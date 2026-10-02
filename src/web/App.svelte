@@ -8,6 +8,7 @@
   import { navigieren, ort, parameter } from './lib/router.svelte.ts';
   import { lesen, schreiben } from './lib/speicher.ts';
   import { ansicht } from './lib/ansicht.svelte.ts';
+  import { gruppieren } from './lib/navigation.ts';
   import Start from './seiten/Start.svelte';
   import Login from './seiten/Login.svelte';
 
@@ -51,6 +52,14 @@
   let module = $state<ModulInfo[]>([]);
   let menueOffen = $state(false);
   let suchtext = $state('');
+  // Zugeklappte Gruppen der Seitenleiste, im Browser gemerkt
+  let zu = $state<string[]>(lesen('nav.zu', []));
+  const gruppen = $derived(gruppieren(module));
+
+  function gruppeUmschalten(id: string) {
+    zu = zu.includes(id) ? zu.filter((g) => g !== id) : [...zu, id];
+    schreiben('nav.zu', zu);
+  }
 
   async function sitzungLaden() {
     sitzung = await api.get('/api/sitzung');
@@ -131,16 +140,20 @@
           <a href="/" class:aktiv={ort.pfad === '/'}><Icon name="zentrale" />Start</a>
           <a href="/karte" class:aktiv={ort.pfad === '/karte'}><Icon name="karte" />Karte</a>
           <a href="/timeline" class:aktiv={ort.pfad === '/timeline'}><Icon name="timeline" />Timeline</a>
-          <div class="trenner">Module</div>
-          {#each module.filter((m) => m.id !== 'zentrale') as m (m.id)}
-            <a href="/modul/{m.id}" class:aktiv={ort.pfad === `/modul/${m.id}`} class:aus={!m.aktiv}><Icon name={m.symbol} />{m.name}</a>
+          {#each gruppen as g (g.id)}
+            {@const hatAktive = g.seiten.some((x) => x.pfad === ort.pfad)}
+            {@const offen = hatAktive || !zu.includes(g.id)}
+            <button class="trenner" class:offen aria-expanded={offen} onclick={() => gruppeUmschalten(g.id)} disabled={hatAktive}>
+              <span>{g.name}</span>
+              {#if !offen}<span class="anzahl">{g.seiten.length}</span>{/if}
+              <Icon name="pfeil" groesse={14} />
+            </button>
+            {#if offen}
+              {#each g.seiten as x (x.pfad)}
+                <a href={x.pfad} class:aktiv={ort.pfad === x.pfad} class:aus={x.aus}><Icon name={x.symbol} />{x.name}</a>
+              {/each}
+            {/if}
           {/each}
-          <div class="trenner">Hub</div>
-          <a href="/alarme" class:aktiv={ort.pfad === '/alarme'}><Icon name="alarm" />Alarmzentrale</a>
-          <a href="/notizen" class:aktiv={ort.pfad === '/notizen'}><Icon name="notiz" />Notizen</a>
-          <a href="/hub-status" class:aktiv={ort.pfad === '/hub-status'}><Icon name="status" />Status</a>
-          <a href="/system" class:aktiv={ort.pfad === '/system'}><Icon name="system" />System</a>
-          <a href="/einrichtung" class:aktiv={ort.pfad === '/einrichtung'}><Icon name="einstellungen" />Einrichtung</a>
         </nav>
         <div class="fuss">
           {#if sitzung.benutzer}<div class="sehr-klein gedaempft">Angemeldet als {sitzung.benutzer}</div>{/if}
@@ -252,11 +265,43 @@
     opacity: 0.5;
   }
   .trenner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 0;
+    margin-top: 10px;
+    padding: 6px 10px 4px;
+    border: none;
+    border-radius: 6px;
+    background: none;
     font-size: 0.7rem;
+    font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-3);
-    padding: 14px 10px 4px;
+    cursor: pointer;
+  }
+  .trenner:hover:not(:disabled) {
+    color: var(--text-2);
+  }
+  .trenner:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+  .trenner span:first-child {
+    flex: 1;
+    text-align: left;
+  }
+  .trenner :global(svg) {
+    transition: transform 0.2s ease;
+  }
+  .trenner.offen :global(svg) {
+    transform: rotate(90deg);
+  }
+  .anzahl {
+    font-family: var(--schrift-zahl);
+    letter-spacing: 0;
   }
   .fuss {
     margin-top: auto;
