@@ -35,6 +35,9 @@ export interface Konfig {
   warnGebiete: string[];
   heliAlle: boolean;
   pagespeedKey: string;
+  hibpKey: string;
+  githubToken: string;
+  sportsdbKey: string;
   suhLogin: { benutzer: string; passwort: string };
 }
 
@@ -49,6 +52,8 @@ export const GEHEIME_SCHLUESSEL = [
   'NTFY_THEMA',
   'ICAL_URL',
   'PAGESPEED_API_KEY',
+  'HIBP_API_KEY',
+  'GITHUB_TOKEN',
   'SUH_LOGIN_BENUTZER',
   'SUH_LOGIN_PASSWORT',
 ];
@@ -127,6 +132,9 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     warnGebiete: liste(e.WARN_GEBIETE ?? 'St. Gallen;Appenzell;Thurgau;Toggenburg', ';'),
     heliAlle: e.HELI_ALLE !== 'false',
     pagespeedKey: e.PAGESPEED_API_KEY ?? '',
+    hibpKey: e.HIBP_API_KEY ?? '',
+    githubToken: e.GITHUB_TOKEN ?? '',
+    sportsdbKey: e.THESPORTSDB_KEY || '123',
     suhLogin: { benutzer: e.SUH_LOGIN_BENUTZER ?? '', passwort: e.SUH_LOGIN_PASSWORT ?? '' },
   };
 }
@@ -142,6 +150,8 @@ export function geheimeWerte(k: Konfig): string[] {
     k.ntfy.token,
     k.icalUrl,
     k.pagespeedKey,
+    k.hibpKey,
+    k.githubToken,
     k.suhLogin.benutzer,
     k.suhLogin.passwort,
   ].filter((w) => w && w.length >= 4);

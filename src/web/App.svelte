@@ -35,6 +35,11 @@
     content: () => import('./module/Content.svelte'),
     veranstaltungen: () => import('./module/Veranstaltungen.svelte'),
     parken: () => import('./module/Parken.svelte'),
+    dienste: () => import('./module/Dienste.svelte'),
+    sicherheit: () => import('./module/Sicherheit.svelte'),
+    abhaengigkeiten: () => import('./module/Abhaengigkeiten.svelte'),
+    aenderungen: () => import('./module/Aenderungen.svelte'),
+    teams: () => import('./module/Teams.svelte'),
   };
 
   let sitzung = $state<{ angemeldet: boolean; benutzer: string | null; demo: boolean; einrichtungOffen: boolean } | null>(null);

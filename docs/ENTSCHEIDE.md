@@ -146,3 +146,24 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 ### E32 Parkplätze: Opendatasoft der Stadt St. Gallen
 - **Was:** Abruf alle 10 Minuten, Rohwerte 14 Tage, danach Stundenmittel (ein Jahr). Typische Belegung als Median je Wochentag und Stunde.
 - **Warum:** Einzige offene Echtzeitquelle, Lizenz CC BY-NC (private Nutzung passt). Median ist robust gegen Ausreisser (Anlässe).
+
+### E33 Dienste Status über Statuspage JSON
+- **Was:** Supabase, GitHub, Vercel, Cloudflare über `/api/v2/status.json` und `/api/v2/incidents/unresolved.json`, ntfy über `https://ntfy.sh/v1/health`. Verlauf nur bei Wechseln. Hinweis auf Zusammenhang, wenn ein Dienst mit «hostet Kundenseiten» gestört ist und der Webseiten Wächter gleichzeitig Ausfälle sieht.
+- **Warum:** Offizielle, offene Schnittstellen ohne Schlüssel. Alternative wären RSS Feeds der Statusseiten (weniger strukturiert).
+
+### E34 Sicherheits Checks nur passiv und nur für eigene Seiten
+- **Was:** Geprüft werden nur Seiten aus dem Webseiten Wächter (Kunden und eigene). Eine Seitenabfrage, zwei TLS Handshakes (einer nur mit TLS 1.0/1.1), DNS Abfragen (SPF, DMARC, DKIM mit üblichen Selektoren, MX), eine HTTP Abfrage für die Weiterleitung. Keine Port Scans. Punkte: Transport 40, Header 35, E-Mail 20, Software 10 (normalisiert auf 100), Notenskala wie beim Qualitätscheck.
+- **Warum:** Aussagekräftig, ohne Angriffscharakter. DKIM ohne bekannten Selektor ist nicht sicher prüfbar, darum nur «nicht gefunden» mit Hinweis.
+- **PHP Ende der Unterstützung:** Daten von php.net/supported-versions im Code hinterlegt, jährlich nachführen.
+
+### E35 Abhängigkeiten über osv.dev
+- **Was:** package-lock.json (v1 bis v3) lesen, ohne Lockfile Versionen aus package.json (als ungenau markiert). osv.dev `querybatch`, Details je Schwachstelle mit Tagescache. Schwere aus der GitHub Advisory Einstufung. Standardprojekt ist der Hub selbst.
+- **Warum:** osv.dev ist offen, ohne Schlüssel und deckt npm vollständig ab. `npm audit` bräuchte npm und node_modules auf dem Pi.
+
+### E36 Änderungs Wächter mit Basis und Gewichten
+- **Was:** Momentaufnahme aus sichtbarem Text, Skripten, externen Domains, Formularzielen, versteckten Links, Impressum Zeilen, Preiszeilen und Meta Angaben. Uhrzeiten, Daten und lange Kennungen werden neutralisiert. Vergleich gegen die Basis, «erwartet» übernimmt den neuen Stand.
+- **Warum:** Mengenvergleich je Bereich ist robust und günstig im RAM (statt vollem Text Diff). Alternative: visueller Vergleich mit Screenshots, auf dem Pi zu schwer.
+
+### E37 Weitere Teams: TheSportsDB
+- **Was:** FC St. Gallen über TheSportsDB (freier Testschlüssel 123, eigener Schlüssel möglich), alternativ OpenLigaDB. «keine» Quelle zeigt ehrlich, dass es keine erlaubte Quelle gibt.
+- **Warum:** OpenLigaDB hat für die Super League 2026/27 keine Daten (Community gepflegt, 2025/26 lückenhaft). Die Seiten der Swiss Football League bieten keine offene Schnittstelle.

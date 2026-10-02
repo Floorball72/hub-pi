@@ -1,14 +1,19 @@
 // Manifest: alle Module des Hubs. Der Kern lädt sie in dieser Liste.
 import type { ModulDef } from '../kern/modul.ts';
+import { abhaengigkeiten } from './abhaengigkeiten/index.ts';
+import { aenderungen } from './aenderungen/index.ts';
 import { content } from './content/index.ts';
+import { dienste } from './dienste/index.ts';
 import { drohne } from './drohne/index.ts';
 import { events } from './events/index.ts';
 import { mobilitaet } from './mobilitaet/index.ts';
 import { parken } from './parken/index.ts';
 import { rettung } from './rettung/index.ts';
 import { scont } from './scont/index.ts';
+import { sicherheit } from './sicherheit/index.ts';
 import { swissunihockey } from './swissunihockey/index.ts';
 import { veranstaltungen } from './veranstaltungen/index.ts';
+import { teams } from './teams/index.ts';
 import { unihockey } from './unihockey/index.ts';
 import { wetter } from './wetter/index.ts';
 import { zentrale } from './zentrale/index.ts';
@@ -23,6 +28,11 @@ export const MODULE: ModulDef[] = [
   content,
   veranstaltungen,
   parken,
+  dienste,
+  sicherheit,
+  abhaengigkeiten,
+  aenderungen,
+  teams,
   swissunihockey,
   unihockey,
   mobilitaet,
