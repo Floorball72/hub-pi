@@ -882,13 +882,11 @@ function rettungLaufzeit(ctx: Kontext) {
       einheit: inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft',
       unter: `${heute} Flüge in 24 h erfasst`,
       zeilen: [
-        ...inDerLuft
-          .slice(0, 2)
-          .map((p) => ({
-            text: `${p.organisation ?? 'Heli'} ${p.kennzeichen ?? ''}`,
-            wert: p.hoeheFt !== null ? `${p.hoeheFt} ft` : '',
-            status: 'warnung' as Ampel,
-          })),
+        ...inDerLuft.slice(0, 2).map((p) => ({
+          text: `${p.organisation ?? 'Heli'} ${p.kennzeichen ?? ''}`,
+          wert: p.hoeheFt !== null ? `${p.hoeheFt} ft` : '',
+          status: 'warnung' as Ampel,
+        })),
         {
           text: 'Alertswiss Region',
           wert: String(alerts.length),
@@ -923,12 +921,10 @@ function rettungLaufzeit(ctx: Kontext) {
       limit: 5,
     });
     const zeilen = [
-      ...fluege
-        .slice(0, 3)
-        .map((f) => ({
-          text: `${f.organisation ?? 'Heli'} ${f.kennzeichen ?? ''} ${f.start_ort ? `bei ${f.start_ort}` : ''}`,
-          wert: ZEIT(f.start),
-        })),
+      ...fluege.slice(0, 3).map((f) => ({
+        text: `${f.organisation ?? 'Heli'} ${f.kennzeichen ?? ''} ${f.start_ort ? `bei ${f.start_ort}` : ''}`,
+        wert: ZEIT(f.start),
+      })),
       ...meld
         .filter((m) => m.kategorie !== 'Mitteilung')
         .slice(0, 3)

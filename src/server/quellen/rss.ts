@@ -25,7 +25,7 @@ export function htmlZuText(html: string): string {
     .replace(/<\/p>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
-    .replace(/[​‌‍﻿]/g, '')
+    .replace(/\u200b|\u200c|\u200d|\ufeff/g, '')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n')
     .trim();
