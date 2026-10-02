@@ -68,6 +68,17 @@ Dann auf dem **Pi**:
 sudo apt install -y unzip && unzip -o pi-hub-code.zip
 ```
 
+Unter Windows geht `scp` gleich in der PowerShell. Wer lieber klickt: WinSCP (Windows) oder Cyberduck (Mac), Verbindung «SFTP» zu `pihub.local`, Benutzer `pi`, die ZIP Datei in den Ordner `/home/pi` ziehen.
+
+**Variante A2, mit USB Stick** (ohne Netzwerk vom Laptop): ZIP Datei auf den Stick kopieren, Stick in den Pi stecken, dann auf dem **Pi**:
+
+```bash
+lsblk                                   # Stick suchen, meist sda1
+sudo mount /dev/sda1 /mnt
+cp /mnt/pi-hub-code.zip ~ && sudo umount /mnt
+sudo apt install -y unzip && unzip -o pi-hub-code.zip
+```
+
 **Variante B, mit GitHub** (falls der Zugriff eingerichtet ist):
 
 ```bash
