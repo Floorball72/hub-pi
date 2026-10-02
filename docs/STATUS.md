@@ -18,11 +18,12 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 
 ## Speicherverbrauch (RSS des Hub Prozesses)
 
-Gemessen in der Entwicklungsumgebung (x86_64, Node 24 bzw. 22). Auf dem Pi 3 (ARM64) ist mit ähnlichen
-Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfen»).
+Phasen 1 bis 9 gemessen in der Entwicklungsumgebung (x86_64, Node 24 bzw. 22). Auf dem Pi 3 gemessen nach der
+Installation am 2. Oktober 2026.
 
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
+| Pi 3 | 112 MB | Raspberry Pi 3, Debian 13 (trixie) aarch64, Node 24, alle 22 Module, lokaler Treiber, kurz nach dem Start. Pi gesamt: 223 von 905 MB belegt |
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
 | 9 | 100 MB (Spitze 113 MB) | Demo mit allen 22 Modulen, Abrufplaner, Metriken, Watchdog |
 | 8 | 96 MB (Spitze 111 MB) | Demo mit 17 Modulen |
@@ -45,6 +46,13 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Playwright Screenshots mobil und breit: Start, Alarme, Status, System, Einrichtung, Karte, scont, Wetter, Drohne
 - Open-Meteo, NOAA KP Index, geo.admin.ch Drohnenzonen, RainViewer: echt abgerufen, Antworten als Fixtures in den Tests
 - Sonnenberechnung (NOAA Algorithmus) gegen PyEphem und Open-Meteo: Abweichung unter 10 Sekunden
+
+## Auf dem Pi geprüft (2. Oktober 2026)
+
+- `install.sh` auf Raspberry Pi 3 mit Debian 13 (trixie): Bau auf dem Gerät rund 3 Minuten, Dienste `pihub`, `pihub-backup.timer`, `pihub-aktualisieren.path` aktiv unter echtem systemd
+- Release Pipeline mit Backup, Gesundheitscheck und Selbsttest: drei Releases nacheinander (`install.sh` zweimal, `pihub update` einmal), Aufräumen auf 3 Versionen
+- Dabei behoben: Rückfall bei der Erstinstallation setzte `current` auf sich selbst; Unterspannung führte beim Update zum Rückfall; CRLF Zeilenenden aus Windows (`.gitattributes`)
+- Selbsttest mit echten Quellen: alle Quellen grün ausser PageSpeed ohne Schlüssel (HTTP 429)
 
 ## Ungetestet
 
@@ -100,7 +108,8 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - scont: eine echte Kundenseite anlegen, nach einigen Minuten Antwortzeit und SSL Tage kontrollieren (Seite scont, Klick auf die Seite)
 - PageSpeed API Schlüssel eintragen (Google Cloud Console, «PageSpeed Insights API» aktivieren, Schlüssel erstellen) und eine Messung auslösen
 
-- RAM Verbrauch auf dem Pi messen: Seite «System», Wert «RAM des Hubs»
+- RAM Verbrauch nach einigen Tagen Betrieb nochmals messen: Seite «System», Wert «RAM des Hubs» (kurz nach dem Start 112 MB)
+- Netzteil: Der Selbsttest meldete Unterspannung (`vcgencmd get_throttled` 0x50005). Netzteil mit mindestens 2.5 A verwenden, danach muss der Wert 0x0 sein
 - `sudo systemctl status pihub pihub-backup.timer pihub-aktualisieren.path` zeigt alles aktiv
 - Temperatur und Drosselung werden auf dem Pi angezeigt (`vcgencmd` braucht die Gruppe `video`, install.sh fügt sie hinzu)
 - Tailscale Funnel Syntax für die öffentliche Statusseite (siehe docs/TAILSCALE.md)
