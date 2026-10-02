@@ -194,7 +194,7 @@ Tipp Android: in der ntfy App für das Thema «Sofortige Zustellung» einschalte
 | Veranstaltungen, Tab Quellen | Kalender (iCal) oder RSS von Vereinen und Veranstaltern, nur nach Prüfung der Nutzungsbedingungen mit Häkchen; Stichworte setzen |
 | Event Zentrale, Tab Vorlagen | Eigene Vorlagen (am einfachsten: eine Veranstaltung planen und «Als Vorlage speichern») |
 | Content Kalender, Tab Checklisten | Checklisten je Art anpassen |
-| Drohne, Tab Sonne | Schwelle für den Sonnenuntergangs Push (Alarmzentrale, Regel «Schöner Sonnenuntergang»), Gewichte nach einigen Bewertungen |
+| Drohne, Tab Sonne | Schwelle für den Sonnenuntergangs Push (Alarmzentrale, Regel «Schöner Sonnenauf oder untergang»), Gewichte nach einigen Bewertungen |
 | Drohne, Tab Kundendrehs | Ort und Dauer eintragen, damit der Dreh Wetter Wächter prüfen kann |
 | Auffälligkeiten | Empfindlichkeit (Standard «normal»), einzelne Messwerte bei Bedarf ausschalten |
 | Alarmzentrale, Schwellen | Abhängigkeiten nur hoch und kritisch, Dienste ab Stufe 3 (Störung), Aufgaben der Event Zentrale 24 h vor Frist, Sonnenuntergang ab Score 75 |

@@ -404,7 +404,7 @@ function laufzeit(ctx: Kontext) {
     );
     const hoch = offen.filter((m) => m.gewicht === 'hoch');
     return {
-      status: (hoch.length ? 'ausfall' : offen.length ? 'warnung' : 'ok') as Ampel,
+      status: (offen.length ? 'warnung' : 'ok') as Ampel,
       titel: 'Änderungen',
       wert: String(offen.length),
       einheit: 'offen',

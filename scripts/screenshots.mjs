@@ -39,6 +39,21 @@ const ALLE = [
   '/modul/rettung#tab=Einsätze',
   '/modul/swissunihockey#tab=Checkliste',
   '/modul/unihockey#tab=Einstellungen',
+  '/modul/drohne#tab=Sonne',
+  '/modul/drehwetter',
+  '/modul/events',
+  '/modul/content',
+  '/modul/veranstaltungen',
+  '/modul/parken',
+  '/modul/dienste',
+  '/modul/sicherheit',
+  '/modul/abhaengigkeiten',
+  '/modul/aenderungen',
+  '/modul/teams',
+  '/modul/auffaelligkeiten',
+  '/modul/abrufe',
+  '/modul/selbstheilung',
+  '/modul/updates',
 ];
 const seiten = process.argv.slice(2).length ? process.argv.slice(2) : ALLE;
 const ansichten = [

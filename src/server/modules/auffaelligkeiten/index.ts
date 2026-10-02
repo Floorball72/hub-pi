@@ -348,7 +348,7 @@ function laufzeit(ctx: Kontext) {
       }
       // aktueller Wert: bei der Temperatur deutlich über dem Normalbereich
       reg.letzte.set(m.id, {
-        wert: m.id === 'zentrale.temperatur' ? 68 : stunden[stunden.length - 1].wert,
+        wert: m.id === 'zentrale.temperatur' ? 76 : stunden[stunden.length - 1].wert,
         zeit: jetzt,
       });
     }
@@ -358,9 +358,9 @@ function laufzeit(ctx: Kontext) {
       {
         metrik: 'zentrale.temperatur',
         start: new Date(jetzt - 40 * 60000).toISOString(),
-        wert: 68,
-        median: 52,
-        z: 6.1,
+        wert: 76,
+        median: 56,
+        z: 6.4,
         richtung: 'hoch',
       },
       {
