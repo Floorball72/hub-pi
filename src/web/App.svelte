@@ -25,6 +25,7 @@
   const MODULSEITEN: Record<string, () => Promise<{ default: Component }>> = {
     zentrale: () => import('./module/Zentrale.svelte'),
     wetter: () => import('./module/Wetter.svelte'),
+    mobilitaet: () => import('./module/Mobilitaet.svelte'),
     scont: () => import('./module/Scont.svelte'),
     rettung: () => import('./module/Rettung.svelte'),
     drohne: () => import('./module/Drohne.svelte'),

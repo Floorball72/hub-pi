@@ -97,7 +97,7 @@
             <ul class="liste">
               {#each t.zeilen as z, i (i)}
                 <li class="zeile-zwischen">
-                  <span class="zeile">{#if z.status}<span class="punkt {z.status}"></span>{/if}<span>{z.text}</span></span>
+                  <span class="briefing-text">{#if z.status}<span class="punkt {z.status}"></span>{/if}<span>{z.text}</span></span>
                   {#if z.wert}<span class="zahl wert">{z.wert}</span>{/if}
                 </li>
               {/each}
@@ -215,6 +215,15 @@
   }
   .wert {
     white-space: nowrap;
+  }
+  .briefing-text {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .briefing-text .punkt {
+    flex: none;
+    transform: translateY(-1px);
   }
   .kiosk .held {
     padding: 32px;

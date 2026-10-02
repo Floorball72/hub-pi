@@ -163,7 +163,6 @@
       {:else if schritt === 6}
         <h2>Optional</h2>
         <div class="feld"><label for="ps">Google PageSpeed API Key (ohne Key gelten strenge Limits)</label><input id="ps" type="password" bind:value={w.PAGESPEED_API_KEY} placeholder={geheimPlatzhalter('PAGESPEED_API_KEY')} /></div>
-        <div class="feld"><label for="wi">Windy Webcams API Key</label><input id="wi" type="password" bind:value={w.WINDY_WEBCAMS_KEY} placeholder={geheimPlatzhalter('WINDY_WEBCAMS_KEY')} /></div>
         <h3 style="margin-top:16px">swiss unihockey Hub Login</h3>
         <p class="gedaempft klein">Wird nur in der .env gespeichert und nirgends angezeigt oder geloggt. Der Hub nutzt ihn nicht für Aktionen.</p>
         <div class="feld"><label for="sb">Benutzer</label><input id="sb" type="password" bind:value={w.SUH_LOGIN_BENUTZER} placeholder={geheimPlatzhalter('SUH_LOGIN_BENUTZER')} autocomplete="off" /></div>

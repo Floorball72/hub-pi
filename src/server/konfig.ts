@@ -32,8 +32,9 @@ export interface Konfig {
   icalUrl: string;
   region: { name: string; lat: number; lon: number; radiusKm: number };
   einsatzFeeds: Feed[];
+  warnGebiete: string[];
+  heliAlle: boolean;
   pagespeedKey: string;
-  windyKey: string;
   suhLogin: { benutzer: string; passwort: string };
 }
 
@@ -48,7 +49,6 @@ export const GEHEIME_SCHLUESSEL = [
   'NTFY_THEMA',
   'ICAL_URL',
   'PAGESPEED_API_KEY',
-  'WINDY_WEBCAMS_KEY',
   'SUH_LOGIN_BENUTZER',
   'SUH_LOGIN_PASSWORT',
 ];
@@ -124,8 +124,9 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
       radiusKm: zahl(e.REGION_RADIUS_KM, 40),
     },
     einsatzFeeds: feedsParsen(e.EINSATZ_FEEDS),
+    warnGebiete: liste(e.WARN_GEBIETE ?? 'St. Gallen;Appenzell;Thurgau;Toggenburg', ';'),
+    heliAlle: e.HELI_ALLE !== 'false',
     pagespeedKey: e.PAGESPEED_API_KEY ?? '',
-    windyKey: e.WINDY_WEBCAMS_KEY ?? '',
     suhLogin: { benutzer: e.SUH_LOGIN_BENUTZER ?? '', passwort: e.SUH_LOGIN_PASSWORT ?? '' },
   };
 }
@@ -141,7 +142,6 @@ export function geheimeWerte(k: Konfig): string[] {
     k.ntfy.token,
     k.icalUrl,
     k.pagespeedKey,
-    k.windyKey,
     k.suhLogin.benutzer,
     k.suhLogin.passwort,
   ].filter((w) => w && w.length >= 4);

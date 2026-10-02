@@ -1,0 +1,265 @@
+// Helikopter über ADS-B (adsb.lol, ODbL). Sichtbar sind nur Luftfahrzeuge, die selbst einen Transponder senden.
+// Erkennung von Start und Landung aus aufeinanderfolgenden Positionen.
+import { distanzKm } from '../../quellen/geo.ts';
+import { httpJson } from '../../quellen/http.ts';
+
+export const ADSB_NAMENSNENNUNG = 'ADS-B Daten: adsb.lol (ODbL)';
+
+export interface AdsbFlugzeug {
+  hex: string;
+  r?: string;
+  t?: string;
+  flight?: string;
+  category?: string;
+  lat?: number;
+  lon?: number;
+  alt_baro?: number | 'ground';
+  gs?: number;
+  track?: number;
+  seen?: number;
+  seen_pos?: number;
+}
+
+export interface Kennung {
+  organisation: string;
+  muster: string;
+}
+
+export interface HeliPosition {
+  hex: string;
+  kennzeichen: string | null;
+  typ: string | null;
+  rufzeichen: string | null;
+  organisation: string | null;
+  lat: number;
+  lon: number;
+  hoeheFt: number | null;
+  amBoden: boolean;
+  speedKn: number | null;
+  kurs: number | null;
+  zeit: number;
+}
+
+export function adsbUrl(lat: number, lon: number, radiusKm: number): string {
+  const nm = Math.min(250, Math.max(1, Math.round(radiusKm / 1.852)));
+  return `https://api.adsb.lol/v2/point/${lat.toFixed(4)}/${lon.toFixed(4)}/${nm}`;
+}
+
+export async function adsbHolen(lat: number, lon: number, radiusKm: number): Promise<AdsbFlugzeug[]> {
+  const d = await httpJson<{ ac?: AdsbFlugzeug[] }>(adsbUrl(lat, lon, radiusKm), {
+    timeoutMs: 12000,
+    abstandMs: 5000,
+  });
+  return d.ac ?? [];
+}
+
+/** Muster: genaues Kennzeichen oder Präfix mit * am Ende (z.B. HB-ZR*) */
+export function musterPasst(kennzeichen: string | null | undefined, muster: string): boolean {
+  if (!kennzeichen) return false;
+  const k = kennzeichen.toUpperCase().trim();
+  const m = muster.toUpperCase().trim();
+  return m.endsWith('*') ? k.startsWith(m.slice(0, -1)) : k === m;
+}
+
+export function organisationFinden(
+  kennzeichen: string | null | undefined,
+  kennungen: Kennung[],
+): string | null {
+  return kennungen.find((k) => musterPasst(kennzeichen, k.muster))?.organisation ?? null;
+}
+
+/** ADS-B Kategorie A7 = Drehflügler */
+export function istHelikopter(a: AdsbFlugzeug): boolean {
+  return a.category === 'A7';
+}
+
+export function heliFiltern(
+  flugzeuge: AdsbFlugzeug[],
+  kennungen: Kennung[],
+  alleHelikopter: boolean,
+  region: { lat: number; lon: number; radiusKm: number },
+  jetzt: number,
+): HeliPosition[] {
+  const aus: HeliPosition[] = [];
+  for (const a of flugzeuge) {
+    if (typeof a.lat !== 'number' || typeof a.lon !== 'number') continue;
+    if (distanzKm(region.lat, region.lon, a.lat, a.lon) > region.radiusKm) continue;
+    const organisation = organisationFinden(a.r, kennungen);
+    if (!organisation && !(alleHelikopter && istHelikopter(a))) continue;
+    const amBoden = a.alt_baro === 'ground';
+    aus.push({
+      hex: a.hex,
+      kennzeichen: a.r ?? null,
+      typ: a.t ?? null,
+      rufzeichen: a.flight?.trim() || null,
+      organisation,
+      lat: a.lat,
+      lon: a.lon,
+      hoeheFt: typeof a.alt_baro === 'number' ? a.alt_baro : amBoden ? 0 : null,
+      amBoden,
+      speedKn: a.gs ?? null,
+      kurs: a.track ?? null,
+      zeit: jetzt - Math.round((a.seen_pos ?? a.seen ?? 0) * 1000),
+    });
+  }
+  return aus;
+}
+
+export interface Flug {
+  hex: string;
+  kennzeichen: string | null;
+  typ: string | null;
+  organisation: string | null;
+  start: number;
+  startArt: 'start' | 'erfasst';
+  startLat: number;
+  startLon: number;
+  ende: number | null;
+  endeArt: 'landung' | 'signalverlust' | 'verlassen' | null;
+  endeLat: number | null;
+  endeLon: number | null;
+  maxHoeheFt: number | null;
+  spur: [number, number, number][];
+}
+
+export interface FlugEreignis {
+  art: 'start' | 'erfasst' | 'landung' | 'signalverlust';
+  flug: Flug;
+}
+
+const IN_DER_LUFT_KN = 25;
+const VERLUST_MS = 3 * 60000;
+
+function inDerLuft(p: HeliPosition): boolean {
+  return !p.amBoden && (p.speedKn ?? 0) >= IN_DER_LUFT_KN;
+}
+
+/** Verfolgt Helikopter über mehrere Abrufe und meldet Start, Landung und Signalverlust. */
+export class FlugErkennung {
+  private aktiv = new Map<string, { flug: Flug | null; letzte: HeliPosition; luft: boolean }>();
+
+  laufende(): Flug[] {
+    return [...this.aktiv.values()].map((a) => a.flug).filter((f): f is Flug => !!f);
+  }
+
+  aktualisieren(positionen: HeliPosition[], jetzt: number): FlugEreignis[] {
+    const ereignisse: FlugEreignis[] = [];
+    const gesehen = new Set<string>();
+    for (const p of positionen) {
+      gesehen.add(p.hex);
+      const luft = inDerLuft(p);
+      const a = this.aktiv.get(p.hex);
+      if (!a) {
+        const flug = luft ? this.neuerFlug(p, 'erfasst') : null;
+        this.aktiv.set(p.hex, { flug, letzte: p, luft });
+        if (flug) ereignisse.push({ art: 'erfasst', flug });
+        continue;
+      }
+      if (!a.luft && luft) {
+        a.flug = this.neuerFlug(p, 'start');
+        ereignisse.push({ art: 'start', flug: a.flug });
+      } else if (a.luft && !luft && a.flug) {
+        this.beenden(a.flug, p, 'landung', p.zeit);
+        ereignisse.push({ art: 'landung', flug: a.flug });
+        a.flug = null;
+      } else if (a.flug) {
+        const letzterPunkt = a.flug.spur[a.flug.spur.length - 1];
+        if (!letzterPunkt || p.zeit - letzterPunkt[2] >= 30000) {
+          a.flug.spur.push([round5(p.lat), round5(p.lon), p.zeit]);
+          if (a.flug.spur.length > 300) a.flug.spur.splice(1, 1);
+        }
+        if (p.hoeheFt !== null) a.flug.maxHoeheFt = Math.max(a.flug.maxHoeheFt ?? 0, p.hoeheFt);
+      }
+      a.letzte = p;
+      a.luft = luft;
+    }
+    for (const [hex, a] of this.aktiv) {
+      if (gesehen.has(hex) || jetzt - a.letzte.zeit < VERLUST_MS) continue;
+      if (a.flug) {
+        // Niedrig verschwunden: wahrscheinlich gelandet (Funkschatten). Sonst Region verlassen.
+        const tief = (a.letzte.hoeheFt ?? 99999) < 4500;
+        this.beenden(a.flug, a.letzte, tief ? 'signalverlust' : 'verlassen', a.letzte.zeit);
+        if (tief) ereignisse.push({ art: 'signalverlust', flug: a.flug });
+      }
+      this.aktiv.delete(hex);
+    }
+    return ereignisse;
+  }
+
+  private neuerFlug(p: HeliPosition, art: 'start' | 'erfasst'): Flug {
+    return {
+      hex: p.hex,
+      kennzeichen: p.kennzeichen,
+      typ: p.typ,
+      organisation: p.organisation,
+      start: p.zeit,
+      startArt: art,
+      startLat: p.lat,
+      startLon: p.lon,
+      ende: null,
+      endeArt: null,
+      endeLat: null,
+      endeLon: null,
+      maxHoeheFt: p.hoeheFt,
+      spur: [[round5(p.lat), round5(p.lon), p.zeit]],
+    };
+  }
+
+  private beenden(f: Flug, p: HeliPosition, art: Flug['endeArt'], zeit: number) {
+    f.ende = zeit;
+    f.endeArt = art;
+    f.endeLat = p.lat;
+    f.endeLon = p.lon;
+    f.spur.push([round5(p.lat), round5(p.lon), zeit]);
+  }
+}
+
+function round5(n: number) {
+  return Math.round(n * 100000) / 100000;
+}
+
+/** Statistik aus erfassten Flügen: nach Stunde, Wochentag und als Raster für die Heatmap */
+export function flugStatistik(
+  fluege: {
+    start: string;
+    start_lat: number | null;
+    start_lon: number | null;
+    ende_lat: number | null;
+    ende_lon: number | null;
+  }[],
+  raster = 0.02,
+) {
+  const proStunde = Array(24).fill(0) as number[];
+  const proWochentag = Array(7).fill(0) as number[];
+  const heat = new Map<string, number>();
+  const fmt = new Intl.DateTimeFormat('de-CH', {
+    timeZone: 'Europe/Zurich',
+    hour: 'numeric',
+    hourCycle: 'h23',
+    weekday: 'short',
+  });
+  const tage = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  for (const f of fluege) {
+    const teile = Object.fromEntries(fmt.formatToParts(new Date(f.start)).map((p) => [p.type, p.value]));
+    proStunde[Number(teile.hour)]++;
+    const tag = tage.indexOf(String(teile.weekday).replace('.', ''));
+    if (tag >= 0) proWochentag[tag]++;
+    for (const [la, lo] of [
+      [f.start_lat, f.start_lon],
+      [f.ende_lat, f.ende_lon],
+    ]) {
+      if (la === null || lo === null) continue;
+      const k = `${(Math.round(la / raster) * raster).toFixed(3)},${(Math.round(lo / raster) * raster).toFixed(3)}`;
+      heat.set(k, (heat.get(k) ?? 0) + 1);
+    }
+  }
+  return {
+    anzahl: fluege.length,
+    proStunde,
+    proWochentag,
+    heat: [...heat.entries()].map(([k, n]) => {
+      const [la, lo] = k.split(',').map(Number);
+      return [la, lo, n] as [number, number, number];
+    }),
+  };
+}

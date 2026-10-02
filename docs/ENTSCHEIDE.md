@@ -92,3 +92,40 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 ### E20 Kartenhintergrund
 - **Was:** swisstopo Landeskarte grau, im Browser invertiert für das dunkle Design. Weitere Hintergründe: farbig, Luftbild, OpenStreetMap.
 - **Warum:** Kostenlos (swisstopo Geodienste sind frei nutzbar), keine Schlüssel, dunkles Design ohne kommerziellen Kartenanbieter.
+
+## Module (Phasen 2 bis 4)
+
+### E21 Eigene Module «Wetter» und «Mobilität»
+- **Was:** Wetter (Orte, KP, Radar) und Mobilität (ÖV, später Parkplätze) sind eigene Module statt Teil von Zentrale oder Rettung.
+- **Warum:** Einzeln ausschaltbar (RAM, Abrufe) und von mehreren Bereichen genutzt (Briefing, Drohne, Rettung).
+
+### E22 Verfügbarkeit aus Zählabfragen
+- **Was:** Verfügbarkeit (24 h, 7 und 30 Tage) wird mit zwei COUNT Abfragen pro Seite berechnet und 2 Minuten zwischengespeichert. Rohdaten älter als 31 Tage werden zu Stundenwerten verdichtet.
+- **Warum:** Keine grossen Datenmengen über die Leitung zu Supabase, wenig RAM.
+
+### E23 Ausfall erst nach zwei Fehlern
+- **Was:** Eine Seite gilt erst nach zwei fehlgeschlagenen Prüfungen in Folge als ausgefallen.
+- **Warum:** Einzelne Zeitüberschreitungen erzeugen sonst Fehlalarme in der Nacht.
+
+### E24 Sonne nach NOAA statt SunCalc
+- **Was:** Sonnenstand und Zeiten nach dem NOAA Algorithmus (Meeus), Mondphase nach SunCalc.
+- **Warum:** SunCalc wich beim Untergang bis 2,5 Minuten von PyEphem und Open-Meteo ab, NOAA unter 10 Sekunden.
+- **Definitionen:** Goldene Stunde: Sonne zwischen +6° und -4°. Blaue Stunde: -4° bis -6°. Ohne Geländehorizont.
+
+### E25 Wetterfenster stündlich, nur bei Tageslicht
+- **Was:** Ein Ort ist fliegbar, wenn eine Stunde alle Grenzen des Ortes erfüllt und Tag ist. Wind auf Flughöhe: nächste Messhöhe von Open-Meteo (10, 80 oder 120 m). Push ab Mindestdauer (Schwelle der Regel, Standard 2 Stunden).
+
+### E26 ADS-B über adsb.lol
+- **Was:** Abruf alle 30 Sekunden im Radius der Region. Standard: alle Drehflügler (ADS-B Kategorie A7) zeigen, Organisationen über Kennzeichen Muster hervorheben (Rega HB-ZR*, HB-TI*, zuhause prüfen).
+- **Warum:** Offene Daten (ODbL), ohne Schlüssel. OpenSky wäre eine Alternative (Konto nötig für höhere Limits).
+- **Start und Landung:** «In der Luft» heisst nicht am Boden und mindestens 25 Knoten. Verschwindet ein Heli tiefer als 4500 Fuss, gilt das als vermutete Landung (Funkschatten in den Bergen).
+
+### E27 Einsatzauswertungen: Stadtpolizei St.Gallen eingebaut
+- **Was:** Medienmitteilungen der Stadtpolizei St.Gallen über daten.stadt.sg.ch (Lizenz CC BY), weitere RSS Feeds über `EINSATZ_FEEDS`. Grobe Einordnung über Stichworte. Zeitverzug in der Oberfläche angeschrieben.
+- **Warum:** Einzige gefundene offene Quelle mit klarer Lizenz. Die Kantonspolizei St.Gallen hat keinen gefundenen eigenen Feed (der Kantons Feed enthält allgemeine Mitteilungen).
+
+### E28 Nicht gebaute Kartenebenen
+- **Blitze live:** Keine offene Quelle mit erlaubter Weiterverwendung gefunden. Ebene sichtbar, aber gesperrt mit Begründung.
+- **Verkehrslage und Pässe:** Braucht Schlüssel und DATEX II Verarbeitung (opentransportdata.swiss). Nicht gebaut.
+- **Unwetter und Lawinen als Fläche:** MeteoAlarm liefert keine Geometrien, das SLF Format konnte ausserhalb des Winters nicht geprüft werden. Darum als Listen.
+- **Webcams:** Eigene Liste (MeteoSchweiz Wetterkameras sind nicht als offener Dienst verfügbar). Windy Webcams API (Schlüssel) wurde nicht gebaut, weil sie nicht ohne Schlüssel geprüft werden konnte.

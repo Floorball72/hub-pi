@@ -24,6 +24,7 @@ const ALLE = [
   '/modul/rettung',
   '/modul/wetter',
   '/modul/drohne',
+  '/modul/mobilitaet',
   '/modul/unihockey',
   '/modul/swissunihockey',
   '/suche?q=Kirchberg',

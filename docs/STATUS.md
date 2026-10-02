@@ -9,7 +9,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | 1 | Kern: Gerüst, Module, Daten, Login, Alarmzentrale, Systemstatus, Statusseite, install.sh, Deploy, Tailscale | fertig |
 | 2 | Webseiten Wächter, Kunden und Domains, Qualitätscheck | fertig |
 | 3 | Karte, Wetter, Drohnen Planung | fertig |
-| 4 | Rettung | offen |
+| 4 | Rettung | fertig |
 | 5 | swiss unihockey, Unihockey, Timeline, Briefing | offen |
 | 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | offen |
 
@@ -21,6 +21,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 4 | 94 MB (Spitze 104 MB) | Demo mit allen Modulen, Heli Verfolgung alle 30 s, Karte |
 | 3 | 88 MB (Spitze 100 MB) | Demo, Karte mit Ebenen, Wetter und Drohne |
 | 2 | 84 MB (Spitze 95 MB) | Demo Modus mit 4 Seiten und 7 Tagen Verlauf, Screenshots aller scont Ansichten |
 
@@ -39,6 +40,10 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 
 ## Ungetestet
 
+- Overpass API (Spitäler, Rettungswachen, Landeplätze, Defis): von hier nicht erreichbar, gebaut nach der Overpass Dokumentation
+- MeteoAlarm Schweiz: Feed war beim Bau leer, Format am deutschen Feed geprüft. Gebietsnamen der Schweiz unbekannt (Filter `WARN_GEBIETE`)
+- SLF Lawinenbulletin: im Oktober leer, Felder nach CAAML v6
+
 - PageSpeed Insights: von hier aus ohne Schlüssel immer HTTP 429 (Kontingent erschöpft). Gebaut nach der Dokumentation der API v5 (`lighthouseResult.categories.*.score`, `audits.*.numericValue`). Mit eigenem Schlüssel zuhause prüfen.
 - SSL Prüfung: In der Entwicklungsumgebung fängt ein Proxy TLS ab, darum sah der Test nur dessen Zertifikat. Logik geprüft, echte Ablaufdaten zuhause prüfen.
 
@@ -49,6 +54,11 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Tailscale Befehle (docs/TAILSCALE.md)
 
 ## Zuhause prüfen
+
+- Rega Kennzeichen (Modul Rettung, Tab Kennzeichen): Standard HB-ZR* und HB-TI* aus öffentlichen Flottenangaben, ergänzen um Air Zermatt, Air Glaciers, Polizei falls gewünscht
+- Unwetter: bei der nächsten Warnung prüfen, wie MeteoAlarm die Gebiete benennt, und `WARN_GEBIETE` anpassen
+- Im Winter: Lawinenbulletin Liste im Modul Rettung kontrollieren
+- Kartenebenen Spitäler, Rettungswachen, Landeplätze, Defis einmal einschalten (Overpass)
 
 - scont: eine echte Kundenseite anlegen, nach einigen Minuten Antwortzeit und SSL Tage kontrollieren (Seite scont, Klick auf die Seite)
 - PageSpeed API Schlüssel eintragen (Google Cloud Console, «PageSpeed Insights API» aktivieren, Schlüssel erstellen) und eine Messung auslösen
