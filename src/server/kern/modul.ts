@@ -35,6 +35,8 @@ export interface Kontext {
 
 export interface ModulLaufzeit {
   routen?: (app: FastifyInstance) => void | Promise<void>;
+  /** Routen ohne Login an der Wurzel (z.B. öffentliche Statusseite). Nur Daten, die öffentlich sein dürfen! */
+  oeffentlicheRouten?: (app: FastifyInstance) => void | Promise<void>;
   jobs?: JobDef[];
   kachel?: () => Promise<Kachel>;
   ebenen?: () => Ebene[];

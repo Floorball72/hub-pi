@@ -29,6 +29,16 @@ const ALLE = [
   '/modul/unihockey',
   '/modul/swissunihockey',
   '/suche?q=Kirchberg',
+  '/modul/scont#tab=Zeit',
+  '/modul/scont#tab=Berichte',
+  '/modul/drohne#tab=Logbuch',
+  '/modul/drohne#tab=Akkus',
+  '/modul/drohne#tab=Dokumente',
+  '/modul/rettung#tab=Toolbox',
+  '/modul/rettung#tab=Rega',
+  '/modul/rettung#tab=Einsätze',
+  '/modul/swissunihockey#tab=Checkliste',
+  '/modul/unihockey#tab=Einstellungen',
 ];
 const seiten = process.argv.slice(2).length ? process.argv.slice(2) : ALLE;
 const ansichten = [
@@ -56,9 +66,15 @@ for (const a of ansichten) {
   await Promise.all([page.waitForURL(`${BASIS}/`), page.click('button[type=submit]')]);
   for (const s of seiten) {
     probleme.length = 0;
-    await page.goto(`${BASIS}${s}`, { waitUntil: 'networkidle' }).catch(() => {});
+    // «/modul/x#tab=Name» öffnet die Seite und klickt den Tab
+    const [pfad, tab] = s.split('#tab=');
+    await page.goto(`${BASIS}${pfad}`, { waitUntil: 'networkidle' }).catch(() => {});
+    if (tab) {
+      await page.locator('nav.tabs button', { hasText: decodeURIComponent(tab) }).first().click().catch(() => probleme.push(`Tab ${tab} fehlt`));
+      await page.waitForLoadState('networkidle').catch(() => {});
+    }
     await page.waitForTimeout(s === '/karte' ? 3500 : 1200);
-    const datei = `screenshots/${a.name}${s === '/' ? '-start' : s.replace(/[/?=]/g, '-')}.png`;
+    const datei = `screenshots/${a.name}${s === '/' ? '-start' : s.replace(/[/?=#%]/g, '-')}.png`;
     await page.screenshot({ path: datei, fullPage: s !== '/karte' });
     const relevant = probleme.filter((p) => !/tile|wmts|wms\.geo|openstreetmap|rainviewer|ERR_TOO_MANY_RETRIES|ERR_CERT|ERR_TUNNEL/i.test(p));
     if (relevant.length) {

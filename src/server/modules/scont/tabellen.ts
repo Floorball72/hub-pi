@@ -186,7 +186,25 @@ export const QUALITAET = tabelle({
   indizes: [['seite_id', 'erstellt']],
 });
 
+export const ZEITEN = tabelle({
+  name: 'zeiten',
+  modul: 'scont',
+  label: 'Zeiterfassung',
+  bearbeitbar: true,
+  anzeige: 'beschreibung',
+  suche: ['beschreibung'],
+  spalten: [
+    { name: 'kunde_id', typ: 'text', label: 'Kunde', verweis: 'kunden', pflicht: true },
+    { name: 'start', typ: 'zeit', label: 'Start', pflicht: true },
+    { name: 'ende', typ: 'zeit', label: 'Ende' },
+    { name: 'minuten', typ: 'real', label: 'Minuten', min: 0 },
+    { name: 'beschreibung', typ: 'text', label: 'Beschreibung' },
+  ],
+  indizes: [['kunde_id', 'start']],
+});
+
 export const SCONT_TABELLEN = [
+  ZEITEN,
   KUNDEN,
   DOMAINS,
   KOSTEN,

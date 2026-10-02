@@ -3,6 +3,7 @@
   import Karte from '../komponenten/Karte.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
+  import Toolbox from './Toolbox.svelte';
   import { api } from '../lib/api.ts';
   import { datumZeit, relativ } from '../lib/format.ts';
 
@@ -50,7 +51,7 @@
   const dauer = (a: string, b: string | null) => (b ? `${Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)} min` : 'läuft');
 </script>
 
-<ModulRahmen modulId="rettung" tabs={['Lage', 'Einsätze', 'Rega Statistik', 'Kennzeichen', 'Webcams']} bind:tab>
+<ModulRahmen modulId="rettung" tabs={['Lage', 'Einsätze', 'Rega Statistik', 'Toolbox', 'Kennzeichen', 'Webcams']} bind:tab>
   {#if tab === 'Lage'}
     <Karte hoehe="min(62vh, 560px)" gruppen={['Rettung', 'Gefahren', 'Wetter']} zentrum={[47.35, 9.15]} zoom={9} />
     <p class="sehr-klein gedaempft">Helikopter: Es sind nur Luftfahrzeuge sichtbar, die einen Transponder (ADS-B oder Mode S mit Position) senden. Rettungswagen sind nicht öffentlich und werden nicht angezeigt.</p>
@@ -170,6 +171,8 @@
       <Karte hoehe="420px" gruppen={['Rettung']} zentrum={[47.38, 9.2]} zoom={9} />
       <p class="sehr-klein gedaempft">Ebene «Rega Einsätze (Heatmap)» im Ebenen Menü einschalten. Statistik nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
     {/if}
+  {:else if tab === 'Toolbox'}
+    <Toolbox />
   {:else if tab === 'Kennzeichen'}
     <div class="hinweis" style="margin-bottom:12px">Kennzeichen oder Präfixe (mit *) pro Organisation, z.B. Rega, Air Zermatt, Air Glaciers, Polizei. Die Standardwerte für die Rega (HB-ZR*, HB-TI*) stammen aus öffentlichen Flottenangaben und müssen geprüft werden. Bitte nur Kennzeichen eintragen, die öffentlich bekannt sind.</div>
     <div class="panel"><TabellenEditor tabelle="heli_kennungen" sort="organisation" spalten={['organisation', 'muster', 'push']} neuText="Kennzeichen" /></div>

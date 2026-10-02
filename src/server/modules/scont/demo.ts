@@ -230,3 +230,30 @@ export async function demoDatenAnlegen(daten: Daten, jetzt: Date) {
     ]);
   }
 }
+
+export async function demoZeitenAnlegen(daten: Daten, jetzt: Date) {
+  const kunden = await daten.liste<{ id: string; name: string }>('kunden', { limit: 10 });
+  const zeilen: Record<string, unknown>[] = [];
+  kunden.forEach((k, i) => {
+    for (let t = 1; t <= 6; t++) {
+      const start = new Date(jetzt.getTime() - (t * 3 + i) * 86400000);
+      start.setUTCHours(8 + i, 0, 0, 0);
+      const minuten = 30 + ((t * 37 + i * 11) % 150);
+      zeilen.push({
+        kunde_id: k.id,
+        start: start.toISOString(),
+        ende: new Date(start.getTime() + minuten * 60000).toISOString(),
+        minuten,
+        beschreibung: [
+          'Inhalte aktualisiert',
+          'Plugin Updates',
+          'Besprechung',
+          'Fotos bearbeitet',
+          'Fehler behoben',
+          'Newsletter',
+        ][t % 6],
+      });
+    }
+  });
+  await daten.einfuegen('zeiten', zeilen);
+}

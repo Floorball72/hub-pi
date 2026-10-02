@@ -6,7 +6,21 @@ import type { Ampel, Kachel, TimelineEintrag } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
 import { lokalDatum } from '../../kern/zeit.ts';
 import { httpAnfrage, httpJson } from '../../quellen/http.ts';
-import { demoDatenAnlegen, demoPagespeed, demoPruefung, demoQualitaet, demoSsl } from './demo.ts';
+import {
+  monatsDaten,
+  monatsreportPdf,
+  type OeffentlicherStatus,
+  seitenStatistik,
+  statusHtml,
+} from './bericht.ts';
+import {
+  demoZeitenAnlegen,
+  demoDatenAnlegen,
+  demoPagespeed,
+  demoPruefung,
+  demoQualitaet,
+  demoSsl,
+} from './demo.ts';
 import {
   linksExtrahieren,
   linksPruefen,
@@ -171,7 +185,10 @@ function scontLaufzeit(ctx: Kontext) {
 
   async function vorbereiten() {
     vorbereitet ??= (async () => {
-      if (konfig.demo && (await daten.anzahl('kunden')) === 0) await demoDatenAnlegen(daten, ctx.jetzt());
+      if (konfig.demo && (await daten.anzahl('kunden')) === 0) {
+        await demoDatenAnlegen(daten, ctx.jetzt());
+        await demoZeitenAnlegen(daten, ctx.jetzt());
+      }
       for (const v of await daten.liste<{ id: string; seite_id: string }>('vorfaelle', {
         filter: { ende: null },
         limit: 100,
@@ -644,5 +661,138 @@ function scontLaufzeit(ctx: Kontext) {
     };
   }
 
-  return { jobs, routen, kachel, timeline, briefing };
+  // Zeiterfassung per Knopfdruck
+  async function laufendeZeit() {
+    const [z] = await daten.liste<{
+      id: string;
+      kunde_id: string;
+      start: string;
+      beschreibung: string | null;
+    }>('zeiten', {
+      filter: { ende: null },
+      sortierung: '-start',
+      limit: 1,
+    });
+    return z ?? null;
+  }
+
+  async function zeitStoppen() {
+    const z = await laufendeZeit();
+    if (!z) return null;
+    const ende = ctx.jetzt();
+    const minuten = Math.round(((ende.getTime() - new Date(z.start).getTime()) / 60000) * 10) / 10;
+    await daten.aendern('zeiten', z.id, { ende: ende.toISOString(), minuten });
+    return { ...z, minuten };
+  }
+
+  let statusCache: { zeit: number; html: string } | null = null;
+
+  async function oeffentlicherStatus(): Promise<OeffentlicherStatus[]> {
+    await vorbereiten();
+    const liste = (await seiten()).filter((s) => s.oeffentlich && s.aktiv);
+    const heute = new Date(ctx.jetzt());
+    return Promise.all(
+      liste.map(async (s) => {
+        const tage: (number | null)[] = [];
+        for (let i = 29; i >= 0; i--) {
+          const von = new Date(heute.getTime() - (i + 1) * 86400000);
+          const bis = new Date(heute.getTime() - i * 86400000);
+          tage.push((await seitenStatistik(daten, s.id, von, bis)).verfuegbarkeit);
+        }
+        const [letzte] = await daten.liste<{ ok: boolean }>('pruefungen', {
+          filter: { seite_id: s.id },
+          sortierung: '-erstellt',
+          limit: 1,
+        });
+        return {
+          name: s.oeffentlicher_name || s.name,
+          online: letzte ? letzte.ok || !offeneVorfaelle.has(s.id) : null,
+          tage,
+          verfuegbarkeit30: (
+            await seitenStatistik(daten, s.id, new Date(heute.getTime() - 30 * 86400000), heute)
+          ).verfuegbarkeit,
+        };
+      }),
+    );
+  }
+
+  async function zusatzRouten(app: FastifyInstance) {
+    app.get('/zeit', async () => {
+      const laufend = await laufendeZeit();
+      const monatStart = new Date(ctx.jetzt());
+      monatStart.setUTCDate(1);
+      monatStart.setUTCHours(0, 0, 0, 0);
+      const monat = await daten.liste<{ kunde_id: string; minuten: number | null }>('zeiten', {
+        filter: { start: { gte: monatStart.toISOString() } },
+        limit: 5000,
+      });
+      const proKunde: Record<string, number> = {};
+      for (const z of monat) proKunde[z.kunde_id] = (proKunde[z.kunde_id] ?? 0) + (z.minuten ?? 0);
+      return {
+        laufend,
+        proKunde,
+        kunden: await daten.liste('kunden', { filter: { status: 'aktiv' }, sortierung: 'name', limit: 200 }),
+      };
+    });
+    app.post<{ Body: { kunde_id?: string; beschreibung?: string } }>('/zeit/start', async (req) => {
+      const kundeId = String(req.body?.kunde_id ?? '');
+      if (!(await daten.hole('kunden', kundeId))) throw new EingabeFehler('Kunde nicht gefunden');
+      const gestoppt = await zeitStoppen();
+      const z = await daten.eins('zeiten', {
+        kunde_id: kundeId,
+        start: ctx.jetzt().toISOString(),
+        beschreibung: typeof req.body?.beschreibung === 'string' ? req.body.beschreibung.slice(0, 300) : null,
+      });
+      return { laufend: z, gestoppt };
+    });
+    app.post('/zeit/stopp', async () => ({ gestoppt: await zeitStoppen() }));
+
+    app.get<{ Querystring: { kunde?: string; monat?: string } }>('/report', async (req, reply) => {
+      const monat =
+        req.query.monat && /^\d{4}-\d{2}$/.test(req.query.monat)
+          ? req.query.monat
+          : lokalDatum(ctx.jetzt()).slice(0, 7);
+      let d: Awaited<ReturnType<typeof monatsDaten>>;
+      try {
+        d = await monatsDaten(daten, String(req.query.kunde ?? ''), monat);
+      } catch (e) {
+        throw new EingabeFehler((e as Error).message);
+      }
+      const pdf = monatsreportPdf(d, ctx.jetzt());
+      await ctx.aktivitaet('scont', `Monatsreport ${d.kunde.name} ${monat} erstellt`, 'aktion');
+      const dateiname = `Monatsreport-${d.kunde.name.replace(/[^A-Za-z0-9]+/g, '-')}-${monat}.pdf`;
+      return reply
+        .type('application/pdf')
+        .header('Content-Disposition', `inline; filename="${dateiname}"`)
+        .send(pdf);
+    });
+    app.get<{ Querystring: { kunde?: string; monat?: string } }>('/report/daten', async (req) => {
+      const monat =
+        req.query.monat && /^\d{4}-\d{2}$/.test(req.query.monat)
+          ? req.query.monat
+          : lokalDatum(ctx.jetzt()).slice(0, 7);
+      return monatsDaten(daten, String(req.query.kunde ?? ''), monat);
+    });
+  }
+
+  async function oeffentlicheRouten(app: FastifyInstance) {
+    // Öffentliche Statusseite: nur freigegebene Seiten, nur Name und Verfügbarkeit
+    app.get('/status', async (_req, reply) => {
+      if (!statusCache || Date.now() - statusCache.zeit > 60000) {
+        statusCache = { zeit: Date.now(), html: statusHtml(await oeffentlicherStatus(), ctx.jetzt()) };
+      }
+      return reply
+        .type('text/html; charset=utf-8')
+        .header('Cache-Control', 'public, max-age=60')
+        .header('X-Robots-Tag', 'noindex')
+        .send(statusCache.html);
+    });
+  }
+
+  const alleRouten = async (app: FastifyInstance) => {
+    await routen(app);
+    await zusatzRouten(app);
+  };
+
+  return { jobs, routen: alleRouten, oeffentlicheRouten, kachel, timeline, briefing };
 }

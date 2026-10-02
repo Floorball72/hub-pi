@@ -213,6 +213,17 @@ export async function appErstellen(o: AppOptionen): Promise<{ app: FastifyInstan
     );
   }
 
+  // Öffentliche Routen der Module (ohne Login), z.B. /status. Ausgeschaltete Module antworten mit 404.
+  for (const [id, m] of hub.module) {
+    if (!m.laufzeit.oeffentlicheRouten) continue;
+    await app.register(async (scope) => {
+      scope.addHook('onRequest', async (_req, reply) => {
+        if (!hub.modulAktiv(id)) return reply.code(404).type('text/plain').send('Nicht gefunden');
+      });
+      await m.laufzeit.oeffentlicheRouten!(scope);
+    });
+  }
+
   statischAusliefern(app, o.webVerzeichnis ?? resolve('dist/web'));
   return { app, hub };
 }

@@ -3,6 +3,8 @@
   import Linie from '../komponenten/Linie.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
+  import Berichte from './scont/Berichte.svelte';
+  import ZeitErfassung from './scont/ZeitErfassung.svelte';
   import { api, fehlerText } from '../lib/api.ts';
   import { bestaetigen } from '../lib/bestaetigen.svelte.ts';
   import { chf, datum, datumZeit, relativ } from '../lib/format.ts';
@@ -108,7 +110,7 @@
   }
 </script>
 
-<ModulRahmen modulId="scont" tabs={['Übersicht', 'Seiten', 'Kunden', 'Domains', 'Kosten']} bind:tab>
+<ModulRahmen modulId="scont" tabs={['Übersicht', 'Zeit', 'Berichte', 'Seiten', 'Kunden', 'Domains', 'Kosten']} bind:tab>
   {#if tab === 'Übersicht'}
     {#if detail}
       <div class="zeile-zwischen">
@@ -236,6 +238,10 @@
     {:else}
       <div class="laedt" style="height:200px"></div>
     {/if}
+  {:else if tab === 'Zeit'}
+    <ZeitErfassung />
+  {:else if tab === 'Berichte'}
+    <Berichte />
   {:else if tab === 'Seiten'}
     <div class="panel"><TabellenEditor tabelle="seiten" spalten={['name', 'url', 'kunde_id', 'aktiv', 'intervall_min', 'oeffentlich']} neuText="Seite" onauswahl={(z) => { tab = 'Übersicht'; navigieren(`/modul/scont?seite=${z.id}`); }} /></div>
   {:else if tab === 'Kunden'}

@@ -4,6 +4,7 @@
   import Karte from '../komponenten/Karte.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
+  import Extras from './drohne/Extras.svelte';
   import WetterIcon from '../komponenten/WetterIcon.svelte';
   import { api, fehlerText } from '../lib/api.ts';
   import { datumZeit, zeit } from '../lib/format.ts';
@@ -85,7 +86,7 @@
   const naechste48 = $derived(detail ? detail.stunden.filter((s) => s.t >= Date.now() - 3600000).slice(0, 48) : []);
 </script>
 
-<ModulRahmen modulId="drohne" tabs={['Planung', 'Orte', 'Kundendrehs']} bind:tab>
+<ModulRahmen modulId="drohne" tabs={['Planung', 'Orte', 'Kundendrehs', 'Logbuch', 'Akkus und Wartung', 'Dokumente']} bind:tab>
   {#if tab === 'Planung'}
     <div class="planung">
       <div class="karte-spalte">
@@ -227,6 +228,8 @@
     <div class="panel">
       <TabellenEditor tabelle="drohnen_orte" sort="name" spalten={['name', 'status', 'shortlist', 'wetterfenster_alarm', 'wind_max_kmh']} neuText="Ort" onauswahl={(z) => navigieren(`/modul/drohne?ort=${z.id}`)} />
     </div>
+  {:else if tab === 'Logbuch' || tab === 'Akkus und Wartung' || tab === 'Dokumente'}
+    <Extras ansicht={tab} />
   {:else}
     <div class="panel">
       <TabellenEditor tabelle="drehs" sort="termin" spalten={['titel', 'kunde_id', 'termin', 'status', 'frist']} neuText="Dreh" />

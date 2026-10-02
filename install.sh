@@ -105,6 +105,7 @@ for d in pihub.service pihub-backup.service pihub-backup.timer pihub-aktualisier
 done
 install -m 755 "$BASIS/quelle/scripts/release.sh" /usr/local/sbin/pihub-release
 install -m 755 "$BASIS/quelle/scripts/aktualisieren.sh" /usr/local/sbin/pihub-aktualisieren
+install -m 755 "$BASIS/quelle/scripts/pihub-befehl.sh" /usr/local/bin/pihub
 mkdir -p /etc/systemd/journald.conf.d
 install -m 644 "$BASIS/quelle/deploy/journald-pihub.conf" /etc/systemd/journald.conf.d/pihub.conf
 install -m 644 "$BASIS/quelle/deploy/logrotate-pihub" /etc/logrotate.d/pihub
@@ -123,4 +124,5 @@ gruen "Pi Hub läuft: http://${IP}:${PORT}"
 echo "Nächste Schritte:"
 echo "  1. Tailscale einrichten (docs/TAILSCALE.md)"
 echo "  2. Einrichtungsassistent öffnen: http://${IP}:${PORT}/einrichtung"
-echo "  3. Selbsttest: sudo -u $BENUTZER bash -c 'cd $BASIS/current && npm run selbsttest'"
+echo "  3. Selbsttest: pihub selbsttest"
+echo "  Hilfe zu allen Befehlen: pihub"

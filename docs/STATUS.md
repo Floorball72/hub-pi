@@ -11,7 +11,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | 3 | Karte, Wetter, Drohnen Planung | fertig |
 | 4 | Rettung | fertig |
 | 5 | swiss unihockey, Unihockey, Timeline, Briefing | fertig |
-| 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | offen |
+| 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | fertig |
 
 ## Speicherverbrauch (RSS des Hub Prozesses)
 
@@ -21,6 +21,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 6 | 96 MB (Spitze 107 MB) | Demo, alle Seiten und Tabs mit Playwright geprüft |
 | 5 | 95 MB (Spitze 109 MB) | Demo mit 8 Modulen, Timeline und Briefing |
 | 4 | 94 MB (Spitze 104 MB) | Demo mit allen Modulen, Heli Verfolgung alle 30 s, Karte |
 | 3 | 88 MB (Spitze 100 MB) | Demo, Karte mit Ebenen, Wetter und Drohne |
@@ -73,6 +74,20 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Temperatur und Drosselung werden auf dem Pi angezeigt (`vcgencmd` braucht die Gruppe `video`, install.sh fügt sie hinzu)
 - Tailscale Funnel Syntax für die öffentliche Statusseite (siehe docs/TAILSCALE.md)
 - In Supabase Registrierungen deaktivieren (Authentication, Sign In / Providers). Der Einrichtungsassistent warnt, wenn sie offen sind.
+
+## Rettungs Toolbox: vor dem Gebrauch prüfen
+
+Alle Rechner sind als «Hilfsmittel, ersetzt keine Entscheidung» gekennzeichnet. Bitte jede Formel gegen die
+Vorgaben deines Rettungsdienstes prüfen (Code: `src/server/geteilt/toolbox.ts`, Tests: `test/phase6.test.ts`).
+
+| Rechner | Formel | Quelle | Prüfen |
+|---|---|---|---|
+| GCS | Augen 1 bis 4 + Verbal 1 bis 5 + Motorik 1 bis 6; Einteilung SHT 13 bis 15 leicht, 9 bis 12 mittel, 3 bis 8 schwer | Teasdale & Jennett 1974, glasgowcomascale.org | deutsche Bezeichnungen der Stufen |
+| NEWS2 | Punktetabelle für AF, SpO2 (Skala 1 und 2), O2, BD sys, Puls, Bewusstsein (ACVPU), Temperatur; Risiko 0 bis 4 niedrig, ein Parameter mit 3 niedrig bis mittel, 5 bis 6 mittel, ab 7 hoch | Royal College of Physicians 2017 | alle Grenzwerte, besonders Skala 2 |
+| Tropfen | Tropfen/min = ml × Tropffaktor / min; ml/h = ml / min × 60 | Tropfformel, ISO 8536-4 (20 Tropfen pro ml) | Tropffaktor eurer Infusionsbestecke |
+| Dosis | mg = mg/kg × kg; ml = mg / (mg/ml) | Dreisatz | Maximaldosen sind nicht hinterlegt |
+| Sauerstoff | Minuten = Flaschenliter × (Druck minus Restdruck) / Fluss | Boyle Mariotte Näherung | Restdruck nach eurer Vorgabe |
+| Umrechnen | °C und °F, kg und lb (0,45359237), kPa und mmHg (0,133322), cm und inch, Glukose mmol/l und mg/dl (18,016), mg und µg | Definitionen und Normwerte | Glukose Faktor |
 
 ## Bekannte Grenzen
 
