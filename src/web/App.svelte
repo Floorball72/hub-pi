@@ -14,7 +14,7 @@
   // Seiten werden erst bei Bedarf geladen
   const SEITEN: Record<string, () => Promise<{ default: Component }>> = {
     '/alarme': () => import('./seiten/Alarme.svelte'),
-    '/status': () => import('./seiten/Status.svelte'),
+    '/hub-status': () => import('./seiten/Status.svelte'),
     '/system': () => import('./seiten/System.svelte'),
     '/einrichtung': () => import('./seiten/Einrichtung.svelte'),
     '/suche': () => import('./seiten/Suche.svelte'),
@@ -124,7 +124,7 @@
           <div class="trenner">Hub</div>
           <a href="/alarme" class:aktiv={ort.pfad === '/alarme'}><Icon name="alarm" />Alarmzentrale</a>
           <a href="/notizen" class:aktiv={ort.pfad === '/notizen'}><Icon name="notiz" />Notizen</a>
-          <a href="/status" class:aktiv={ort.pfad === '/status'}><Icon name="status" />Status</a>
+          <a href="/hub-status" class:aktiv={ort.pfad === '/hub-status'}><Icon name="status" />Status</a>
           <a href="/system" class:aktiv={ort.pfad === '/system'}><Icon name="system" />System</a>
           <a href="/einrichtung" class:aktiv={ort.pfad === '/einrichtung'}><Icon name="einstellungen" />Einrichtung</a>
         </nav>

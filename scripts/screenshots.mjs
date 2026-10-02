@@ -15,6 +15,7 @@ const ALLE = [
   '/karte',
   '/timeline',
   '/alarme',
+  '/hub-status',
   '/status',
   '/system',
   '/notizen',

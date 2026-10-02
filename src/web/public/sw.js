@@ -14,7 +14,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/status')) return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname === '/status') return;
   // Assets mit Hash: Cache zuerst. Seiten: Netz zuerst, Cache als Rückfall.
   if (url.pathname.startsWith('/assets/')) {
     e.respondWith(

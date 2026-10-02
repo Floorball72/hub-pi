@@ -4,7 +4,18 @@ import { drohne } from './drohne/index.ts';
 import { mobilitaet } from './mobilitaet/index.ts';
 import { rettung } from './rettung/index.ts';
 import { scont } from './scont/index.ts';
+import { swissunihockey } from './swissunihockey/index.ts';
+import { unihockey } from './unihockey/index.ts';
 import { wetter } from './wetter/index.ts';
 import { zentrale } from './zentrale/index.ts';
 
-export const MODULE: ModulDef[] = [zentrale, wetter, scont, rettung, drohne, mobilitaet];
+export const MODULE: ModulDef[] = [
+  zentrale,
+  wetter,
+  scont,
+  rettung,
+  drohne,
+  swissunihockey,
+  unihockey,
+  mobilitaet,
+];

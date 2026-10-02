@@ -10,7 +10,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | 2 | Webseiten Wächter, Kunden und Domains, Qualitätscheck | fertig |
 | 3 | Karte, Wetter, Drohnen Planung | fertig |
 | 4 | Rettung | fertig |
-| 5 | swiss unihockey, Unihockey, Timeline, Briefing | offen |
+| 5 | swiss unihockey, Unihockey, Timeline, Briefing | fertig |
 | 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | offen |
 
 ## Speicherverbrauch (RSS des Hub Prozesses)
@@ -21,6 +21,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 5 | 95 MB (Spitze 109 MB) | Demo mit 8 Modulen, Timeline und Briefing |
 | 4 | 94 MB (Spitze 104 MB) | Demo mit allen Modulen, Heli Verfolgung alle 30 s, Karte |
 | 3 | 88 MB (Spitze 100 MB) | Demo, Karte mit Ebenen, Wetter und Drohne |
 | 2 | 84 MB (Spitze 95 MB) | Demo Modus mit 4 Seiten und 7 Tagen Verlauf, Screenshots aller scont Ansichten |
@@ -54,6 +55,10 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Tailscale Befehle (docs/TAILSCALE.md)
 
 ## Zuhause prüfen
+
+- swiss unihockey: Format deiner Kalendereinträge. Erkannt wird «swiss unihockey |» am Anfang, Typ (Resultatpost, Matchbericht) und Status (fix, evtl., Ersatz für ...) irgendwo in Titel oder Beschreibung. Postzeit wird als Terminbeginn plus 3 Stunden geschätzt (Annahme: Termin = Anspielzeit des letzten Spiels). Ligen (z.B. «Herren NLB») in der Beschreibung werden in «Spiele des Tages» hervorgehoben.
+- swiss unihockey: `docs/swissunihockey-ablauf.md` mit dem Ablauf von Marion füllen, danach im Modul «Aus Ablauf Datei laden»
+- Unihockey: Team IDs prüfen (Standard Vipers 416423 «UHC Jonschwil Vipers II, Herren KF 2. Liga», Toggenburg 429092 «Herren GF 2. Liga»)
 
 - Rega Kennzeichen (Modul Rettung, Tab Kennzeichen): Standard HB-ZR* und HB-TI* aus öffentlichen Flottenangaben, ergänzen um Air Zermatt, Air Glaciers, Polizei falls gewünscht
 - Unwetter: bei der nächsten Warnung prüfen, wie MeteoAlarm die Gebiete benennt, und `WARN_GEBIETE` anpassen

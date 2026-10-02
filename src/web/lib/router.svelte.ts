@@ -22,7 +22,7 @@ document.addEventListener('click', (e) => {
   const href = a.getAttribute('href');
   if (!href?.startsWith('/') || href.startsWith('//') || a.target === '_blank' || a.hasAttribute('download'))
     return;
-  if (href.startsWith('/api/') || href.startsWith('/status')) return;
+  if (href.startsWith('/api/') || href === '/status' || href.startsWith('/status?')) return;
   e.preventDefault();
   navigieren(href);
 });
