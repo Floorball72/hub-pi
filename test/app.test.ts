@@ -115,3 +115,21 @@ describe('Server', () => {
     assert.equal(r.headers['x-content-type-options'], 'nosniff');
   });
 });
+
+describe('scont im Demo Modus', () => {
+  it('legt Demo Daten an und liefert Übersicht und Details', async () => {
+    const u = (await anfrage('GET', '/api/m/scont/uebersicht')).json();
+    assert.ok(u.seiten.length >= 3);
+    assert.ok(u.seiten[0].verfuegbarkeit.woche > 90);
+    const d = (await anfrage('GET', `/api/m/scont/seite/${u.seiten[0].seite.id}`)).json();
+    assert.ok(d.pruefungen.length > 10);
+    const start = (await anfrage('GET', '/api/start')).json();
+    assert.equal(start.kacheln.scont.status, 'warnung');
+  });
+  it('setzt Standardwerte beim Anlegen einer Seite', async () => {
+    const seite = (
+      await anfrage('POST', '/api/daten/seiten', { name: 'Testseite', url: 'https://t.example' })
+    ).json();
+    assert.equal(seite.intervall_min, 5);
+  });
+});

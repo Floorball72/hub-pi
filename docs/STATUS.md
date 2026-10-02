@@ -7,7 +7,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | Phase | Inhalt | Stand |
 |---|---|---|
 | 1 | Kern: Gerüst, Module, Daten, Login, Alarmzentrale, Systemstatus, Statusseite, install.sh, Deploy, Tailscale | fertig |
-| 2 | Webseiten Wächter, Kunden und Domains, Qualitätscheck | offen |
+| 2 | Webseiten Wächter, Kunden und Domains, Qualitätscheck | fertig |
 | 3 | Karte, Wetter, Drohnen Planung | offen |
 | 4 | Rettung | offen |
 | 5 | swiss unihockey, Unihockey, Timeline, Briefing | offen |
@@ -21,6 +21,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 2 | 84 MB (Spitze 95 MB) | Demo Modus mit 4 Seiten und 7 Tagen Verlauf, Screenshots aller scont Ansichten |
 
 Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, `MemoryMax=400M`).
 
@@ -35,6 +36,9 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 
 ## Ungetestet
 
+- PageSpeed Insights: von hier aus ohne Schlüssel immer HTTP 429 (Kontingent erschöpft). Gebaut nach der Dokumentation der API v5 (`lighthouseResult.categories.*.score`, `audits.*.numericValue`). Mit eigenem Schlüssel zuhause prüfen.
+- SSL Prüfung: In der Entwicklungsumgebung fängt ein Proxy TLS ab, darum sah der Test nur dessen Zertifikat. Logik geprüft, echte Ablaufdaten zuhause prüfen.
+
 - systemd Units (`deploy/*.service`, `.timer`, `.path`) auf echtem systemd
 - `npm run deploy` (braucht SSH Zugang zum Pi)
 - Supabase Auth Login (braucht ein Supabase Projekt)
@@ -42,6 +46,9 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Tailscale Befehle (docs/TAILSCALE.md)
 
 ## Zuhause prüfen
+
+- scont: eine echte Kundenseite anlegen, nach einigen Minuten Antwortzeit und SSL Tage kontrollieren (Seite scont, Klick auf die Seite)
+- PageSpeed API Schlüssel eintragen (Google Cloud Console, «PageSpeed Insights API» aktivieren, Schlüssel erstellen) und eine Messung auslösen
 
 - RAM Verbrauch auf dem Pi messen: Seite «System», Wert «RAM des Hubs»
 - `sudo systemctl status pihub pihub-backup.timer pihub-aktualisieren.path` zeigt alles aktiv
