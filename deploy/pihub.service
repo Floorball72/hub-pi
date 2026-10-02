@@ -1,0 +1,32 @@
+[Unit]
+Description=Pi Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pihub
+Group=pihub
+WorkingDirectory=/opt/pihub/current
+Environment=NODE_ENV=production
+Environment=PIHUB_ENV=/opt/pihub/.env
+Environment=DATEN_VERZEICHNIS=/opt/pihub/data
+ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning --max-old-space-size=200 dist/server/main.js
+Restart=always
+RestartSec=5
+# Grenzen, damit der Pi nie wegen des Hubs hängt
+MemoryHigh=320M
+MemoryMax=400M
+Nice=5
+# Härtung
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/pihub/data /opt/pihub/.env
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Pi Hub Aktualisierung (git pull, Build, Neustart)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pihub-aktualisieren
+StandardOutput=append:/opt/pihub/logs/aktualisieren.log
+StandardError=append:/opt/pihub/logs/aktualisieren.log

@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Hub Backup
+
+[Service]
+Type=oneshot
+User=pihub
+WorkingDirectory=/opt/pihub/current
+Environment=PIHUB_ENV=/opt/pihub/.env
+Environment=DATEN_VERZEICHNIS=/opt/pihub/data
+ExecStart=/usr/local/bin/node --disable-warning=ExperimentalWarning scripts/backup.ts
+Nice=10

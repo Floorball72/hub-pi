@@ -1,0 +1,8 @@
+[Unit]
+Description=Pi Hub Aktualisierung beobachten
+
+[Path]
+PathExists=/opt/pihub/data/aktualisieren.anfrage
+
+[Install]
+WantedBy=multi-user.target
