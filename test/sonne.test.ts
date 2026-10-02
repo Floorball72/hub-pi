@@ -1,13 +1,34 @@
 // Tests der Sonnenuntergangs Prognose.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { naechsteStunde, punktInRichtung, STANDARD_GEWICHTE, sonnenScore, vergleich } from '../src/server/modules/drohne/sonnenuntergang.ts';
+import {
+  naechsteStunde,
+  punktInRichtung,
+  STANDARD_GEWICHTE,
+  sonnenScore,
+  vergleich,
+} from '../src/server/modules/drohne/sonnenuntergang.ts';
 import type { Stunde } from '../src/server/quellen/openmeteo.ts';
 import { distanzKm } from '../src/server/quellen/geo.ts';
 
 const basis: Stunde = {
-  t: 0, temp: 15, regen: 0, regenWahrsch: 0, code: 2, wind10: 5, wind80: 8, wind120: 9, boeen: 10, richtung: 270,
-  wolken: 50, wolkenTief: 0, wolkenMittel: 30, wolkenHoch: 40, sicht: 40000, feuchte: 55, tag: true,
+  t: 0,
+  temp: 15,
+  regen: 0,
+  regenWahrsch: 0,
+  code: 2,
+  wind10: 5,
+  wind80: 8,
+  wind120: 9,
+  boeen: 10,
+  richtung: 270,
+  wolken: 50,
+  wolkenTief: 0,
+  wolkenMittel: 30,
+  wolkenHoch: 40,
+  sicht: 40000,
+  feuchte: 55,
+  tag: true,
 };
 
 describe('Sonnenuntergang Score', () => {
@@ -17,7 +38,12 @@ describe('Sonnenuntergang Score', () => {
     assert.equal(r.faktoren.length, 6);
   });
   it('geschlossene tiefe Decke oder Regen geben einen tiefen Score', () => {
-    assert.ok(sonnenScore({ ...basis, wolkenTief: 100, regen: 1.5, sicht: 3000, feuchte: 98 }, { ...basis, wolkenTief: 100 }).score < 20);
+    assert.ok(
+      sonnenScore(
+        { ...basis, wolkenTief: 100, regen: 1.5, sicht: 3000, feuchte: 98 },
+        { ...basis, wolkenTief: 100 },
+      ).score < 20,
+    );
   });
   it('wolkenloser Himmel ist gut, aber nicht spektakulär', () => {
     const s = sonnenScore({ ...basis, wolkenHoch: 0, wolkenMittel: 0 }, null).score;
@@ -33,12 +59,19 @@ describe('Sonnenuntergang Score', () => {
     assert.ok(p.lon < 9.04 && Math.abs(p.lat - 47.41) < 0.05);
   });
   it('wählt die nächste Stunde nur innerhalb einer Stunde', () => {
-    const st = [{ ...basis, t: 0 }, { ...basis, t: 3600000 }];
+    const st = [
+      { ...basis, t: 0 },
+      { ...basis, t: 3600000 },
+    ];
     assert.equal(naechsteStunde(st, 3000000)?.t, 3600000);
     assert.equal(naechsteStunde(st, 9000000), null);
   });
   it('vergleicht Prognose und Bewertung', () => {
-    const v = vergleich([{ score: 100, bewertung: 5 }, { score: 0, bewertung: 1 }, { score: 50, bewertung: 3 }]);
+    const v = vergleich([
+      { score: 100, bewertung: 5 },
+      { score: 0, bewertung: 1 },
+      { score: 50, bewertung: 3 },
+    ]);
     assert.equal(v.mittlererFehler, 0);
     assert.equal(v.korrelation, 1);
     assert.equal(vergleich([]).anzahl, 0);

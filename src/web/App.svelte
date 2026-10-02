@@ -31,6 +31,10 @@
     drohne: () => import('./module/Drohne.svelte'),
     unihockey: () => import('./module/Unihockey.svelte'),
     swissunihockey: () => import('./module/SwissUnihockey.svelte'),
+    events: () => import('./module/Events.svelte'),
+    content: () => import('./module/Content.svelte'),
+    veranstaltungen: () => import('./module/Veranstaltungen.svelte'),
+    parken: () => import('./module/Parken.svelte'),
   };
 
   let sitzung = $state<{ angemeldet: boolean; benutzer: string | null; demo: boolean; einrichtungOffen: boolean } | null>(null);

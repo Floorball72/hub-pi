@@ -750,7 +750,7 @@ function drohneLaufzeit(ctx: Kontext) {
     app.put<{ Body: Partial<Gewichte> }>('/sonne/gewichte', async (req) => {
       const neu: Partial<Gewichte> = {};
       for (const k of Object.keys(STANDARD_GEWICHTE) as (keyof Gewichte)[]) {
-        const w = Number((req.body ?? {})[k]);
+        const w = Number(req.body?.[k]);
         if (!Number.isFinite(w) || w < 0 || w > 10)
           throw new EingabeFehler(`Gewicht ${k}: Zahl von 0 bis 10`);
         neu[k] = w;

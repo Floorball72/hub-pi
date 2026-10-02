@@ -66,7 +66,8 @@ export type Symbol =
   | 'erdbeben'
   | 'warnung'
   | 'einsatz'
-  | 'halt';
+  | 'halt'
+  | 'parken';
 
 export interface GeoPunkt {
   id: string;

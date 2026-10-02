@@ -129,3 +129,20 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 - **Verkehrslage und Pässe:** Braucht Schlüssel und DATEX II Verarbeitung (opentransportdata.swiss). Nicht gebaut.
 - **Unwetter und Lawinen als Fläche:** MeteoAlarm liefert keine Geometrien, das SLF Format konnte ausserhalb des Winters nicht geprüft werden. Darum als Listen.
 - **Webcams:** Eigene Liste (MeteoSchweiz Wetterkameras sind nicht als offener Dienst verfügbar). Windy Webcams API (Schlüssel) wurde nicht gebaut, weil sie nicht ohne Schlüssel geprüft werden konnte.
+
+### E29 Sonnenuntergangs Prognose als nachvollziehbare Heuristik
+- **Was:** Score 0 bis 100 aus sechs gewichteten Faktoren (hohe und mittlere Wolken, freier Horizont 80 km Richtung Sonne, tiefe Wolken, Sicht, Feuchte, Regen). Gewichte in der Oberfläche anpassbar, Bewertungen nach dem Abend werden gegen die Prognose verglichen.
+- **Warum:** Es gibt kein offenes, belegtes Modell. Eine einfache Formel mit sichtbaren Faktoren lässt sich mit eigenen Bewertungen kalibrieren.
+- **Alternative:** Kommerzielle Dienste (z.B. SunsetWx), nicht offen.
+
+### E30 Event Zentrale und Content Kalender ohne Personendaten
+- **Was:** Aufgaben und Ablauf tragen eine Rolle statt Namen. Vorlagen speichern Fristen relativ zum Beginn (Tage) und den Ablauf in Minuten. Content Beiträge haben eine Checkliste je Art (in der Oberfläche anpassbar). Erinnerung über die Alarmzentrale (Ruhezeit gilt).
+- **Warum:** Datensparsamkeit, Vorlagen lassen sich so für jeden Termin wiederverwenden. Der Hub veröffentlicht und schreibt keine Texte.
+
+### E31 Veranstaltungen nur aus selbst erfassten, geprüften Quellen
+- **Was:** Quellen (iCal, RSS) werden in einer Tabelle erfasst und erst abgerufen, wenn das Häkchen «Nutzungsbedingungen geprüft» gesetzt ist. robots.txt wird beachtet, Abruf alle 6 Stunden. Übernahme in die Event Zentrale mit einem Klick.
+- **Warum:** Keine offene Schnittstelle für Anlässe in St. Gallen mit klarer Erlaubnis gefunden. Scraping von Veranstaltungsportalen verstösst meist gegen deren Bedingungen.
+
+### E32 Parkplätze: Opendatasoft der Stadt St. Gallen
+- **Was:** Abruf alle 10 Minuten, Rohwerte 14 Tage, danach Stundenmittel (ein Jahr). Typische Belegung als Median je Wochentag und Stunde.
+- **Warum:** Einzige offene Echtzeitquelle, Lizenz CC BY-NC (private Nutzung passt). Median ist robust gegen Ausreisser (Anlässe).

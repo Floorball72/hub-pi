@@ -12,6 +12,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | 4 | Rettung | fertig |
 | 5 | swiss unihockey, Unihockey, Timeline, Briefing | fertig |
 | 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | fertig |
+| 7 | Sonnenuntergangs Prognose, Event Zentrale, Content Kalender, Veranstaltungen, Parkplätze | fertig |
 
 ## Speicherverbrauch (RSS des Hub Prozesses)
 
@@ -21,6 +22,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 7 | 99 MB (Spitze 112 MB) | Demo mit 12 Modulen, Content Kalender, Event Zentrale, Parkhaus Karte |
 | 6 | 96 MB (Spitze 107 MB) | Demo, alle Seiten und Tabs mit Playwright geprüft |
 | 5 | 95 MB (Spitze 109 MB) | Demo mit 8 Modulen, Timeline und Briefing |
 | 4 | 94 MB (Spitze 104 MB) | Demo mit allen Modulen, Heli Verfolgung alle 30 s, Karte |
@@ -42,6 +44,8 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 
 ## Ungetestet
 
+- Veranstaltungsquellen (iCal, RSS) mit echten Anbietern: Parser mit eigenen Fixtures geprüft
+
 - Overpass API (Spitäler, Rettungswachen, Landeplätze, Defis): von hier nicht erreichbar, gebaut nach der Overpass Dokumentation
 - MeteoAlarm Schweiz: Feed war beim Bau leer, Format am deutschen Feed geprüft. Gebietsnamen der Schweiz unbekannt (Filter `WARN_GEBIETE`)
 - SLF Lawinenbulletin: im Oktober leer, Felder nach CAAML v6
@@ -56,6 +60,10 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Tailscale Befehle (docs/TAILSCALE.md)
 
 ## Zuhause prüfen
+
+- Sonnenuntergang: einige Abende mit Sternen bewerten (Drohne, Tab Sonne). Nach etwa 10 Bewertungen zeigt der Vergleich, ob die Gewichte passen (docs/SONNENUNTERGANG.md)
+- Veranstaltungen: Es gibt keine offene, ausdrücklich erlaubte Quelle für Anlässe in St. Gallen (geprüft: Opendatasoft der Stadt, opendata.swiss). Eigene iCal oder RSS Quellen von Vereinen und Veranstaltern erfassen, Nutzungsbedingungen prüfen und das Häkchen setzen
+- Parkplätze: Daten der Stadt St. Gallen sind CC BY-NC (nur private Nutzung). Typische Belegung wird nach etwa 2 Wochen aussagekräftig
 
 - swiss unihockey: Format deiner Kalendereinträge. Erkannt wird «swiss unihockey |» am Anfang, Typ (Resultatpost, Matchbericht) und Status (fix, evtl., Ersatz für ...) irgendwo in Titel oder Beschreibung. Postzeit wird als Terminbeginn plus 3 Stunden geschätzt (Annahme: Termin = Anspielzeit des letzten Spiels). Ligen (z.B. «Herren NLB») in der Beschreibung werden in «Spiele des Tages» hervorgehoben.
 - swiss unihockey: `docs/swissunihockey-ablauf.md` mit dem Ablauf von Marion füllen, danach im Modul «Aus Ablauf Datei laden»
