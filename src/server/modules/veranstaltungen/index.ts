@@ -147,6 +147,7 @@ function laufzeit(ctx: Kontext) {
     name: 'Erfasste Veranstaltungsquellen (iCal, RSS)',
     modul: 'veranstaltungen',
     ttlSek: 6 * 3600,
+    nurMitEintrag: true,
     abruf: async (q) => {
       if (!(await robotsErlaubt(q.url))) throw new Error('robots.txt verbietet den Abruf');
       const text = await httpText(q.url, { timeoutMs: 15000, maxBytes: 3_000_000 });

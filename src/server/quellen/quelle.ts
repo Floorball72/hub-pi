@@ -31,6 +31,8 @@ export interface QuellenDef<P, T> {
   beschreibung?: string;
   /** Beispielparameter für den Selbsttest */
   testParameter?: () => P;
+  /** Wird nur mit erfassten Einträgen abgerufen, der Selbsttest überspringt sie ohne testParameter */
+  nurMitEintrag?: boolean;
   /** Abrufplaner: kürzester und längster Abstand, Tagesbudget, wichtig für Alarme */
   minSek?: number;
   maxSek?: number;

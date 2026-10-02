@@ -132,6 +132,7 @@ function laufzeit(ctx: Kontext) {
     name: 'Kundenseiten (Momentaufnahme)',
     modul: 'aenderungen',
     ttlSek: 600,
+    nurMitEintrag: true,
     abruf: async ({ url, ausnahmen }) => {
       if (!(await robotsErlaubt(url))) throw new Error('robots.txt verbietet den Abruf');
       const a = await httpAnfrage(url, { timeoutMs: 20000, maxBytes: 3_000_000 });

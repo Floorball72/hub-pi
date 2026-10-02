@@ -222,6 +222,10 @@ for (const q of nurKern ? [] : quellen) {
     punkt('hinweis', q.def.name, 'nicht konfiguriert');
     continue;
   }
+  if (q.def.nurMitEintrag && !q.def.testParameter) {
+    punkt('hinweis', q.def.name, 'wird nur mit erfassten Einträgen abgerufen');
+    continue;
+  }
   try {
     const p = q.def.testParameter ? q.def.testParameter() : undefined;
     const start = performance.now();
