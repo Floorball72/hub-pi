@@ -357,13 +357,11 @@ function suhLaufzeit(ctx: Kontext) {
       wert: n ? kurz(n.start) : 'kein Einsatz',
       unter: n ? `${n.typ ?? 'Einsatz'} · ${n.status}${n.ersatzFuer ? ` für ${n.ersatzFuer}` : ''}` : '',
       zeilen: [
-        ...e.liste
-          .slice(1, 4)
-          .map((x) => ({
-            text: `${x.typ ?? 'Einsatz'} ${x.status === 'fix' ? '' : x.status}`.trim(),
-            wert: kurz(x.start),
-            status: (x.status === 'evtl.' ? 'warnung' : 'neutral') as Ampel,
-          })),
+        ...e.liste.slice(1, 4).map((x) => ({
+          text: `${x.typ ?? 'Einsatz'} ${x.status === 'fix' ? '' : x.status}`.trim(),
+          wert: kurz(x.start),
+          status: (x.status === 'evtl.' ? 'warnung' : 'neutral') as Ampel,
+        })),
         ...(evtl ? [{ text: 'Unsichere Einsätze', wert: String(evtl), status: 'warnung' as Ampel }] : []),
       ],
       demo: e.demo,
@@ -416,18 +414,16 @@ function suhLaufzeit(ctx: Kontext) {
       (t) => !einsatzAusTermin(t) && lokalDatum(new Date(t.start)) === lokalDatum(ctx.jetzt()),
     );
     const zeilen = [
-      ...termine
-        .slice(0, 4)
-        .map((t) => ({
-          text: t.titel,
-          wert: t.ganztags
-            ? 'ganztags'
-            : new Date(t.start).toLocaleTimeString('de-CH', {
-                timeZone: 'Europe/Zurich',
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-        })),
+      ...termine.slice(0, 4).map((t) => ({
+        text: t.titel,
+        wert: t.ganztags
+          ? 'ganztags'
+          : new Date(t.start).toLocaleTimeString('de-CH', {
+              timeZone: 'Europe/Zurich',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+      })),
       ...(e.liste[0]
         ? [
             {
