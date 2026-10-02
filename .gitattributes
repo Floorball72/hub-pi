@@ -1,0 +1,6 @@
+# Der Hub läuft auf Linux: Textdateien immer mit LF, auch auf Windows (sonst bricht z.B. install.sh)
+* text=auto eol=lf
+# Fixtures sind echte Antworten von Quellen und bleiben Byte für Byte erhalten
+test/fixtures/** -text
+*.png binary
+*.whl binary
