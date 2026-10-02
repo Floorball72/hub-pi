@@ -51,7 +51,8 @@ export function sonnenScore(
   const tief = lokal.wolkenTief ?? 0;
   // 1. Leinwand: hohe und mittlere Wolken färben sich. Optimum bei etwa 50 % Bedeckung.
   const leinwand = Math.min(100, hoch + 0.6 * mittel);
-  const fWolken = leinwand <= 50 ? leinwand / 50 : grenze(1 - (leinwand - 50) / 60);
+  // Nur sichtbar, soweit tiefe Wolken am Ort sie nicht verdecken
+  const fWolken = (leinwand <= 50 ? leinwand / 50 : grenze(1 - (leinwand - 50) / 60)) * grenze(1 - tief / 100);
   // 2. Freier Horizont: tiefe Wolken in Richtung Sonne blockieren das Licht
   const tiefHorizont = horizont?.wolkenTief ?? tief;
   const fHorizont = grenze(1 - tiefHorizont / 100);
