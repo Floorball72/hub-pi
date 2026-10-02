@@ -14,7 +14,7 @@ Erfolgreich, wenn `tailscale version` eine Versionsnummer zeigt.
 ## 2. Pi anmelden
 
 ```bash
-sudo tailscale up --hostname=pihub
+sudo tailscale up --hostname=hub-pi
 ```
 
 Es erscheint ein Link (`https://login.tailscale.com/a/...`). Auf dem Laptop öffnen und mit deinem Konto anmelden.
@@ -41,11 +41,11 @@ sudo tailscale serve --bg 8080
 Erfolgreich, wenn `tailscale serve status` etwas zeigt wie:
 
 ```
-https://pihub.tail1234.ts.net (tailnet only)
+https://hub-pi.tail1234.ts.net (tailnet only)
 |-- / proxy http://127.0.0.1:8080
 ```
 
-Der Hub ist jetzt unter `https://pihub.<dein-tailnet>.ts.net` erreichbar, nur für Geräte in deinem Tailnet.
+Der Hub ist jetzt unter `https://hub-pi.<dein-tailnet>.ts.net` erreichbar, nur für Geräte in deinem Tailnet.
 Die Einstellung bleibt nach einem Neustart erhalten (`--bg`).
 
 Ältere Tailscale Versionen (vor 1.52) kennen `--bg` nicht. Dann zuerst `sudo apt update && sudo apt upgrade tailscale`.
@@ -54,7 +54,7 @@ Die Einstellung bleibt nach einem Neustart erhalten (`--bg`).
 
 1. App **Tailscale** installieren (App Store oder Play Store)
 2. Mit demselben Konto anmelden, VPN erlauben
-3. Im Browser `https://pihub.<dein-tailnet>.ts.net` öffnen
+3. Im Browser `https://hub-pi.<dein-tailnet>.ts.net` öffnen
 4. iPhone: Teilen, «Zum Home Bildschirm». Android: Menü, «App installieren». Der Hub läuft dann wie eine App (PWA).
 
 ## 6. Wer darf zugreifen?
@@ -78,7 +78,7 @@ Nur nötig, wenn Kunden die Verfügbarkeit ihrer Seite ohne Tailscale sehen soll
 sudo tailscale funnel --bg --https=8443 --set-path=/status http://127.0.0.1:8080/status
 ```
 
-Die Seite ist dann unter `https://pihub.<dein-tailnet>.ts.net:8443/status` öffentlich.
+Die Seite ist dann unter `https://hub-pi.<dein-tailnet>.ts.net:8443/status` öffentlich.
 Funnel muss in der Tailscale Verwaltung (Access controls, Attribut `funnel`) erlaubt sein.
 Ausschalten: `sudo tailscale funnel --https=8443 off`.
 

@@ -16,8 +16,8 @@ Laptop, Handy, die Datei `pi-hub-code.zip` aus dem Chat (oder Zugriff auf das Gi
    - Betriebssystem: **Raspberry Pi OS (other)**, dann **Raspberry Pi OS Lite (64-bit)**
    - Speicher: die SD Karte
 3. Bei «Einstellungen anpassen» (OS Anpassung):
-   - Hostname: `pihub`
-   - Benutzername: `pi`, ein eigenes Passwort
+   - Hostname: `hub-pi`
+   - Benutzername: `scont`, ein eigenes Passwort
    - WLAN nur, wenn kein Kabel möglich ist
    - Zeitzone: `Europe/Zurich`, Tastatur: `ch`
    - Reiter «Dienste»: **SSH aktivieren** (mit Passwort)
@@ -29,20 +29,20 @@ Laptop, Handy, die Datei `pi-hub-code.zip` aus dem Chat (oder Zugriff auf das Gi
 
 SD Karte in den Pi, Netzwerkkabel zum Router, dann Strom einstecken. Zwei Minuten warten.
 
-**Geklappt, wenn:** die grüne LED flackert und im Router ein Gerät «pihub» erscheint.
+**Geklappt, wenn:** die grüne LED flackert und im Router ein Gerät «hub-pi» erscheint.
 
 ## 3. Mit dem Pi verbinden
 
 Auf dem Laptop ein Terminal öffnen (Windows: PowerShell):
 
 ```bash
-ssh pi@pihub.local
+ssh scont@hub-pi.local
 ```
 
 Beim ersten Mal die Frage mit `yes` beantworten, dann das Passwort aus Schritt 1 eingeben.
-Klappt `pihub.local` nicht, die IP Adresse aus dem Router nehmen: `ssh pi@192.168.x.y`.
+Klappt `hub-pi.local` nicht, die IP Adresse aus dem Router nehmen: `ssh scont@192.168.x.y`.
 
-**Geklappt, wenn:** die Zeile `pi@pihub:~ $` erscheint.
+**Geklappt, wenn:** die Zeile `scont@hub-pi:~ $` erscheint.
 
 ## 4. System aktualisieren
 
@@ -50,16 +50,16 @@ Klappt `pihub.local` nicht, die IP Adresse aus dem Router nehmen: `ssh pi@192.16
 sudo apt update && sudo apt full-upgrade -y && sudo reboot
 ```
 
-Nach dem Neustart (eine Minute) wieder mit `ssh pi@pihub.local` verbinden.
+Nach dem Neustart (eine Minute) wieder mit `ssh scont@hub-pi.local` verbinden.
 
-**Geklappt, wenn:** du wieder `pi@pihub:~ $` siehst.
+**Geklappt, wenn:** du wieder `scont@hub-pi:~ $` siehst.
 
 ## 5. Pi Hub auf den Pi kopieren
 
 **Variante A, mit der ZIP Datei** (ohne GitHub). Auf dem **Laptop**, im Ordner mit der ZIP Datei:
 
 ```bash
-scp pi-hub-code.zip pi@pihub.local:~
+scp pi-hub-code.zip scont@hub-pi.local:~
 ```
 
 Dann auf dem **Pi**:
@@ -68,7 +68,7 @@ Dann auf dem **Pi**:
 sudo apt install -y unzip && unzip -o pi-hub-code.zip
 ```
 
-Unter Windows geht `scp` gleich in der PowerShell. Wer lieber klickt: WinSCP (Windows) oder Cyberduck (Mac), Verbindung «SFTP» zu `pihub.local`, Benutzer `pi`, die ZIP Datei in den Ordner `/home/pi` ziehen.
+Unter Windows geht `scp` gleich in der PowerShell. Wer lieber klickt: WinSCP (Windows) oder Cyberduck (Mac), Verbindung «SFTP» zu `hub-pi.local`, Benutzer `scont`, die ZIP Datei in den Ordner `/home/scont` ziehen.
 
 **Variante A2, mit USB Stick** (ohne Netzwerk vom Laptop): ZIP Datei auf den Stick kopieren, Stick in den Pi stecken, dann auf dem **Pi**:
 
@@ -138,7 +138,7 @@ die Daten liegen dann nur auf dem Pi.
 Im Browser auf dem Laptop öffnen (im Heimnetz):
 
 ```
-http://pihub.local:8080/einrichtung
+http://hub-pi.local:8080/einrichtung
 ```
 
 Oder über Tailscale: `https://pihub.<dein-tailnet>.ts.net/einrichtung`.
@@ -218,7 +218,7 @@ Tipp Android: in der ntfy App für das Thema «Sofortige Zustellung» einschalte
 pihub update ~/pi-hub
 ```
 
-**Vom Laptop mit Node.js:** im Projektordner `npm run deploy` (Ziel in der `.env` des Laptops: `DEPLOY_ZIEL=pi@pihub.local`).
+**Vom Laptop mit Node.js:** im Projektordner `npm run deploy` (Ziel in der `.env` des Laptops: `DEPLOY_ZIEL=scont@hub-pi.local`).
 
 **Aus dem Hub (empfohlen):** einmalig auf dem Pi
 

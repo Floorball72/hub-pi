@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy vom Laptop auf den Pi: lokal prüfen und bauen, per rsync hochladen, auf dem Pi Release mit
 # Gesundheitscheck. Schlägt der Check fehl, schaltet der Pi automatisch auf die vorherige Version zurück.
-# Ziel einstellen in .env (DEPLOY_ZIEL=pi@pihub, DEPLOY_PFAD=/opt/pihub) oder als Umgebungsvariable.
+# Ziel einstellen in .env (DEPLOY_ZIEL=scont@hub-pi.local, DEPLOY_PFAD=/opt/pihub) oder als Umgebungsvariable.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 wert() { grep -E "^$1=" .env 2>/dev/null | cut -d= -f2- || true; }
-ZIEL="${DEPLOY_ZIEL:-$(wert DEPLOY_ZIEL)}"; ZIEL="${ZIEL:-pi@pihub}"
+ZIEL="${DEPLOY_ZIEL:-$(wert DEPLOY_ZIEL)}"; ZIEL="${ZIEL:-scont@hub-pi.local}"
 PFAD="${DEPLOY_PFAD:-$(wert DEPLOY_PFAD)}"; PFAD="${PFAD:-/opt/pihub}"
 
 echo "== Prüfen (Typecheck, Lint, Tests)"
