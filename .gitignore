@@ -1,0 +1,25 @@
+# Abhängigkeiten und Builds
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Geheimnisse: nie ins Git
+.env
+.env.*
+!.env.example
+
+# Laufzeitdaten
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/
+logs/
+*.log
+
+# Werkzeuge
+screenshots/
+.DS_Store
+.vscode/
+.idea/

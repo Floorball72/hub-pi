@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": { "includes": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "!src/web/**/*.svelte"] },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 110 },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "always" } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
+      "suspicious": { "noExplicitAny": "warn" },
+      "complexity": { "useLiteralKeys": "off" }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } }
+}
