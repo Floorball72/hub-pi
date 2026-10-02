@@ -53,8 +53,13 @@ punkt(
 );
 if (s.temperaturC === null) punkt('hinweis', 'Temperatur', 'nicht lesbar (kein Pi?)');
 else punkt(s.temperaturC < 70 ? 'ok' : 'fehler', 'Temperatur', `${s.temperaturC} °C`);
+// Drosselung ist ein Hardware Problem, kein Fehler eines Releases: beim Update nur Hinweis, sonst Rückfall
 if (s.drosselung !== null)
-  punkt(s.drosselung === '0x0' ? 'ok' : 'fehler', 'Keine Drosselung (Netzteil)', s.drosselung);
+  punkt(
+    s.drosselung === '0x0' ? 'ok' : nurKern ? 'hinweis' : 'fehler',
+    'Keine Drosselung (Netzteil)',
+    s.drosselung,
+  );
 punkt((s.speicherFreiGb ?? 0) > 3 ? 'ok' : 'fehler', 'Speicher frei', `${s.speicherFreiGb} GB`);
 punkt(
   s.tailscale.verbunden ? 'ok' : 'hinweis',
