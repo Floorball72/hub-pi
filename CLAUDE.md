@@ -118,3 +118,17 @@ Das Modul liefert nur Infos und eine Checkliste. Es erstellt nichts, schreibt ni
 4. Rettung: Helikopter, Alertswiss, Warnungen, Einsatzauswertungen, Rega Statistik
 5. swiss unihockey und Unihockey Modul, gemeinsame Timeline, Morgenbriefing
 6. Rest: Zeiterfassung, Drohnen Extras, Rettungs Toolbox, Berichte, öffentliche Statusseite
+
+## Umsetzung und Entscheide (Stand Bau)
+
+Ergänzt nach dem Bau. Details und Begründungen in `docs/ENTSCHEIDE.md`, Stand in `docs/STATUS.md`.
+
+* Datenschicht mit zwei Treibern hinter einem Interface (`src/server/daten`): `supabase` (Postgres Verbindung aus dem Backend) und `lokal` (SQLite über `node:sqlite`, für Entwicklung, Tests und als Offline Puffer). Wahl über `DATEN_TREIBER` in der `.env`.
+* Schema als Code: Tabellen werden pro Modul mit `tabelle({...})` deklariert. `npm run db:generieren` erzeugt neue Migrationen in `supabase/migrations`, `npm run db:migrate` wendet sie an.
+* **Regel: Migrationen sind rückwärts kompatibel.** Nur neue Tabellen und neue Spalten, nie löschen oder umbenennen. So kann ein Update jederzeit auf die vorherige Version zurückfallen.
+* Jede externe Quelle ist eine `Quelle` mit Cache, Timeout, Status und Demo Daten (`DEMO_MODUS=true`).
+* Module: Zentrale, Wetter, scont, Rettung, Drohne, swiss unihockey, Unihockey, Mobilität. Jedes Modul ist einzeln ausschaltbar.
+* Login: lokaler Admin (scrypt) oder Supabase Auth für Adressen in `ERLAUBTE_EMAILS`. Schreibende Anfragen brauchen den Header `x-pihub: 1`.
+* Betrieb: `install.sh`, Releases unter `/opt/pihub/releases` mit Rückfall, Befehl `pihub` auf dem Pi, Backup täglich per systemd Timer.
+* Tests mit `node:test`, Lint mit Biome, Screenshots mit Playwright (`npm run screenshots`).
+* Kein TypeScript, das Node nicht direkt ausführen kann (keine Enums, keine Konstruktor Parameter Eigenschaften).
