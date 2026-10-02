@@ -1,0 +1,455 @@
+/* Pi Hub Design: dunkel, ruhig, mobil zuerst. Grosse Zahlen in Space Grotesk. */
+@import '@fontsource-variable/space-grotesk';
+
+:root {
+  --bg: #080c11;
+  --bg-verlauf: radial-gradient(1200px 600px at 10% -10%, #10203033 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #0c2a2a33 0%, transparent 60%);
+  --flaeche: #0f151d;
+  --flaeche-2: #141c26;
+  --flaeche-3: #1a2431;
+  --rand: #1f2a38;
+  --rand-hell: #2b3a4d;
+  --text: #e6edf3;
+  --text-2: #94a3b8;
+  --text-3: #64748b;
+  --akzent: #4cc9f0;
+  --akzent-2: #7c9cff;
+  --ok: #34d399;
+  --warnung: #fbbf24;
+  --ausfall: #f87171;
+  --neutral: #64748b;
+  --ok-bg: #34d39914;
+  --warnung-bg: #fbbf2414;
+  --ausfall-bg: #f8717114;
+  --radius: 14px;
+  --radius-klein: 9px;
+  --schatten: 0 1px 0 #ffffff08 inset, 0 10px 30px #0006;
+  --schrift-zahl: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --schrift: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+  --abstand: 16px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: var(--bg-verlauf);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--schrift);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: var(--akzent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--schrift-zahl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.5em;
+}
+h1 {
+  font-size: 1.6rem;
+}
+h2 {
+  font-size: 1.15rem;
+}
+h3 {
+  font-size: 1rem;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.zahl {
+  font-family: var(--schrift-zahl);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.gedaempft {
+  color: var(--text-2);
+}
+.klein {
+  font-size: 0.85rem;
+}
+.sehr-klein {
+  font-size: 0.75rem;
+}
+.mono {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+/* Flächen */
+.karte-flaeche,
+.panel {
+  background: linear-gradient(180deg, var(--flaeche-2), var(--flaeche));
+  border: 1px solid var(--rand);
+  border-radius: var(--radius);
+  box-shadow: var(--schatten);
+  padding: var(--abstand);
+}
+
+.raster {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+}
+.raster-2 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+}
+.stapel > * + * {
+  margin-top: 12px;
+}
+.zeile {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zeile-zwischen {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+.wachsen {
+  flex: 1;
+}
+
+/* Ampel */
+.punkt {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  background: var(--neutral);
+}
+.punkt.ok {
+  background: var(--ok);
+  box-shadow: 0 0 10px #34d39966;
+}
+.punkt.warnung {
+  background: var(--warnung);
+  box-shadow: 0 0 10px #fbbf2466;
+}
+.punkt.ausfall {
+  background: var(--ausfall);
+  box-shadow: 0 0 12px #f87171aa;
+  animation: pulsieren 1.6s ease-in-out infinite;
+}
+@keyframes pulsieren {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.marke {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rand-hell);
+  color: var(--text-2);
+  background: var(--flaeche-3);
+  white-space: nowrap;
+}
+.marke.ok {
+  color: var(--ok);
+  border-color: #34d39944;
+  background: var(--ok-bg);
+}
+.marke.warnung {
+  color: var(--warnung);
+  border-color: #fbbf2444;
+  background: var(--warnung-bg);
+}
+.marke.ausfall {
+  color: var(--ausfall);
+  border-color: #f8717144;
+  background: var(--ausfall-bg);
+}
+.marke.demo {
+  color: #c4b5fd;
+  border-color: #a78bfa55;
+  background: #a78bfa14;
+}
+
+/* Bedienelemente */
+button,
+.knopf {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--flaeche-3);
+  border: 1px solid var(--rand-hell);
+  border-radius: var(--radius-klein);
+  padding: 8px 14px;
+  cursor: pointer;
+  min-height: 38px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+button:hover,
+.knopf:hover {
+  background: #223043;
+  border-color: #3a4d65;
+  text-decoration: none;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.primaer {
+  background: linear-gradient(180deg, #2bb3df, #1a8fb8);
+  border-color: #4cc9f0;
+  color: #04111a;
+  font-weight: 600;
+}
+button.primaer:hover {
+  background: linear-gradient(180deg, #3cc2ec, #209ac4);
+}
+button.gefahr {
+  border-color: #f8717166;
+  color: var(--ausfall);
+}
+button.gefahr:hover {
+  background: #f871711f;
+}
+button.leise {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+button.leise:hover {
+  background: var(--flaeche-3);
+  color: var(--text);
+}
+button.klein {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: #0b1118;
+  border: 1px solid var(--rand-hell);
+  border-radius: var(--radius-klein);
+  padding: 8px 10px;
+  width: 100%;
+  min-height: 38px;
+}
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid #4cc9f088;
+  outline-offset: 1px;
+}
+input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  accent-color: var(--akzent);
+}
+label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.feld + .feld {
+  margin-top: 10px;
+}
+
+/* Schalter */
+.schalter {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex: none;
+  display: inline-block;
+}
+.schalter input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.schalter span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #273445;
+  border: 1px solid var(--rand-hell);
+  transition: 0.2s;
+  cursor: pointer;
+}
+.schalter span::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: 0.2s;
+}
+.schalter input:checked + span {
+  background: #1a8fb8;
+  border-color: var(--akzent);
+}
+.schalter input:checked + span::after {
+  transform: translateX(18px);
+  background: white;
+}
+
+/* Tabellen */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--rand);
+}
+td {
+  padding: 8px;
+  border-bottom: 1px solid #1a2330;
+  vertical-align: top;
+}
+tr:last-child td {
+  border-bottom: none;
+}
+.tabelle-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hinweise */
+.hinweis {
+  font-size: 0.85rem;
+  padding: 10px 12px;
+  border-radius: var(--radius-klein);
+  border: 1px solid var(--rand-hell);
+  background: var(--flaeche-3);
+  color: var(--text-2);
+}
+.hinweis.warnung {
+  border-color: #fbbf2444;
+  background: var(--warnung-bg);
+  color: #fde68a;
+}
+.hinweis.ausfall {
+  border-color: #f8717144;
+  background: var(--ausfall-bg);
+  color: #fecaca;
+}
+.hinweis.ok {
+  border-color: #34d39944;
+  background: var(--ok-bg);
+  color: #a7f3d0;
+}
+
+.leer {
+  color: var(--text-3);
+  font-size: 0.9rem;
+  padding: 12px 0;
+}
+
+/* Liste */
+.liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.liste > li {
+  padding: 9px 0;
+  border-bottom: 1px solid #1a2330;
+}
+.liste > li:last-child {
+  border-bottom: none;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-bottom: 14px;
+  scrollbar-width: none;
+}
+.tabs button {
+  white-space: nowrap;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.tabs button.aktiv {
+  background: var(--flaeche-3);
+  border-color: var(--rand-hell);
+  color: var(--text);
+}
+
+/* Skelett beim Laden */
+.laedt {
+  background: linear-gradient(90deg, #141c26 0%, #1b2532 50%, #141c26 100%);
+  background-size: 200% 100%;
+  animation: schimmer 1.4s linear infinite;
+  border-radius: 8px;
+  min-height: 18px;
+}
+@keyframes schimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
