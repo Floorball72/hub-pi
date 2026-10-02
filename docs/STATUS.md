@@ -8,7 +8,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 |---|---|---|
 | 1 | Kern: Gerüst, Module, Daten, Login, Alarmzentrale, Systemstatus, Statusseite, install.sh, Deploy, Tailscale | fertig |
 | 2 | Webseiten Wächter, Kunden und Domains, Qualitätscheck | fertig |
-| 3 | Karte, Wetter, Drohnen Planung | offen |
+| 3 | Karte, Wetter, Drohnen Planung | fertig |
 | 4 | Rettung | offen |
 | 5 | swiss unihockey, Unihockey, Timeline, Briefing | offen |
 | 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | offen |
@@ -21,6 +21,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 3 | 88 MB (Spitze 100 MB) | Demo, Karte mit Ebenen, Wetter und Drohne |
 | 2 | 84 MB (Spitze 95 MB) | Demo Modus mit 4 Seiten und 7 Tagen Verlauf, Screenshots aller scont Ansichten |
 
 Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, `MemoryMax=400M`).
@@ -32,7 +33,9 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - `install.sh` auf Ubuntu 24.04 (x86_64) als Root durchgelaufen: Pakete, Node 24 Download mit Prüfsumme, Benutzer, .env, Build auf dem Gerät, Start, Gesundheitscheck. systemd selbst war in der Testumgebung nicht verfügbar (Attrappe), die Unit Dateien sind darum nur syntaktisch geprüft.
 - Rückfall bei kaputtem Release: erkannt, alte Version läuft weiter
 - Backup Skript und Selbsttest auf der installierten Version
-- Playwright Screenshots mobil und breit: Start, Alarme, Status, System, Einrichtung, Karte
+- Playwright Screenshots mobil und breit: Start, Alarme, Status, System, Einrichtung, Karte, scont, Wetter, Drohne
+- Open-Meteo, NOAA KP Index, geo.admin.ch Drohnenzonen, RainViewer: echt abgerufen, Antworten als Fixtures in den Tests
+- Sonnenberechnung (NOAA Algorithmus) gegen PyEphem und Open-Meteo: Abweichung unter 10 Sekunden
 
 ## Ungetestet
 

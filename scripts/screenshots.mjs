@@ -22,6 +22,7 @@ const ALLE = [
   '/modul/zentrale',
   '/modul/scont',
   '/modul/rettung',
+  '/modul/wetter',
   '/modul/drohne',
   '/modul/unihockey',
   '/modul/swissunihockey',
