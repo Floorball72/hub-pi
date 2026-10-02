@@ -40,6 +40,11 @@
     abhaengigkeiten: () => import('./module/Abhaengigkeiten.svelte'),
     aenderungen: () => import('./module/Aenderungen.svelte'),
     teams: () => import('./module/Teams.svelte'),
+    abrufe: () => import('./module/Abrufe.svelte'),
+    auffaelligkeiten: () => import('./module/Auffaelligkeiten.svelte'),
+    selbstheilung: () => import('./module/Selbstheilung.svelte'),
+    updates: () => import('./module/Updates.svelte'),
+    drehwetter: () => import('./module/Drehwetter.svelte'),
   };
 
   let sitzung = $state<{ angemeldet: boolean; benutzer: string | null; demo: boolean; einrichtungOffen: boolean } | null>(null);

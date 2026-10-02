@@ -167,3 +167,25 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 ### E37 Weitere Teams: TheSportsDB
 - **Was:** FC St. Gallen über TheSportsDB (freier Testschlüssel 123, eigener Schlüssel möglich), alternativ OpenLigaDB. «keine» Quelle zeigt ehrlich, dass es keine erlaubte Quelle gibt.
 - **Warum:** OpenLigaDB hat für die Super League 2026/27 keine Daten (Community gepflegt, 2025/26 lückenhaft). Die Seiten der Swiss Football League bieten keine offene Schnittstelle.
+
+### E38 Intelligente Abrufe als zentraler Planer in der Quelle
+- **Was:** Jede `Quelle` fragt den Abrufplaner: Grundtakt `ttlSek` mal Faktor der Nutzung (aktiv 1, ruhig 1.5, keine Nutzung 2.5, Nacht 3; wichtige Quellen höchstens 1.5), Backoff und Pause ab 3 Fehlern je Adresse (wichtige Quellen nie pausiert), Tagesbudget, Modus auto, fix oder aus. Dazu bedingte Abrufe mit ETag und Last-Modified (304) in `http.ts` und ±5 % Streuung bei Jobs ab 5 Minuten. Nutzung zählt nur bei sichtbarer Seite.
+- **Warum:** Eine Stelle statt Logik in jedem Modul. Schont Datenvolumen, Strom und die Anbieter. Pausen je Adresse, damit eine kaputte Kundenseite nicht alle anderen bremst.
+- **Alternative:** Feste Intervalle je Modul (bisher), oder ein eigener Prozess als Planer (mehr RAM).
+
+### E39 Auffälligkeiten mit Median und MAD
+- **Was:** Module melden Zahlen über `ctx.metrik(...)`. Normalbereich je Eimer (Werktag oder Wochenende, Stunde) aus den Stundenmitteln der letzten 4 Wochen, Rückfall auf die Stunde und auf gesamt. Robuster z Wert mit Untergrenze für die Streuung (2 % des Medians, Mindestabweichung je Metrik). Schwellen 6, 4.5, 3.5 für niedrig, normal, hoch. Rückmeldung «normal» erhöht den Faktor um 15 %, «relevant» senkt ihn um 5 % (0.7 bis 2.5). Lernphase 14 Tage, Mindestdauer und Sperrfrist je Metrik.
+- **Warum:** Median und MAD sind robust gegen Ausreisser und brauchen kaum Rechenzeit. Werktag und Wochenende statt sieben Wochentage, weil sonst nach 4 Wochen nur 4 Werte je Eimer da wären.
+- **Alternative:** Mittelwert und Standardabweichung (anfällig auf Ausreisser), Holt Winters oder maschinelles Lernen (zu schwer für den Pi 3).
+
+### E40 Selbstheilung in Stufen
+- **Was:** Watchdog alle 2 Minuten: nach 3 Fehlern in Folge Modul neu laden, danach Job pausieren (15 min, 1 h, 4 h, 12 h), erst dann Nachricht. Hängt ein Job über 30 Minuten oder liegt der RAM dreimal über 300 MB oder reagiert der Hub träge (p99 Verzögerung über 2 s), beendet er sich und systemd startet neu (höchstens einmal pro Stunde, dreimal pro Tag). Bei wenig Speicher früher verdichten und nur 5 Backups behalten.
+- **Warum:** Die meisten Fehler sind vorübergehend (Netz, Anbieter). Neustarts nur als letztes Mittel, weil sie Daten im RAM (Caches, Heli Spuren) verlieren.
+
+### E41 Sichere Updates über die bestehende Release Pipeline
+- **Was:** Der Hub schreibt nur eine Anfrage, die Arbeit macht `pihub-aktualisieren` als root (systemd Path Unit). Erlaubt ist nur `UPDATE_REPO` und ein Commit auf `UPDATE_BRANCH`. Vorher Selbsttest `--kern` der laufenden Version, dann Bau in einem eigenen Release Ordner, Backup, Migrationen, Umschalten, Gesundheitscheck, Selbsttest, sonst Rückfall. Ergebnis als JSON Datei, der Hub meldet es in der Alarmzentrale. Automatisch nur im Nachtfenster, einmal pro Tag, Standard aus.
+- **Warum:** Der Dienst selbst hat keine Root Rechte (systemd Härtung). Standard aus, weil ein Update zuerst einmal von Hand geprüft werden soll.
+
+### E42 Dreh Wetter Wächter nutzt die zentrale Timeline
+- **Was:** Prüfpunkte 72, 48, 24 und 4 Stunden vorher gegen das Mindestwetter des Drehorts. Ausweichtermine: gleiche Dauer, 7 bis 20 Uhr bei Tageslicht, gutes Wetter, keine Überschneidung mit Einträgen der Timeline (Kalender, swiss unihockey Einsätze, Veranstaltungen, andere Drehs). Ganztägige Kalendereinträge blockieren nicht. Höchstens ein Vorschlag pro Tag.
+- **Warum:** Die Timeline sammelt schon alle Termine, so braucht es keine eigene Abfrage pro Quelle. Der Hub verschiebt nie selbst.

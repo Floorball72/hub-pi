@@ -14,6 +14,7 @@ Stand der Entwicklung. Wird nach jeder Phase aktualisiert.
 | 6 | Zeiterfassung, Drohnen Extras, Toolbox, Berichte, öffentliche Statusseite | fertig |
 | 7 | Sonnenuntergangs Prognose, Event Zentrale, Content Kalender, Veranstaltungen, Parkplätze | fertig |
 | 8 | Dienste Status, Sicherheits Checks, Abhängigkeiten Wächter, Änderungs Wächter, Weitere Teams | fertig |
+| 9 | Dreh Wetter Wächter, Auffälligkeiten, Selbstheilung, Sichere Updates, Intelligente Abrufe | fertig |
 
 ## Speicherverbrauch (RSS des Hub Prozesses)
 
@@ -23,6 +24,7 @@ Werten zu rechnen, die Messung auf dem Pi steht noch aus (siehe «Zuhause prüfe
 | Phase | Normalbetrieb | Bemerkung |
 |---|---|---|
 | 1 | 88 MB | installierte Version, Node 24, nach Start und einigen Anfragen |
+| 9 | 100 MB (Spitze 113 MB) | Demo mit allen 22 Modulen, Abrufplaner, Metriken, Watchdog |
 | 8 | 96 MB (Spitze 111 MB) | Demo mit 17 Modulen |
 | 7 | 99 MB (Spitze 112 MB) | Demo mit 12 Modulen, Content Kalender, Event Zentrale, Parkhaus Karte |
 | 6 | 96 MB (Spitze 107 MB) | Demo, alle Seiten und Tabs mit Playwright geprüft |
@@ -46,6 +48,10 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 
 ## Ungetestet
 
+- Update Pipeline (`scripts/aktualisieren.sh`, `scripts/release.sh` mit Backup, Migration, Selbsttest, Rückfall): Syntax geprüft, Ablauf wie die in Phase 1 getestete Release Logik, aber der neue Ablauf noch nicht auf einem echten Pi mit systemd
+- Neustart durch die Selbstheilung (`process.exit` unter systemd, nur wenn `INVOCATION_ID` gesetzt ist)
+- TLS 1.0/1.1 Prüfung und Ereignisschleifen Messung auf dem Pi 3
+
 - Have I Been Pwned Domain Suche (`HIBP_API_KEY`): braucht einen kostenpflichtigen Schlüssel und verifizierte Domains, gebaut nach der Dokumentation API v3 (`/breacheddomain/{domain}`)
 - Sicherheits Checks: TLS und Zertifikat sah in der Entwicklungsumgebung nur den Proxy. Ob «TLS 1.0/1.1 akzeptiert» auf dem Pi feststellbar ist, hängt von dessen OpenSSL ab (sonst «nicht feststellbar»)
 - Abhängigkeiten über die GitHub API (privat mit `GITHUB_TOKEN`)
@@ -66,6 +72,11 @@ Ziel: unter 300 MB. Zusätzlich begrenzt systemd den Dienst (`MemoryHigh=320M`, 
 - Tailscale Befehle (docs/TAILSCALE.md)
 
 ## Zuhause prüfen
+
+- Sichere Updates: `pihub updates-einrichten` ausführen (bei privatem Repository vorher Zugang einrichten), dann im Hub «Jetzt aktualisieren» einmal von Hand testen, danach «Automatische Updates» einschalten
+- Auffälligkeiten: die ersten 14 Tage lernt der Hub nur. Danach Meldungen mit «War normal» oder «War relevant» bewerten
+- Abrufe: nach einigen Tagen auf der Seite «Intelligente Abrufe» die Zähler ansehen, bei Bedarf Budget oder festen Takt setzen
+- Dreh Wetter Wächter: bei Kundendrehs Ort und Dauer eintragen (Modul Drohne), Mindestwetter je Ort prüfen
 
 - Abhängigkeiten Wächter: eigene Projekte erfassen (GitHub «besitzer/name», für private Repositories `GITHUB_TOKEN` mit Leserecht). Ordner unter /home kann der Dienst nicht lesen (systemd ProtectHome)
 - Änderungs Wächter: «Seiten aus dem Webseiten Wächter übernehmen», nach dem ersten Tag dynamische Stellen als Ausnahmen eintragen, falls Fehlalarme kommen

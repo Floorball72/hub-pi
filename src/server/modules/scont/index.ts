@@ -131,6 +131,9 @@ function scontLaufzeit(ctx: Kontext) {
 
   const erreichbarkeit = ctx.quelle<{ url: string; text: string | null; name: string }, PruefErgebnis>({
     id: 'scont.erreichbarkeit',
+    wichtig: true,
+    // Der Wächter bestimmt den Takt selbst (Prüfintervall je Seite), darum kein Mindestabstand
+    minSek: 0,
     name: 'Webseiten Prüfung',
     modul: 'scont',
     ttlSek: 20,
@@ -141,6 +144,7 @@ function scontLaufzeit(ctx: Kontext) {
   });
   const ssl = ctx.quelle<string, SslErgebnis>({
     id: 'scont.ssl',
+    wichtig: true,
     name: 'SSL Zertifikate',
     modul: 'scont',
     ttlSek: 6 * 3600,
@@ -206,6 +210,16 @@ function scontLaufzeit(ctx: Kontext) {
       { seite_id: s.id, ok: e.ok, status: e.status, ms: e.ms, fehler: e.fehler },
     ]);
     letztePruefung.set(s.id, ctx.jetzt().getTime());
+    if (e.ok)
+      await ctx.metrik({
+        id: `scont.ms.${s.id}`,
+        name: `Antwortzeit ${s.name}`,
+        einheit: 'ms',
+        richtung: 'hoch',
+        minAbweichung: 400,
+        minDauerMin: 20,
+        prioritaet: 4,
+      })(e.ms);
     const n = e.ok ? 0 : (fehlerInFolge.get(s.id) ?? 0) + 1;
     fehlerInFolge.set(s.id, n);
     if (n >= 2 && !offeneVorfaelle.has(s.id)) {

@@ -1,14 +1,6 @@
 // Kern Routen: Module, Kacheln, Status, System, Alarmzentrale, Suche, Timeline, Briefing, Karte.
 import type { FastifyInstance } from 'fastify';
-import type {
-  AlarmRegel,
-  Ampel,
-  BriefingTeil,
-  Ebene,
-  Kachel,
-  SuchTreffer,
-  TimelineEintrag,
-} from '../geteilt/typen.ts';
+import type { AlarmRegel, Ampel, BriefingTeil, Ebene, Kachel, SuchTreffer } from '../geteilt/typen.ts';
 import { EingabeFehler } from '../daten/schema.ts';
 import { fehlerText } from './fehler.ts';
 import type { Hub } from './hub.ts';
@@ -243,18 +235,7 @@ export function kernRouten(app: FastifyInstance, hub: Hub) {
     const bis = req.query.bis ? new Date(req.query.bis) : new Date(hub.jetzt().getTime() + 30 * 86400000);
     if (Number.isNaN(von.getTime()) || Number.isNaN(bis.getTime()))
       throw new EingabeFehler('Ungültiger Zeitraum');
-    const eintraege: TimelineEintrag[] = [];
-    await Promise.all(
-      [...hub.module.entries()].map(async ([id, m]) => {
-        if (!m.laufzeit.timeline || !hub.modulAktiv(id)) return;
-        try {
-          eintraege.push(...(await mitTimeout(m.laufzeit.timeline(von, bis), 8000)));
-        } catch (e) {
-          hub.log.warn({ modul: id, fehler: fehlerText(e) }, 'Timeline fehlgeschlagen');
-        }
-      }),
-    );
-    return eintraege.sort((a, b) => a.start.localeCompare(b.start));
+    return hub.timeline(von, bis);
   });
 
   app.get('/api/briefing', async () => {

@@ -16,6 +16,11 @@ export interface JobStatus {
   naechsterLauf: string | null;
   laeufe: number;
   fehler: number;
+  fehlerInFolge: number;
+  /** Seit wann der aktuelle Lauf dauert (ms seit Epoch), null wenn nicht aktiv */
+  laeuftSeit: number | null;
+  pausiertBis: string | null;
+  intervallSek?: number;
 }
 
 interface Eintrag {
@@ -64,11 +69,24 @@ export class Scheduler {
         naechsterLauf: null,
         laeufe: 0,
         fehler: 0,
+        fehlerInFolge: 0,
+        laeuftSeit: null,
+        pausiertBis: null,
       },
     });
     // Täglicher Job, dessen Zeit heute schon vorbei ist: erst morgen
     const e = this.jobs.get(id)!;
     if (def.taeglich && minutenLokal(this.jetzt()) < hhmmZuMinuten(def.taeglich)) e.letzterTag = null;
+  }
+
+  /** Job bis zu einem Zeitpunkt aussetzen (Selbstheilung), null hebt die Pause auf */
+  pausieren(id: string, bis: Date | null) {
+    const e = this.jobs.get(id);
+    if (e) e.status.pausiertBis = bis ? bis.toISOString() : null;
+  }
+
+  modulEntfernen(modul: string) {
+    for (const [id, e] of this.jobs) if (e.modul === modul && !e.status.laeuft) this.jobs.delete(id);
   }
 
   starten(taktMs = 15000) {
@@ -89,6 +107,7 @@ export class Scheduler {
     const ids: string[] = [];
     for (const [id, e] of this.jobs) {
       if (e.status.laeuft || !this.aktiv(e.modul)) continue;
+      if (e.status.pausiertBis && Date.parse(e.status.pausiertBis) > jetzt.getTime()) continue;
       if (this.istFaellig(e, jetzt)) {
         ids.push(id);
         gestartet.push(this.ausfuehren(e));
@@ -109,21 +128,29 @@ export class Scheduler {
   async ausfuehren(e: Eintrag) {
     const start = this.jetzt();
     e.status.laeuft = true;
+    e.status.laeuftSeit = start.getTime();
     if (e.def.taeglich) e.letzterTag = lokalDatum(start);
     try {
       const meldung = await e.def.lauf();
       e.status.letzterFehler = null;
+      e.status.fehlerInFolge = 0;
       e.status.letzteMeldung = meldung ? String(meldung).slice(0, 200) : null;
     } catch (err) {
       e.status.fehler++;
+      e.status.fehlerInFolge++;
       e.status.letzterFehler = fehlerText(err).slice(0, 200);
       this.melden(e.modul, e.def.name, e.status.letzterFehler);
     } finally {
       e.status.laeuft = false;
+      e.status.laeuftSeit = null;
       e.status.laeufe++;
       e.status.letzterLauf = start.toISOString();
       e.status.letzteDauerMs = this.jetzt().getTime() - start.getTime();
-      if (e.def.intervallSek) e.faellig = this.jetzt().getTime() + e.def.intervallSek * 1000;
+      if (e.def.intervallSek) {
+        // Längere Intervalle leicht streuen (±5 %), damit sich Abrufe nicht immer gleichzeitig ballen
+        const streuung = e.def.intervallSek >= 300 ? 0.95 + Math.random() * 0.1 : 1;
+        e.faellig = this.jetzt().getTime() + e.def.intervallSek * 1000 * streuung;
+      }
     }
   }
 
@@ -138,6 +165,7 @@ export class Scheduler {
   status(): JobStatus[] {
     return [...this.jobs.values()].map((e) => ({
       ...e.status,
+      intervallSek: e.def.intervallSek,
       naechsterLauf: e.def.taeglich ? `täglich ${e.def.taeglich}` : new Date(e.faellig).toISOString(),
     }));
   }

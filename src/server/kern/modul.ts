@@ -7,6 +7,9 @@ import type { Konfig } from '../konfig.ts';
 import type { Quelle, QuellenDef } from '../quellen/quelle.ts';
 import type { Alarmzentrale, RegelVorlage } from './alarm.ts';
 import type { Einstellungen } from './einstellungen.ts';
+import type { MetrikDef, MetrikRegistry } from './metriken.ts';
+import type { Abrufplaner } from './planer.ts';
+import type { Scheduler } from './scheduler.ts';
 
 export interface JobDef {
   id: string;
@@ -31,6 +34,18 @@ export interface Kontext {
   /** Erstellt eine Datenquelle, die zum Modul gehört */
   quelle: <P, T>(def: QuellenDef<P, T>) => Quelle<P, T>;
   jetzt: () => Date;
+  /** Zugriff auf Kern Dienste für Module, die den Hub selbst überwachen */
+  kern: {
+    planer: Abrufplaner;
+    scheduler: Scheduler;
+    quellen: () => Quelle<never, unknown>[];
+    module: () => { id: string; name: string; aktiv: boolean; fehler?: string }[];
+    modulNeuLaden: (id: string) => Promise<boolean>;
+    metriken: MetrikRegistry;
+    timeline: (von: Date, bis: Date) => Promise<TimelineEintrag[]>;
+  };
+  /** Meldet eine Zahl an die Auffälligkeiten Erkennung. Gibt eine Funktion zum Erfassen zurück. */
+  metrik: (def: MetrikDef) => (wert: number | null | undefined) => Promise<void>;
 }
 
 export interface ModulLaufzeit {

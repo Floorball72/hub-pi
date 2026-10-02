@@ -38,6 +38,7 @@ export interface Konfig {
   hibpKey: string;
   githubToken: string;
   sportsdbKey: string;
+  update: { repo: string; zweig: string };
   suhLogin: { benutzer: string; passwort: string };
 }
 
@@ -135,6 +136,7 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     hibpKey: e.HIBP_API_KEY ?? '',
     githubToken: e.GITHUB_TOKEN ?? '',
     sportsdbKey: e.THESPORTSDB_KEY || '123',
+    update: { repo: e.UPDATE_REPO || 'Floorball72/hub-pi', zweig: e.UPDATE_BRANCH || 'main' },
     suhLogin: { benutzer: e.SUH_LOGIN_BENUTZER ?? '', passwort: e.SUH_LOGIN_PASSWORT ?? '' },
   };
 }

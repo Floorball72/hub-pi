@@ -134,6 +134,8 @@ export async function appErstellen(o: AppOptionen): Promise<{ app: FastifyInstan
     if (['/api/login', '/api/logout', '/api/sitzung', '/api/gesundheit'].includes(pfad)) return;
     if (pfad.startsWith('/api/einrichtung') && !k.einrichtungAbgeschlossen) return;
     if (!req.sitzung) return reply.code(401).send({ fehler: 'Bitte anmelden' });
+    // Nutzung für den Abrufplaner (nur echte Seitenaufrufe, nicht automatische Aktualisierungen im Hintergrund)
+    if (req.headers['x-pihub-sichtbar'] !== '0') hub.planer.nutzung();
   });
 
   app.addHook('onSend', async (_req, reply, payload) => {

@@ -127,7 +127,12 @@ Ergänzt nach dem Bau. Details und Begründungen in `docs/ENTSCHEIDE.md`, Stand 
 * Schema als Code: Tabellen werden pro Modul mit `tabelle({...})` deklariert. `npm run db:generieren` erzeugt neue Migrationen in `supabase/migrations`, `npm run db:migrate` wendet sie an.
 * **Regel: Migrationen sind rückwärts kompatibel.** Nur neue Tabellen und neue Spalten, nie löschen oder umbenennen. So kann ein Update jederzeit auf die vorherige Version zurückfallen.
 * Jede externe Quelle ist eine `Quelle` mit Cache, Timeout, Status und Demo Daten (`DEMO_MODUS=true`).
-* Module: Zentrale, Wetter, scont, Rettung, Drohne, swiss unihockey, Unihockey, Mobilität. Jedes Modul ist einzeln ausschaltbar.
+* Module: Zentrale, Wetter, scont, Rettung, Drohne, swiss unihockey, Unihockey, Mobilität. Erweiterung: Dreh Wetter Wächter, Event Zentrale, Content Kalender, Veranstaltungen, Parkplätze, Dienste Status, Sicherheits Checks, Abhängigkeiten Wächter, Änderungs Wächter, Weitere Teams, Auffälligkeiten, Intelligente Abrufe, Selbstheilung, Sichere Updates. Jedes Modul ist einzeln ausschaltbar.
+* Neues Modul: Ordner `src/server/modules/<id>/index.ts` mit `ModulDef` (Tabellen, Regeln, `erstellen`), Eintrag in `modules/index.ts`, Seite `src/web/module/<Name>.svelte` in `MODULSEITEN` (App.svelte), Symbol in `Icon.svelte`, danach `npm run db:generieren`. Jede Quelle mit Demo Adapter.
+* Abrufe laufen über den zentralen Abrufplaner (`kern/planer.ts`): Takt aus `ttlSek`, angepasst an Nutzung und Nacht, Backoff je Adresse, Budget. Quellen, die für Alarme zählen, mit `wichtig: true` markieren.
+* Messwerte für die Auffälligkeiten Erkennung: `const m = ctx.metrik({ id, name, einheit }); await m(wert);`
+* Push Regeln: neue Regeln standardmässig ohne Nachtmeldungen (`nachts` nur für Ausfälle von Kundenseiten und Auffälligkeiten mit hoher Priorität).
+* Updates nur aus `UPDATE_REPO` (Standard Floorball72/hub-pi), Pipeline in `scripts/aktualisieren.sh` und `scripts/release.sh` (Selbsttest, Backup, Migration, Umschalten, Selbsttest, Rückfall, 3 Versionen).
 * Login: lokaler Admin (scrypt) oder Supabase Auth für Adressen in `ERLAUBTE_EMAILS`. Schreibende Anfragen brauchen den Header `x-pihub: 1`.
 * Betrieb: `install.sh`, Releases unter `/opt/pihub/releases` mit Rückfall, Befehl `pihub` auf dem Pi, Backup täglich per systemd Timer.
 * Tests mit `node:test`, Lint mit Biome, Screenshots mit Playwright (`npm run screenshots`).

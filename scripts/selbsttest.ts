@@ -1,5 +1,8 @@
 // Selbsttest auf dem Pi: Speicher, Temperatur, Datenbank, ntfy, jede Datenquelle.
-// Aufruf: npm run selbsttest   (Option --ohne-push: keine Testnachricht senden)
+// Aufruf: npm run selbsttest   (Option --ohne-push: keine Testnachricht senden,
+//   --kern: nur Dienst, Datenbank und Module, ohne Push und ohne externe Quellen; für die automatischen Updates)
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MODULE } from '../src/server/modules/index.ts';
 import { alleTabellen } from '../src/server/kern/hub.ts';
 import { datenErstellen } from '../src/server/daten/index.ts';
@@ -10,11 +13,15 @@ import { systemStatus } from '../src/server/kern/system.ts';
 import { konfigLaden } from '../src/server/konfig.ts';
 import { Quelle, type QuellenDef } from '../src/server/quellen/quelle.ts';
 import type { Kontext } from '../src/server/kern/modul.ts';
+import { MetrikRegistry } from '../src/server/kern/metriken.ts';
+import { Abrufplaner } from '../src/server/kern/planer.ts';
+import { Scheduler } from '../src/server/kern/scheduler.ts';
 import { Einstellungen } from '../src/server/kern/einstellungen.ts';
 import { Alarmzentrale } from '../src/server/kern/alarm.ts';
 
 const k = konfigLaden({ DEMO_MODUS: 'false' });
-const ohnePush = process.argv.includes('--ohne-push');
+const nurKern = process.argv.includes('--kern');
+const ohnePush = nurKern || process.argv.includes('--ohne-push');
 let gruen = 0;
 let rot = 0;
 let gelb = 0;
@@ -64,6 +71,34 @@ punkt(
   s.backup.letztes ? `vor ${s.backup.alterStunden} h` : 'noch keins',
 );
 
+// Sichere Updates und Selbstheilung
+if (existsSync('/opt/pihub/releases')) {
+  const versionen = readdirSync('/opt/pihub/releases');
+  punkt(
+    versionen.length >= 1 ? 'ok' : 'fehler',
+    'Versionen auf dem Pi',
+    `${versionen.length} (höchstens 3 werden behalten)`,
+  );
+  punkt(
+    existsSync('/opt/pihub/quelle/.git') ? 'ok' : 'hinweis',
+    'Updates aus dem Hub',
+    existsSync('/opt/pihub/quelle/.git')
+      ? `Git Quelle für ${k.update.repo}`
+      : 'nicht eingerichtet (pihub updates-einrichten)',
+  );
+}
+const ergebnisDatei = join(k.datenVerzeichnis, 'aktualisieren.ergebnis.json');
+if (existsSync(ergebnisDatei)) {
+  try {
+    const e = JSON.parse(readFileSync(ergebnisDatei, 'utf8')) as { ok: boolean; meldung: string };
+    punkt(e.ok ? 'ok' : 'hinweis', 'Letztes Update', e.meldung);
+  } catch {
+    punkt('hinweis', 'Letztes Update', 'Ergebnisdatei nicht lesbar');
+  }
+}
+if (s.prozessRssMb > 0)
+  punkt(s.prozessRssMb < 300 ? 'ok' : 'fehler', 'RAM dieses Tests', `${s.prozessRssMb} MB`);
+
 // Dienst
 try {
   const r = await fetch(`http://127.0.0.1:${k.port}/api/gesundheit`, { signal: AbortSignal.timeout(3000) });
@@ -104,7 +139,7 @@ try {
 }
 
 // Push
-if (!k.ntfy.thema) punkt('fehler', 'ntfy', 'Thema fehlt');
+if (!k.ntfy.thema) punkt(nurKern ? 'hinweis' : 'fehler', 'ntfy', 'Thema fehlt');
 else if (ohnePush) punkt('hinweis', 'ntfy', 'übersprungen (--ohne-push)');
 else {
   try {
@@ -152,6 +187,19 @@ for (const m of MODULE) {
     aktivitaet: async () => {},
     modulAktiv: () => true,
     jetzt: () => new Date(),
+    kern: {
+      planer: new Abrufplaner(() => null),
+      scheduler: new Scheduler(() => false),
+      quellen: () => [],
+      module: () => [],
+      modulNeuLaden: async () => false,
+      metriken: new MetrikRegistry(
+        async () => {},
+        () => false,
+      ),
+      timeline: async () => [],
+    },
+    metrik: () => async () => {},
     quelle: <P, T>(def: QuellenDef<P, T>) => {
       const q = new Quelle<P, T>(def, { demo: () => false, aktiv: () => true });
       quellen.push(q as unknown as Quelle<unknown, unknown>);
@@ -164,7 +212,7 @@ for (const m of MODULE) {
     punkt('fehler', `Modul ${m.name}`, (e as Error).message);
   }
 }
-for (const q of quellen) {
+for (const q of nurKern ? [] : quellen) {
   if (q.def.konfiguriert && !q.def.konfiguriert()) {
     punkt('hinweis', q.def.name, 'nicht konfiguriert');
     continue;

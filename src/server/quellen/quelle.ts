@@ -1,6 +1,7 @@
 // Basis für jede externe Datenquelle: Cache, Timeout (über http.ts), Status und Demo Daten.
 // Fällt eine Quelle aus, liefert sie den letzten bekannten Stand mit Hinweis statt eines Absturzes.
 import { fehlerText } from '../kern/fehler.ts';
+import type { Abrufplaner } from '../kern/planer.ts';
 
 export type QuellenZustand = 'ok' | 'fehler' | 'unbekannt' | 'aus' | 'nicht_konfiguriert' | 'demo';
 
@@ -30,6 +31,11 @@ export interface QuellenDef<P, T> {
   beschreibung?: string;
   /** Beispielparameter für den Selbsttest */
   testParameter?: () => P;
+  /** Abrufplaner: kürzester und längster Abstand, Tagesbudget, wichtig für Alarme */
+  minSek?: number;
+  maxSek?: number;
+  wichtig?: boolean;
+  tagesBudget?: number;
 }
 
 export interface QuellenStatus {
@@ -63,9 +69,12 @@ export class Quelle<P = void, T = unknown> {
   private latenz: number | null = null;
 
   readonly def: QuellenDef<P, T>;
-  private umgebung: { demo: () => boolean; aktiv: () => boolean };
+  private umgebung: { demo: () => boolean; aktiv: () => boolean; planer?: Abrufplaner };
 
-  constructor(def: QuellenDef<P, T>, umgebung: { demo: () => boolean; aktiv: () => boolean }) {
+  constructor(
+    def: QuellenDef<P, T>,
+    umgebung: { demo: () => boolean; aktiv: () => boolean; planer?: Abrufplaner },
+  ) {
     this.def = def;
     this.umgebung = umgebung;
   }
@@ -90,8 +99,26 @@ export class Quelle<P = void, T = unknown> {
     }
     const schluessel = JSON.stringify(p ?? null);
     const c = this.cache.get(schluessel);
-    if (!frisch && c && Date.now() - c.zeit < this.def.ttlSek * 1000) {
+    const planer = this.umgebung.planer;
+    const ttl = planer ? planer.ttlSek(this.def, schluessel) : this.def.ttlSek;
+    if (!frisch && c && Date.now() - c.zeit < ttl * 1000) {
       return { ...basis, daten: c.daten, stand: new Date(c.zeit).toISOString(), demo: false };
+    }
+    if (planer) {
+      if (frisch && c && Date.now() - c.zeit < planer.minSek(this.def) * 1000)
+        return { ...basis, daten: c.daten, stand: new Date(c.zeit).toISOString(), demo: false };
+      const d = planer.darf(this.def, schluessel);
+      if (!d.ok) {
+        if (c)
+          return {
+            ...basis,
+            daten: c.daten,
+            stand: new Date(c.zeit).toISOString(),
+            demo: false,
+            veraltet: Date.now() - c.zeit >= ttl * 1000,
+          };
+        return { ...basis, daten: null, stand: null, demo: false, fehler: d.grund };
+      }
     }
     const offen = this.laufend.get(schluessel);
     if (offen) return offen;
@@ -102,8 +129,10 @@ export class Quelle<P = void, T = unknown> {
 
   private async abrufen(p: P, schluessel: string): Promise<Ergebnis<T>> {
     const start = performance.now();
+    this.umgebung.planer?.abgerufen(this.def.id);
     try {
       const daten = await this.def.abruf(p);
+      this.umgebung.planer?.erfolg(this.def.id, schluessel);
       this.latenz = Math.round(performance.now() - start);
       this.zustand = 'ok';
       this.letzterErfolg = new Date().toISOString();
@@ -113,6 +142,7 @@ export class Quelle<P = void, T = unknown> {
       if (this.cache.size > MAX_SCHLUESSEL) this.cache.delete(this.cache.keys().next().value!);
       return { quelle: this.def.id, daten, stand: this.letzterErfolg, demo: false, veraltet: false };
     } catch (e) {
+      this.umgebung.planer?.fehler(this.def.id, this.def.ttlSek, schluessel);
       this.zustand = 'fehler';
       this.letzterFehler = new Date().toISOString();
       this.fehlerMeldung = fehlerText(e).slice(0, 200);

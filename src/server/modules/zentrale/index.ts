@@ -65,6 +65,22 @@ export const zentrale: ModulDef = {
           startVerzoegerungSek: 30,
           lauf: async () => {
             const s = await systemStatus(ctx.konfig.datenVerzeichnis);
+            // Auffälligkeiten: Systemwerte melden
+            await ctx.metrik({
+              id: 'zentrale.ram',
+              name: 'RAM des Hubs',
+              einheit: 'MB',
+              richtung: 'hoch',
+              minAbweichung: 40,
+              minDauerMin: 30,
+            })(s.prozessRssMb);
+            await ctx.metrik({
+              id: 'zentrale.temperatur',
+              name: 'CPU Temperatur',
+              einheit: '°C',
+              richtung: 'hoch',
+              minAbweichung: 8,
+            })(s.temperaturC);
             if (s.temperaturC !== null) {
               await ctx.alarm.melden({
                 regel: 'zentrale.temperatur',

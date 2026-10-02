@@ -58,6 +58,7 @@ export const DREHS = tabelle({
     { name: 'kunde_id', typ: 'text', label: 'Kunde', verweis: 'kunden' },
     { name: 'ort_id', typ: 'text', label: 'Ort', verweis: 'drohnen_orte' },
     { name: 'termin', typ: 'zeit', label: 'Drehtermin' },
+    { name: 'dauer_min', typ: 'int', label: 'Dauer', einheit: 'min', standard: 120, min: 15, max: 1440 },
     {
       name: 'status',
       typ: 'text',

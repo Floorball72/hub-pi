@@ -253,6 +253,13 @@ function laufzeit(ctx: Kontext) {
           'park_messungen',
           r.daten.map((p) => ({ ph_id: p.id, frei: p.frei, prozent: p.prozent, offen: p.offen })),
         );
+        await ctx.metrik({
+          id: 'parken.frei',
+          name: 'Freie Parkplätze St. Gallen',
+          einheit: 'Plätze',
+          minAbweichung: 150,
+          minDauerMin: 30,
+        })(r.daten.filter((p) => p.offen).reduce((s, p) => s + (p.frei ?? 0), 0));
         return `${r.daten.length} Parkhäuser`;
       },
     },

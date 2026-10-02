@@ -164,6 +164,7 @@ function laufzeit(ctx: Kontext) {
 
   const quelle = ctx.quelle<{ art: string; url: string }, DienstStatus>({
     id: 'dienste.status',
+    wichtig: true,
     name: 'Statusseiten der Dienste',
     modul: 'dienste',
     ttlSek: 240,

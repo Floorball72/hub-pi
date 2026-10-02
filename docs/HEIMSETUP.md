@@ -187,6 +187,17 @@ Tipp Android: in der ntfy App für das Thema «Sofortige Zustellung» einschalte
 | Unihockey, Tab Einstellungen | Team IDs prüfen, «Push bei Spielende» nach Wunsch |
 | swiss unihockey | `docs/swissunihockey-ablauf.md` mit dem Ablauf von Marion füllen, dann im Modul «Aus Ablauf Datei laden» |
 | Alarmzentrale | Schwellen und Ruhezeiten anpassen |
+| Weitere Teams, Tab Einstellungen | FC St. Gallen ist vorbereitet (TheSportsDB 134406, Liga 4675). Weitere Teams mit Quelle ergänzen, «keine» wenn es keine erlaubte Quelle gibt |
+| Abhängigkeiten Wächter, Tab Projekte | Eigene Projekte als GitHub «besitzer/name». Private Repositories brauchen `GITHUB_TOKEN` (nur Leserecht) |
+| Änderungs Wächter, Tab Seiten | «Seiten aus dem Webseiten Wächter übernehmen», später dynamische Stellen als Ausnahmen |
+| Dienste Status, Tab Dienste verwalten | Bei Vercel und Cloudflare «hostet Kundenseiten» prüfen, weitere Statusseiten ergänzen |
+| Veranstaltungen, Tab Quellen | Kalender (iCal) oder RSS von Vereinen und Veranstaltern, nur nach Prüfung der Nutzungsbedingungen mit Häkchen; Stichworte setzen |
+| Event Zentrale, Tab Vorlagen | Eigene Vorlagen (am einfachsten: eine Veranstaltung planen und «Als Vorlage speichern») |
+| Content Kalender, Tab Checklisten | Checklisten je Art anpassen |
+| Drohne, Tab Sonne | Schwelle für den Sonnenuntergangs Push (Alarmzentrale, Regel «Schöner Sonnenuntergang»), Gewichte nach einigen Bewertungen |
+| Drohne, Tab Kundendrehs | Ort und Dauer eintragen, damit der Dreh Wetter Wächter prüfen kann |
+| Auffälligkeiten | Empfindlichkeit (Standard «normal»), einzelne Messwerte bei Bedarf ausschalten |
+| Alarmzentrale, Schwellen | Abhängigkeiten nur hoch und kritisch, Dienste ab Stufe 3 (Störung), Aufgaben der Event Zentrale 24 h vor Frist, Sonnenuntergang ab Score 75 |
 
 ## 14. Später: Updates
 
@@ -198,7 +209,17 @@ pihub update ~/pi-hub
 
 **Vom Laptop mit Node.js:** im Projektordner `npm run deploy` (Ziel in der `.env` des Laptops: `DEPLOY_ZIEL=pi@pihub.local`).
 
-**Mit GitHub:** Button «Deploy (Git Pull)» auf der Seite System, wenn der Pi Zugriff auf das Repository hat.
+**Aus dem Hub (empfohlen):** einmalig auf dem Pi
+
+```bash
+pihub updates-einrichten
+```
+
+Ist das Repository privat, vorher Zugang hinterlegen: `sudo -u pihub git config --global credential.helper store`, danach fragt `git clone` einmal nach Benutzer und Token (GitHub Token mit Leserecht auf Floorball72/hub-pi).
+
+Dann im Hub unter «Sichere Updates»: einmal «Jetzt aktualisieren» testen, danach «Automatische Updates im Nachtfenster» einschalten (Standard 02:30 bis 04:30). Der Hub aktualisiert nur, wenn der Selbsttest grün ist, baut in einem eigenen Ordner, macht vorher ein Backup, wendet Migrationen an, prüft sich nach dem Umschalten und schaltet bei Fehlern zurück. Das Ergebnis erscheint in der Alarmzentrale.
+
+**Geklappt, wenn:** auf der Seite «Sichere Updates» bei «Letztes Update» «erfolgreich» steht und `pihub selbsttest` bei «Updates aus dem Hub» grün ist.
 
 Bei allen Varianten gilt: Startet die neue Version nicht, schaltet der Pi automatisch auf die vorherige zurück.
 

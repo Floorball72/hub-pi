@@ -15,6 +15,8 @@ async function anfrage<T>(methode: string, pfad: string, body?: unknown): Promis
     credentials: 'same-origin',
     headers: {
       'x-pihub': '1',
+      // Hintergrund Aktualisierungen zählen nicht als Nutzung (Abrufplaner)
+      ...(document.hidden ? { 'x-pihub-sichtbar': '0' } : {}),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,

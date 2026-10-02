@@ -32,6 +32,34 @@ async function rateLimit(host: string, abstandMs: number) {
   await jetzt;
 }
 
+// Bedingte Abrufe: Antworten mit ETag oder Last-Modified merken und beim nächsten Abruf mitschicken.
+// Antwortet der Server mit 304, wird die gemerkte Antwort verwendet (spart Daten auf beiden Seiten).
+interface Gemerkt {
+  etag: string | null;
+  geaendert: string | null;
+  status: number;
+  headers: [string, string][];
+  text: string;
+}
+const gemerkt = new Map<string, Gemerkt>();
+const MAX_GEMERKT_BYTES = 6_000_000;
+let gemerktBytes = 0;
+export const bedingteAbrufe = { gesendet: 0, nichtGeaendert: 0 };
+
+function merken(url: string, g: Gemerkt) {
+  const alt = gemerkt.get(url);
+  if (alt) gemerktBytes -= alt.text.length;
+  gemerkt.delete(url);
+  if (g.text.length > 300_000) return;
+  gemerkt.set(url, g);
+  gemerktBytes += g.text.length;
+  while (gemerktBytes > MAX_GEMERKT_BYTES && gemerkt.size) {
+    const [k, v] = gemerkt.entries().next().value!;
+    gemerkt.delete(k);
+    gemerktBytes -= v.text.length;
+  }
+}
+
 export interface Antwort {
   status: number;
   headers: Headers;
@@ -47,15 +75,37 @@ export async function httpAnfrage(url: string, o: Optionen = {}): Promise<Antwor
   const start = performance.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), o.timeoutMs ?? 10000);
+  const methode = o.methode ?? 'GET';
+  const bedingt =
+    methode === 'GET' && !o.body && o.weiterleitung !== 'manual' ? gemerkt.get(u.toString()) : undefined;
+  const zusatz: Record<string, string> = {};
+  if (bedingt?.etag) zusatz['If-None-Match'] = bedingt.etag;
+  if (bedingt?.geaendert) zusatz['If-Modified-Since'] = bedingt.geaendert;
+  if (bedingt) bedingteAbrufe.gesendet++;
   try {
     const r = await fetch(u, {
-      method: o.methode ?? 'GET',
-      headers: { 'User-Agent': USER_AGENT, ...o.headers },
+      method: methode,
+      headers: { 'User-Agent': USER_AGENT, ...zusatz, ...o.headers },
       body: o.body,
       signal: ctrl.signal,
       redirect: o.weiterleitung ?? 'follow',
     });
+    if (r.status === 304 && bedingt) {
+      bedingteAbrufe.nichtGeaendert++;
+      await r.body?.cancel();
+      return {
+        status: bedingt.status,
+        headers: new Headers(bedingt.headers),
+        text: bedingt.text,
+        dauerMs: Math.round(performance.now() - start),
+        url: r.url || u.toString(),
+      };
+    }
     const text = await textBegrenzt(r, o.maxBytes ?? 5_000_000);
+    const etag = r.headers.get('etag');
+    const geaendert = r.headers.get('last-modified');
+    if (methode === 'GET' && !o.body && r.status === 200 && (etag || geaendert))
+      merken(u.toString(), { etag, geaendert, status: r.status, headers: [...r.headers.entries()], text });
     return {
       status: r.status,
       headers: r.headers,

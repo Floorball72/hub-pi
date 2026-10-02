@@ -126,6 +126,7 @@ function rettungLaufzeit(ctx: Kontext) {
 
   const adsb = ctx.quelle<void, AdsbFlugzeug[]>({
     id: 'rettung.adsb',
+    wichtig: true,
     name: 'ADS-B (adsb.lol)',
     modul: 'rettung',
     ttlSek: 20,
@@ -136,6 +137,7 @@ function rettungLaufzeit(ctx: Kontext) {
   });
   const alertswiss = ctx.quelle<void, Alert[]>({
     id: 'rettung.alertswiss',
+    wichtig: true,
     name: 'Alertswiss',
     modul: 'rettung',
     ttlSek: 120,
@@ -145,6 +147,7 @@ function rettungLaufzeit(ctx: Kontext) {
   });
   const meteoalarm = ctx.quelle<void, Warnung[]>({
     id: 'rettung.unwetter',
+    wichtig: true,
     name: 'Unwetterwarnungen (MeteoAlarm)',
     modul: 'rettung',
     ttlSek: 600,
@@ -156,6 +159,7 @@ function rettungLaufzeit(ctx: Kontext) {
   });
   const sed = ctx.quelle<void, Erdbeben[]>({
     id: 'rettung.erdbeben',
+    wichtig: true,
     name: 'Erdbeben (SED, ETH Zürich)',
     modul: 'rettung',
     ttlSek: 300,
@@ -298,6 +302,14 @@ function rettungLaufzeit(ctx: Kontext) {
     ]);
   }
 
+  const helisMetrik = ctx.metrik({
+    id: 'rettung.helis',
+    name: 'Helikopter in der Luft',
+    richtung: 'hoch',
+    minAbweichung: 3,
+    minDauerMin: 20,
+  });
+
   async function heliRunde() {
     const r = await adsb.hole(undefined, true);
     positionenFehler = r.fehler;
@@ -305,6 +317,7 @@ function rettungLaufzeit(ctx: Kontext) {
     const k = await kennungen();
     const jetzt = ctx.jetzt().getTime();
     positionen = heliFiltern(r.daten, k, konfig.heliAlle, region, jetzt);
+    await helisMetrik(positionen.length);
     positionenStand = r.stand;
     const ereignisse = erkennung.aktualisieren(positionen, jetzt);
     for (const e of ereignisse) {
