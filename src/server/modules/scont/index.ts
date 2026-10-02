@@ -164,6 +164,8 @@ function scontLaufzeit(ctx: Kontext) {
       ),
     demo: (url) => demoPagespeed(url),
     testParameter: () => 'https://www.admin.ch',
+    // eine Analyse dauert bei Google oft 30 bis 60 s
+    testDauerMs: 95000,
     namensnennung: 'Google PageSpeed Insights',
     beschreibung: 'Ohne API Schlüssel stark begrenzt',
   });
@@ -185,6 +187,8 @@ function scontLaufzeit(ctx: Kontext) {
     },
     demo: (url) => demoQualitaet(url),
     testParameter: () => 'https://www.admin.ch',
+    // bis zu 40 Links, höchstens einer pro Sekunde und Host
+    testDauerMs: 90000,
   });
 
   async function vorbereiten() {

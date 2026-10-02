@@ -229,7 +229,7 @@ for (const q of nurKern ? [] : quellen) {
   try {
     const p = q.def.testParameter ? q.def.testParameter() : undefined;
     const start = performance.now();
-    await mitTimeout(q.def.abruf(p), 20000);
+    await mitTimeout(q.def.abruf(p), q.def.testDauerMs ?? 20000);
     punkt(
       'ok',
       q.def.name,

@@ -33,6 +33,8 @@ export interface QuellenDef<P, T> {
   testParameter?: () => P;
   /** Wird nur mit erfassten Einträgen abgerufen, der Selbsttest überspringt sie ohne testParameter */
   nurMitEintrag?: boolean;
+  /** Längste Dauer im Selbsttest, für absichtlich langsame Quellen (Standard 20 s) */
+  testDauerMs?: number;
   /** Abrufplaner: kürzester und längster Abstand, Tagesbudget, wichtig für Alarme */
   minSek?: number;
   maxSek?: number;
