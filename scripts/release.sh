@@ -14,7 +14,8 @@ TREIBER=$(grep -E '^DATEN_TREIBER=' "$BASIS/.env" 2>/dev/null | cut -d= -f2 || t
 LOG="$BASIS/logs/release.log"
 ERGEBNIS="$BASIS/data/aktualisieren.ergebnis.json"
 SCHRITT=start
-VORHER=$(readlink -f "$BASIS/current" 2>/dev/null || true)
+# -e: bei der Erstinstallation gibt es noch kein current, dann bleibt VORHER leer (kein Rückfall auf sich selbst)
+VORHER=$(readlink -e "$BASIS/current" 2>/dev/null || true)
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 ergebnis() {
