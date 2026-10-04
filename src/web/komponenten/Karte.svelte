@@ -20,6 +20,8 @@
     einpassen = false,
     heat = [],
     ebenenZusatz = [],
+    bereit,
+    basisStart,
   }: {
     hoehe?: string;
     /** Nur Ebenen dieser Gruppen anzeigen (null = alle) */
@@ -40,9 +42,22 @@
     heat?: [number, number, number][];
     /** Zu ebenenFest zusätzlich wählbare Ebenen, am Anfang aus */
     ebenenZusatz?: string[];
+    /** Wird einmal aufgerufen, wenn die Karte steht, für eigene Ebenen der Seite (z.B. bewegte Helis) */
+    bereit?: (L: typeof Leaflet, karte: Leaflet.Map) => (() => void) | void;
+    /** Grundkarte für diese Seite, ohne die gespeicherte Wahl zu ändern */
+    basisStart?: string;
   } = $props();
 
-  const BASIS = [
+  const BASIS: { id: string; name: string; url: string; quelle: string; klasse: string; maxZoom: number; relief?: string }[] = [
+    {
+      id: 'nacht',
+      name: 'Nacht Relief',
+      url: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg',
+      quelle: '© swisstopo',
+      klasse: 'karte-nacht',
+      maxZoom: 19,
+      relief: 'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.leichte-basiskarte_reliefschattierung/default/current/3857/{z}/{x}/{y}.png',
+    },
     {
       id: 'dunkel',
       name: 'Dunkel',
@@ -81,9 +96,10 @@
   let L: typeof Leaflet;
   let karte: Leaflet.Map | null = null;
   let basisLayer: Leaflet.TileLayer | null = null;
+  let reliefLayer: Leaflet.TileLayer | null = null;
   let ebenen = $state<Ebene[]>([]);
   let aktiv = $state<Set<string>>(new Set());
-  let basis = $state(lesen('karte.basis', 'dunkel'));
+  let basis = $state(basisStart ?? lesen('karte.basis', 'dunkel'));
   let panelOffen = $state(false);
   let infos = $state<Record<string, { stand: string | null; demo: boolean; fehler?: string; hinweis?: string; anzahl: number }>>({});
   const layer = new Map<string, Leaflet.Layer>();
@@ -255,12 +271,19 @@
     api.put('/api/karte/auswahl', { auswahl: liste }).catch(() => {});
   }
 
-  function basisSetzen(id: string) {
-    const b = BASIS.find((x) => x.id === id) ?? BASIS[0];
+  function basisSetzen(id: string, merken = true) {
+    const b = BASIS.find((x) => x.id === id) ?? BASIS[1];
     basis = b.id;
-    schreiben('karte.basis', b.id);
+    if (merken && !basisStart) schreiben('karte.basis', b.id);
     if (!karte) return;
     if (basisLayer) karte.removeLayer(basisLayer);
+    if (reliefLayer) karte.removeLayer(reliefLayer);
+    reliefLayer = null;
+    // Relief über der dunklen Karte, aufgehellt, damit Berge und Täler plastisch wirken
+    if (b.relief) {
+      reliefLayer = L.tileLayer(b.relief, { maxZoom: b.maxZoom, maxNativeZoom: 17, className: 'karte-relief', attribution: '' }).addTo(karte);
+      reliefLayer.bringToBack();
+    }
     basisLayer = L.tileLayer(b.url, { attribution: b.quelle, maxZoom: b.maxZoom, className: b.klasse }).addTo(karte);
     basisLayer.bringToBack();
   }
@@ -296,7 +319,7 @@
       if (abgebrochen) return;
       karte = L.map(element, { zoomControl: !kompakt, attributionControl: true, preferCanvas: true, zoomSnap: 0.5 }).setView(zentrum, zoom);
       karte.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener noreferrer">Leaflet</a>');
-      basisSetzen(basis);
+      basisSetzen(basis, false);
       if (onklick) karte.on('click', (ev: Leaflet.LeafletMouseEvent) => onklick?.(ev.latlng.lat, ev.latlng.lng));
       const r = await api.get<{ ebenen: Ebene[]; auswahl: string[] | null }>('/api/karte/ebenen');
       ebenen = r.ebenen;
@@ -305,9 +328,12 @@
       aktiv = start;
       for (const e of sichtbareEbenen) if (start.has(e.id)) ebeneAn(e);
       seitenPunkteZeichnen(punkte, linien, heat);
+      aufraeumen = bereit?.(L, karte) ?? null;
     })();
+    let aufraeumen: (() => void) | null = null;
     return () => {
       abgebrochen = true;
+      aufraeumen?.();
       for (const t of timer.values()) clearInterval(t);
       timer.clear();
       layer.clear();
@@ -445,6 +471,59 @@
   }
   :global(.karte-dunkel) {
     filter: invert(1) hue-rotate(185deg) brightness(0.82) contrast(0.92) saturate(0.6);
+  }
+  :global(.karte-nacht) {
+    filter: invert(1) hue-rotate(195deg) brightness(0.55) contrast(1.15) saturate(0.5);
+  }
+  :global(.karte-relief) {
+    mix-blend-mode: screen;
+    filter: invert(1) brightness(0.55) sepia(0.4) hue-rotate(175deg) saturate(1.6);
+    opacity: 0.65;
+  }
+  :global(.heli-anim) {
+    background: none;
+    border: none;
+  }
+  :global(.heli-oben) {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    color: var(--farbe);
+    filter: drop-shadow(0 0 4px var(--farbe)) drop-shadow(0 0 10px color-mix(in srgb, var(--farbe) 70%, transparent));
+    cursor: pointer;
+  }
+  :global(.heli-oben .rotor) {
+    transform-origin: 12px 9px;
+    animation: rotorDrehen 0.35s linear infinite;
+  }
+  :global(.heli-oben.boden .rotor),
+  :global(.boden .heli-oben .rotor) {
+    animation: none;
+  }
+  :global(.heli-oben.boden),
+  :global(.boden .heli-oben) {
+    opacity: 0.6;
+    filter: none;
+  }
+  @keyframes -global-rotorDrehen {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  :global(.heli-schild) {
+    background: #070b10cc !important;
+    backdrop-filter: blur(4px);
+    border: 1px solid #ffffff22 !important;
+    border-radius: 6px !important;
+    color: #e6edf5 !important;
+    font: 600 11px/1.3 var(--schrift-zahl, ui-monospace, monospace) !important;
+    padding: 2px 6px !important;
+    box-shadow: 0 2px 8px #0008 !important;
+    white-space: nowrap;
+  }
+  :global(.heli-schild::before) {
+    display: none;
   }
   :global(.leaflet-container) {
     background: #0b1016;
