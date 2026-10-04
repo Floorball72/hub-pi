@@ -36,6 +36,8 @@ export const HELI_FLUEGE = tabelle({
     { name: 'ende_ort', typ: 'text' },
     { name: 'max_hoehe_ft', typ: 'int' },
     { name: 'spur', typ: 'json' },
+    { name: 'start_platz', typ: 'text' },
+    { name: 'ende_platz', typ: 'text' },
   ],
   indizes: [['start'], ['organisation', 'start']],
 });

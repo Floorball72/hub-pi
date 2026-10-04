@@ -24,6 +24,7 @@ import {
   flugStatistik,
   type HeliPosition,
   heliFiltern,
+  platzBei,
   type Kennung,
 } from './heli.ts';
 import {
@@ -263,6 +264,13 @@ function rettungLaufzeit(ctx: Kontext) {
     return km < 2 ? naechster.name : `${km} km ${richtungText(grad)} von ${naechster.name}`;
   }
 
+  /** Spital oder Landeplatz an der Position, aus dem Cache der Kartenebenen (eine Woche) */
+  async function platzName(lat: number | null, lon: number | null): Promise<string | null> {
+    if (lat === null || lon === null) return null;
+    const [spitaeler, landeplaetze] = await Promise.all([osm.hole('spital'), osm.hole('landeplatz')]);
+    return platzBei(lat, lon, spitaeler.daten ?? [], landeplaetze.daten ?? []);
+  }
+
   async function kennungen(): Promise<(Kennung & { push: boolean })[]> {
     const liste = await daten.liste<{ organisation: string; muster: string; push: boolean }>(
       'heli_kennungen',
@@ -279,7 +287,7 @@ function rettungLaufzeit(ctx: Kontext) {
     return liste;
   }
 
-  async function flugSpeichern(f: Flug) {
+  async function flugSpeichern(f: Flug, startPlatz: string | null, endePlatz: string | null) {
     await daten.einfuegen('heli_fluege', [
       {
         hex: f.hex,
@@ -298,6 +306,8 @@ function rettungLaufzeit(ctx: Kontext) {
         ende_ort: f.endeLat !== null && f.endeLon !== null ? await ortName(f.endeLat, f.endeLon) : null,
         max_hoehe_ft: f.maxHoeheFt,
         spur: f.spur.map(([la, lo]) => [la, lo]),
+        start_platz: startPlatz,
+        ende_platz: endePlatz,
       },
     ]);
   }
@@ -323,27 +333,41 @@ function rettungLaufzeit(ctx: Kontext) {
     for (const e of ereignisse) {
       const f = e.flug;
       const name = `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? f.hex}`;
+      const mitPush = !!f.organisation && k.some((x) => x.push && x.organisation === f.organisation);
+      // Nur ein echter Start hat einen Startplatz, beim Erfassen ist der Heli schon unterwegs
+      const startPlatz = f.startArt === 'start' ? await platzName(f.startLat, f.startLon) : null;
       if (e.art === 'landung' || e.art === 'signalverlust') {
-        await flugSpeichern(f);
+        const endePlatz = await platzName(f.endeLat, f.endeLon);
+        await flugSpeichern(f, startPlatz, endePlatz);
+        const wo = endePlatz ? ` bei ${endePlatz}` : '';
         await ctx.aktivitaet(
           'rettung',
-          `${name} ${e.art === 'landung' ? 'gelandet' : 'aus dem Empfang verschwunden'}`,
+          `${name} ${e.art === 'landung' ? 'gelandet' : 'aus dem Empfang verschwunden'}${wo}`,
         );
+        // Landung bei einem Spital ist meist ein Patiententransport: eigener Push
+        if (mitPush && endePlatz) {
+          await ctx.alarm.melden({
+            regel: 'rettung.heli',
+            titel: `${name} ${e.art === 'landung' ? 'gelandet' : 'wohl gelandet'}: ${endePlatz}`,
+            text: `${e.art === 'landung' ? 'Gelandet' : 'Signal tief verloren, wahrscheinlich gelandet'} bei ${endePlatz}${startPlatz ? `, gestartet bei ${startPlatz}` : ''}. Flugdauer ${Math.max(1, Math.round(((f.ende ?? jetzt) - f.start) / 60000))} min. Nur Daten des Transponders, ohne Gewähr.`,
+            schluessel: `heli-landung:${f.hex}`,
+            tags: ['helicopter', 'hospital'],
+            link: '/modul/rettung',
+          });
+        }
         continue;
       }
       const ort = await ortName(f.startLat, f.startLon);
-      await ctx.aktivitaet(
-        'rettung',
-        `${name} ${e.art === 'start' ? 'gestartet' : 'erfasst'} bei ${ort ?? 'unbekannt'}`,
-      );
-      const mitPush = k.some((x) => x.push && x.organisation === f.organisation);
-      if (f.organisation && mitPush) {
+      const wo = startPlatz ? `${startPlatz} (${ort ?? 'unbekannt'})` : (ort ?? 'unbekannt');
+      await ctx.aktivitaet('rettung', `${name} ${e.art === 'start' ? 'gestartet' : 'erfasst'} bei ${wo}`);
+      if (mitPush) {
         await ctx.alarm.melden({
           regel: 'rettung.heli',
           titel: `${name} ${e.art === 'start' ? 'gestartet' : 'in der Region'}`,
-          text: `Bei ${ort ?? 'unbekannt'}${f.typ ? `, Typ ${f.typ}` : ''}. Nur Daten des Transponders, zeitnah aber ohne Gewähr.`,
+          text: `${e.art === 'start' ? 'Start' : 'Erfasst'} bei ${wo}${f.typ ? `, Typ ${f.typ}` : ''}. Nur Daten des Transponders, zeitnah aber ohne Gewähr.`,
           schluessel: `heli:${f.hex}`,
           tags: ['helicopter'],
+          link: '/modul/rettung',
         });
       }
     }

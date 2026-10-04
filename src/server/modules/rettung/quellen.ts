@@ -215,7 +215,8 @@ export interface OsmObjekt {
 export const OSM_ABFRAGEN: Record<string, string> = {
   spital: 'nwr["amenity"="hospital"]["emergency"="yes"]',
   wache: 'nwr["emergency"="ambulance_station"]',
-  landeplatz: 'nwr["aeroway"="helipad"]',
+  // Auch Heliports, dort sind die Basen der Rega und anderer Betreiber erfasst
+  landeplatz: 'nwr["aeroway"~"^(helipad|heliport)$"]',
   defi: 'nwr["emergency"="defibrillator"]',
 };
 

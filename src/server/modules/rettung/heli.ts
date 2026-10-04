@@ -214,6 +214,33 @@ export class FlugErkennung {
   }
 }
 
+export interface Platz {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+/**
+ * Spital oder Landeplatz an einer Position (aus OpenStreetMap). Spitäler zählen bis 600 m,
+ * weil der Landeplatz oft auf dem Dach eines Nebengebäudes liegt, Landeplätze bis 300 m.
+ * Unbenannte Landeplätze bei einem Spital tragen den Namen des Spitals.
+ */
+export function platzBei(lat: number, lon: number, spitaeler: Platz[], landeplaetze: Platz[]): string | null {
+  const naechster = (liste: Platz[], maxKm: number) =>
+    liste
+      .map((p) => ({ p, km: distanzKm(lat, lon, p.lat, p.lon) }))
+      .filter((x) => x.km <= maxKm)
+      .sort((a, b) => a.km - b.km)[0]?.p ?? null;
+  const spital = naechster(
+    spitaeler.filter((s) => s.name),
+    0.6,
+  );
+  if (spital) return spital.name;
+  const platz = naechster(landeplaetze, 0.3);
+  if (!platz) return null;
+  return platz.name || 'Helikopterlandeplatz';
+}
+
 function round5(n: number) {
   return Math.round(n * 100000) / 100000;
 }

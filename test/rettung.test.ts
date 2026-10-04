@@ -9,6 +9,7 @@ import {
   flugStatistik,
   type HeliPosition,
   heliFiltern,
+  platzBei,
   musterPasst,
   organisationFinden,
 } from '../src/server/modules/rettung/heli.ts';
@@ -224,5 +225,22 @@ describe('ÖV', () => {
     assert.match(t.abfahrten[0].zeit, /^\d{4}-/);
     assert.ok(t.lat! > 47 && t.lon! > 9);
     assert.ok(!/\d{6}/.test(t.abfahrten[0].linie));
+  });
+});
+
+describe('Landeplätze', () => {
+  const spitaeler = [{ name: 'Kantonsspital St.Gallen', lat: 47.4318, lon: 9.3889 }];
+  const plaetze = [
+    { name: '', lat: 47.432, lon: 9.3895 },
+    { name: 'Rega Basis', lat: 47.5, lon: 9.0 },
+    { name: '', lat: 47.6, lon: 9.1 },
+  ];
+  it('erkennt Spital, benannten und unbenannten Landeplatz', () => {
+    assert.equal(platzBei(47.4321, 9.3893, spitaeler, plaetze), 'Kantonsspital St.Gallen');
+    assert.equal(platzBei(47.5005, 9.0005, spitaeler, plaetze), 'Rega Basis');
+    assert.equal(platzBei(47.6, 9.1, spitaeler, plaetze), 'Helikopterlandeplatz');
+  });
+  it('liefert nichts abseits von Plätzen', () => {
+    assert.equal(platzBei(47.3, 9.2, spitaeler, plaetze), null);
   });
 });

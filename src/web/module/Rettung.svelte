@@ -21,7 +21,7 @@
     proStunde: number[];
     proWochentag: number[];
     orte: [string, number][];
-    letzte: { start: string; ende: string | null; organisation: string | null; kennzeichen: string | null; start_ort: string | null; ende_ort: string | null }[];
+    letzte: { start: string; ende: string | null; organisation: string | null; kennzeichen: string | null; start_ort: string | null; ende_ort: string | null; start_platz?: string | null; ende_platz?: string | null }[];
     laufend: number;
     organisationen: string[];
   }
@@ -163,7 +163,7 @@
         <section class="panel">
           <h3>Letzte Flüge</h3>
           {#each stat.letzte.slice(0, 10) as f (f.start + f.kennzeichen)}
-            <div class="zeile-zwischen klein"><span>{f.organisation ?? 'Heli'} {f.kennzeichen ?? ''} · {f.start_ort ?? '?'} nach {f.ende_ort ?? '?'}</span><span class="gedaempft">{datumZeit(f.start)} · {dauer(f.start, f.ende)}</span></div>
+            <div class="zeile-zwischen klein"><span>{f.organisation ?? 'Heli'} {f.kennzeichen ?? ''} · {f.start_platz ?? f.start_ort ?? '?'} nach {f.ende_platz ?? f.ende_ort ?? '?'}</span><span class="gedaempft">{datumZeit(f.start)} · {dauer(f.start, f.ende)}</span></div>
           {/each}
         </section>
       </div>
