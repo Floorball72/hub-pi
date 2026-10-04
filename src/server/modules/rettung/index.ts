@@ -37,7 +37,10 @@ import {
   platzBei,
   heatRaster,
   type FlugEnde,
+  type ChronikFlug,
+  einsaetzeBilden,
   einsatzLandung,
+  einsatzStatistik,
   letzteStandorte,
   ortArt,
   positionenVereinen,
@@ -1068,6 +1071,31 @@ function rettungLaufzeit(ctx: Kontext) {
       };
     });
 
+    // Einsatz Chronik: Flüge zu Einsätzen zusammengesetzt (Basis, Einsatzort, Spital, zurück)
+    app.get<{ Querystring: { organisation?: string; tage?: string } }>('/einsaetze', async (req) => {
+      await demoVorbereiten();
+      const tage = Math.min(Number(req.query.tage) || 7, 30);
+      const seit = new Date(ctx.jetzt().getTime() - (tage * 86400000 + 4 * 3600000)).toISOString();
+      const filter: Record<string, unknown> = { start: { gte: seit } };
+      const org = req.query.organisation ?? 'Rega';
+      if (org !== 'alle') filter.organisation = org;
+      const fluege = await daten.liste<ChronikFlug>('heli_fluege', {
+        filter,
+        sortierung: '-start',
+        limit: 1500,
+      });
+      const grenze = ctx.jetzt().getTime() - tage * 86400000;
+      const einsaetze = einsaetzeBilden(fluege).filter((e) => new Date(e.start).getTime() >= grenze);
+      const laufend = new Set(erkennung.laufende().map((f) => f.hex));
+      return {
+        einsaetze: einsaetze.slice(0, 80).map((e) => ({ ...e, inDerLuft: !e.zurueck && laufend.has(e.hex) })),
+        anzahl: einsaetze.length,
+        tage,
+        stand: positionenStand,
+        demo: konfig.demo,
+      };
+    });
+
     app.get<{ Querystring: { organisation?: string; tage?: string } }>('/statistik', async (req) => {
       await demoVorbereiten();
       const tage = Math.min(Number(req.query.tage) || 90, 730);
@@ -1088,6 +1116,10 @@ function rettungLaufzeit(ctx: Kontext) {
         ende: string | null;
         start_platz: string | null;
         ende_platz: string | null;
+        id: string;
+        hex: string;
+        ende_art: string | null;
+        spur?: unknown;
       }>('heli_fluege', { filter, sortierung: '-start', limit: 5000 });
       const zaehlen = (werte: (string | null)[]) => {
         const m = new Map<string, number>();
@@ -1109,7 +1141,11 @@ function rettungLaufzeit(ctx: Kontext) {
             .sort((a, b) => a - b);
           return d.length ? Math.round(d[Math.floor(d.length / 2)]) : null;
         })(),
-        letzte: fluege.slice(0, 25),
+        letzte: fluege.slice(0, 25).map(({ spur: _s, ...f }) => f),
+        einsatz: einsatzStatistik(
+          einsaetzeBilden(fluege.map(({ spur: _s, ...f }) => f)),
+          ctx.jetzt().getTime(),
+        ),
         laufend: erkennung.laufende().length,
         organisationen: [
           ...new Set(

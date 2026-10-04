@@ -536,3 +536,57 @@ describe('Rega Landung beim Einsatzort', () => {
     assert.equal(ortArt(null), 'einsatzort');
   });
 });
+
+describe('Einsatz Chronik', () => {
+  it('setzt Flüge zu Einsätzen zusammen', async () => {
+    const { einsaetzeBilden, einsatzStatistik } = await import('../src/server/modules/rettung/heli.ts');
+    const f = (
+      id: string,
+      start: string,
+      ende: string,
+      von: string | null,
+      nach: string | null,
+      ort = 'Ort',
+    ) => ({
+      id,
+      hex: 'abc',
+      organisation: 'Rega',
+      kennzeichen: 'HB-ZRX',
+      start: `2026-10-01T${start}:00Z`,
+      start_platz: von,
+      start_ort: null,
+      start_lat: 47,
+      start_lon: 9,
+      ende: `2026-10-01T${ende}:00Z`,
+      ende_art: 'landung',
+      ende_platz: nach,
+      ende_ort: ort,
+      ende_lat: 47.1,
+      ende_lon: 9.1,
+    });
+    const e = einsaetzeBilden([
+      f('1', '08:00', '08:15', 'Rega Basis St. Gallen', null, 'Wattwil'),
+      f('2', '08:40', '08:55', null, 'Kantonsspital St. Gallen'),
+      f('3', '09:10', '09:20', 'Kantonsspital St. Gallen', 'Rega Basis St. Gallen'),
+      // Nach der Rückkehr beginnt ein neuer Einsatz
+      f('4', '15:00', '15:20', 'Rega Basis St. Gallen', 'Spital Wil'),
+    ]);
+    assert.equal(e.length, 2);
+    const erster = e[1];
+    assert.equal(erster.etappen.length, 3);
+    assert.equal(erster.art, 'einsatzort');
+    assert.equal(erster.einsatzort?.name, 'Wattwil');
+    assert.deepEqual(erster.spitaeler, ['Kantonsspital St. Gallen']);
+    assert.equal(erster.zurueck, true);
+    assert.equal(erster.basis, 'Rega Basis St. Gallen');
+    assert.equal(erster.flugMin, 40);
+    assert.equal(erster.dauerMin, 80);
+    assert.equal(e[0].zurueck, false);
+    assert.equal(e[0].art, 'spital');
+    const s = einsatzStatistik(e, new Date('2026-10-02T00:00:00Z').getTime());
+    assert.equal(s.proBasis[0].basis, 'Rega Basis St. Gallen');
+    assert.equal(s.proBasis[0].anzahl, 2);
+    assert.equal(s.woche.diese.einsaetze, 2);
+    assert.equal(s.orte.length, 1);
+  });
+});

@@ -541,3 +541,195 @@ export function einsatzLandung(
   if (organisation !== 'Rega' || art !== 'landung' || platz || lat === null || lon === null) return false;
   return distanzKm(region.lat, region.lon, lat, lon) <= region.radiusKm;
 }
+
+/** Gespeicherter Flug, wie ihn die Einsatz Chronik braucht */
+export interface ChronikFlug {
+  id: string;
+  hex: string;
+  organisation: string | null;
+  kennzeichen: string | null;
+  start: string;
+  start_platz: string | null;
+  start_ort: string | null;
+  start_lat: number | null;
+  start_lon: number | null;
+  ende: string | null;
+  ende_art: string | null;
+  ende_platz: string | null;
+  ende_ort: string | null;
+  ende_lat: number | null;
+  ende_lon: number | null;
+  spur?: unknown;
+}
+
+export interface Etappe {
+  id: string;
+  von: string | null;
+  nach: string | null;
+  art: ReturnType<typeof ortArt> | 'weg';
+  start: string;
+  ende: string | null;
+  minuten: number | null;
+  lat: number | null;
+  lon: number | null;
+  signalverlust: boolean;
+  spur: [number, number][];
+}
+
+export interface Einsatz {
+  id: string;
+  hex: string;
+  organisation: string | null;
+  kennzeichen: string | null;
+  basis: string | null;
+  start: string;
+  ende: string | null;
+  zurueck: boolean;
+  art: 'einsatzort' | 'verlegung' | 'spital' | 'unklar';
+  einsatzort: { name: string; lat: number; lon: number } | null;
+  spitaeler: string[];
+  flugMin: number;
+  dauerMin: number | null;
+  etappen: Etappe[];
+}
+
+/** Spur auf höchstens n Punkte ausdünnen, erster und letzter bleiben */
+export function ausduennen(spur: unknown, n = 40): [number, number][] {
+  if (!Array.isArray(spur)) return [];
+  const p = spur.filter((x) => Array.isArray(x) && typeof x[0] === 'number' && typeof x[1] === 'number');
+  if (p.length <= n) return p.map((x) => [x[0], x[1]]);
+  const aus: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const x = p[Math.round((i * (p.length - 1)) / (n - 1))];
+    aus.push([x[0], x[1]]);
+  }
+  return aus;
+}
+
+const minZwischen = (a: string, b: string | null) =>
+  b ? Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : null;
+
+/**
+ * Flüge eines Helis zu Einsätzen zusammensetzen: Ein Einsatz beginnt an der Basis (oder nach
+ * einer Pause von mehr als 4 Stunden) und endet mit der Landung an einer Basis. Dazwischen liegen
+ * Landungen am Einsatzort oder bei Spitälern. Abgeleitet aus Transponderdaten, ohne Gewähr.
+ */
+export function einsaetzeBilden(fluege: ChronikFlug[], pauseMin = 240): Einsatz[] {
+  const proHeli = new Map<string, ChronikFlug[]>();
+  for (const f of fluege) {
+    const l = proHeli.get(f.hex) ?? [];
+    l.push(f);
+    proHeli.set(f.hex, l);
+  }
+  const aus: Einsatz[] = [];
+  for (const liste of proHeli.values()) {
+    liste.sort((a, b) => a.start.localeCompare(b.start));
+    let aktuell: ChronikFlug[] = [];
+    const abschliessen = () => {
+      if (aktuell.length) aus.push(einsatzAus(aktuell));
+      aktuell = [];
+    };
+    for (const f of liste) {
+      const vorher = aktuell.at(-1);
+      if (vorher) {
+        const pause = vorher.ende
+          ? (new Date(f.start).getTime() - new Date(vorher.ende).getTime()) / 60000
+          : 0;
+        if (!vorher.ende || pause > pauseMin || vorher.ende_art === 'verlassen') abschliessen();
+      }
+      aktuell.push(f);
+      if (f.ende && f.ende_art !== 'verlassen' && ortArt(f.ende_platz) === 'basis') abschliessen();
+    }
+    abschliessen();
+  }
+  return aus.sort((a, b) => b.start.localeCompare(a.start));
+}
+
+function einsatzAus(fl: ChronikFlug[]): Einsatz {
+  const erster = fl[0];
+  const letzter = fl[fl.length - 1];
+  const etappen: Etappe[] = fl.map((f) => ({
+    id: f.id,
+    von: f.start_platz ?? f.start_ort,
+    nach: f.ende_art === 'verlassen' ? null : (f.ende_platz ?? f.ende_ort),
+    art: f.ende_art === 'verlassen' ? 'weg' : ortArt(f.ende_platz),
+    start: f.start,
+    ende: f.ende,
+    minuten: minZwischen(f.start, f.ende),
+    lat: f.ende_lat,
+    lon: f.ende_lon,
+    signalverlust: f.ende_art === 'signalverlust',
+    spur: ausduennen(f.spur),
+  }));
+  const ort = etappen.find((e) => e.art === 'einsatzort' || e.art === 'landeplatz');
+  const spitaeler = etappen.filter((e) => e.art === 'spital' && e.nach).map((e) => e.nach!);
+  const zurueck = !!letzter.ende && etappen.at(-1)?.art === 'basis';
+  const startBasis = ortArt(erster.start_platz) === 'basis' ? erster.start_platz : null;
+  return {
+    id: erster.id,
+    hex: erster.hex,
+    organisation: erster.organisation,
+    kennzeichen: fl.find((f) => f.kennzeichen)?.kennzeichen ?? null,
+    basis: startBasis ?? (zurueck ? etappen.at(-1)!.nach : null),
+    start: erster.start,
+    ende: letzter.ende,
+    zurueck,
+    art: ort ? 'einsatzort' : spitaeler.length >= 2 ? 'verlegung' : spitaeler.length ? 'spital' : 'unklar',
+    einsatzort:
+      ort && ort.lat !== null && ort.lon !== null
+        ? { name: ort.nach ?? 'Unbekannter Ort', lat: ort.lat, lon: ort.lon }
+        : null,
+    spitaeler,
+    flugMin: etappen.reduce((s, e) => s + (e.minuten ?? 0), 0),
+    dauerMin: minZwischen(erster.start, letzter.ende),
+    etappen,
+  };
+}
+
+/**
+ * Auswertung der Einsätze: pro Basis Anzahl, Flugzeit und typische Dauer, Spitäler nach
+ * Häufigkeit, Einsatzorte für die Karte und Vergleich der letzten 7 Tage mit der Woche davor.
+ */
+export function einsatzStatistik(einsaetze: Einsatz[], jetzt: number) {
+  const basen = new Map<string, { anzahl: number; flugMin: number; dauern: number[] }>();
+  const spitaeler = new Map<string, number>();
+  for (const e of einsaetze) {
+    const b = e.basis ?? 'Unbekannte Basis';
+    const x = basen.get(b) ?? { anzahl: 0, flugMin: 0, dauern: [] };
+    x.anzahl++;
+    x.flugMin += e.flugMin;
+    if (e.dauerMin !== null && e.zurueck) x.dauern.push(e.dauerMin);
+    basen.set(b, x);
+    for (const s of new Set(e.spitaeler)) spitaeler.set(s, (spitaeler.get(s) ?? 0) + 1);
+  }
+  const median = (w: number[]) => {
+    if (!w.length) return null;
+    const s = [...w].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  };
+  const woche = 7 * 86400000;
+  const zaehle = (von: number, bis: number) =>
+    einsaetze.filter((e) => {
+      const t = new Date(e.start).getTime();
+      return t >= von && t < bis;
+    });
+  const diese = zaehle(jetzt - woche, jetzt + 1);
+  const vorher = zaehle(jetzt - 2 * woche, jetzt - woche);
+  const arten = (l: Einsatz[]) => ({
+    einsaetze: l.length,
+    mitEinsatzort: l.filter((e) => e.art === 'einsatzort').length,
+    flugMin: l.reduce((s, e) => s + e.flugMin, 0),
+  });
+  return {
+    anzahl: einsaetze.length,
+    proBasis: [...basen.entries()]
+      .map(([basis, x]) => ({ basis, anzahl: x.anzahl, flugMin: x.flugMin, dauerMin: median(x.dauern) }))
+      .sort((a, b) => b.anzahl - a.anzahl),
+    spitaeler: [...spitaeler.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10),
+    orte: einsaetze
+      .filter((e) => e.einsatzort)
+      .slice(0, 400)
+      .map((e) => ({ ...e.einsatzort!, basis: e.basis, start: e.start, kennzeichen: e.kennzeichen })),
+    woche: { diese: arten(diese), vorher: arten(vorher) },
+  };
+}

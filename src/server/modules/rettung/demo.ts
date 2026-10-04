@@ -280,7 +280,64 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
     abgestellt('4b1demo7', 'HB-ZRS', 300, 'landung', 46.914, 9.552, 'Rega Basis Untervaz', 'Untervaz (Demo)'),
     abgestellt('4b1demo8', 'HB-ZRL', 40, 'signalverlust', r.lat + 0.05, r.lon - 0.08, null, 'Wattwil (Demo)'),
   );
+  // Ganze Einsätze für die Chronik: Basis, Einsatzort, Spital, zurück zur Basis
+  const basis: Halt = ['Rega Basis St. Gallen', 'St. Gallen (Demo)', 47.40559, 9.29009];
+  const spital: Halt = ['Kantonsspital (Demo)', 'St. Gallen (Demo)', 47.4321, 9.3889];
+  const region: Halt = ['Spital Region (Demo)', 'Wil (Demo)', 47.4616, 9.0437];
+  fluege.push(
+    ...demoEinsatz('4b1demo9', 'HB-ZRY', jetzt.getTime() - 26 * 3600000, [
+      basis,
+      [null, 'Ebnat-Kappel (Demo)', 47.262, 9.123],
+      spital,
+      basis,
+    ]),
+    ...demoEinsatz('4b1demo9', 'HB-ZRY', jetzt.getTime() - 52 * 3600000, [basis, region, spital, basis]),
+    ...demoEinsatz('4b1demo9', 'HB-ZRY', jetzt.getTime() - 75 * 3600000, [
+      basis,
+      [null, 'Alt St. Johann (Demo)', 47.192, 9.281],
+      basis,
+    ]),
+  );
   return fluege;
+}
+
+type Halt = [platz: string | null, ort: string, lat: number, lon: number];
+
+/** Ein Einsatz als Kette von Flügen, je 12 bis 20 Minuten Flug und 20 Minuten am Boden */
+function demoEinsatz(hex: string, kz: string, beginn: number, halte: Halt[]): Record<string, unknown>[] {
+  const aus: Record<string, unknown>[] = [];
+  let t = beginn;
+  for (let i = 0; i < halte.length - 1; i++) {
+    const [vp, vo, vla, vlo] = halte[i];
+    const [np, no, nla, nlo] = halte[i + 1];
+    const dauer = 12 + ((i * 7) % 9);
+    aus.push({
+      hex,
+      kennzeichen: kz,
+      typ: 'H145',
+      organisation: 'Rega',
+      start: new Date(t).toISOString(),
+      start_art: 'start',
+      start_lat: vla,
+      start_lon: vlo,
+      start_ort: vo,
+      start_platz: vp,
+      ende: new Date(t + dauer * 60000).toISOString(),
+      ende_art: 'landung',
+      ende_lat: nla,
+      ende_lon: nlo,
+      ende_ort: no,
+      ende_platz: np,
+      max_hoehe_ft: 3000 + i * 400,
+      spur: Array.from({ length: 8 }, (_, k) => [
+        Math.round((vla + ((nla - vla) * k) / 7) * 1e5) / 1e5,
+        Math.round((vlo + ((nlo - vlo) * k) / 7) * 1e5) / 1e5,
+        Math.round((k / 7) * dauer * 60),
+      ]),
+    });
+    t += (dauer + 20) * 60000;
+  }
+  return aus;
 }
 
 /** Demo Webcams mit gezeichnetem Bild, ohne Abruf von aussen */
