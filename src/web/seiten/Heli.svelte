@@ -20,6 +20,15 @@
     max_hoehe_ft: number | null;
     spur: [number, number][] | null;
   }
+  interface Aufenthalt {
+    ankunft: string;
+    bis: string | null;
+    art: 'basis' | 'spital' | 'landeplatz' | 'einsatzort';
+    platz: string | null;
+    ort: string | null;
+    signalverlust: boolean;
+    verlassen: boolean;
+  }
   interface Detail {
     hex: string;
     organisation: string | null;
@@ -27,6 +36,8 @@
     typ: string | null;
     position: { lat: number; lon: number; amBoden: boolean; hoeheFt: number | null; kmh: number | null; kurs: number | null; zeit: string; ort: string | null } | null;
     laufend: { start: string; gestartet: boolean; startPlatz: string | null; maxHoeheFt: number | null; spur: [number, number][] } | null;
+    zuletzt: { lat: number; lon: number; zeit: number; art: 'landung' | 'signalverlust' | 'laufend'; platz: string | null; anBasis: boolean } | null;
+    aufenthalte: Aufenthalt[];
     anzahl30: number;
     heute: number;
     dauerMin: number | null;
@@ -59,6 +70,15 @@
 
   const farbe = $derived(heliFarbe(d?.organisation));
   const name = $derived(d ? `${d.organisation ?? 'Helikopter'} ${d.kennzeichen ?? d.hex}` : '');
+  const ARTEN = { basis: 'Basis', spital: 'Spital', landeplatz: 'Landeplatz', einsatzort: 'Einsatzort' } as const;
+  // Dauer kurz und lesbar: 45 min, 3 h 20 min, 2 Tage
+  function dauer(a: string, b: string | null): string {
+    const min = Math.max(1, Math.round(((b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime()) / 60000));
+    if (min < 60) return `${min} min`;
+    if (min < 48 * 60) return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}`;
+    return `${Math.round(min / 1440)} Tage`;
+  }
+  const zuletztIso = $derived(d?.zuletzt ? new Date(d.zuletzt.zeit).toISOString() : null);
   const minuten = (a: string, b: string | null) => Math.max(1, Math.round(((b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime()) / 60000));
 
   const punkte = $derived<GeoPunkt[]>(
@@ -76,7 +96,19 @@
             zeit: d.position.zeit,
           },
         ]
-      : [],
+      : d?.zuletzt
+        ? [
+            {
+              id: `${d.hex}-zuletzt`,
+              lat: d.zuletzt.lat,
+              lon: d.zuletzt.lon,
+              titel: `${name} zuletzt gesehen`,
+              text: [d.zuletzt.platz, zuletztIso ? datumZeit(zuletztIso) : null].filter(Boolean).join(' · '),
+              symbol: 'heli',
+              farbe: d.zuletzt.anBasis ? '#34d399' : '#fbbf24',
+            },
+          ]
+        : [],
   );
   // Lücke im Empfang zwischen Basis und erstem oder letztem Fix, grau gestrichelt
   function luecken(id: string, spur: [number, number][], von: string | null, nach: string | null): GeoLinie[] {
@@ -126,6 +158,10 @@
         <div class="zahl gross">Am Boden</div>
         <div class="klein">{d.position.ort ?? ''}</div>
         <div class="sehr-klein gedaempft">Transponder empfangen {relativ(d.position.zeit)}</div>
+      {:else if d.zuletzt && zuletztIso}
+        <div class="zahl gross">{d.zuletzt.anBasis ? 'An der Basis' : d.zuletzt.art === 'laufend' ? 'Signal verloren' : 'Steht ausserhalb'}</div>
+        <div class="klein"><span class="ring" class:basis={d.zuletzt.anBasis}></span> {d.zuletzt.platz ?? 'Ort unbekannt'}</div>
+        <div class="sehr-klein gedaempft">Letztes Signal vor {dauer(zuletztIso, null)} ({datumZeit(zuletztIso)})</div>
       {:else}
         <div class="zahl gross">Nicht erfasst</div>
         <div class="sehr-klein gedaempft">Gerade kein Signal. Letzter Flug {d.fluege[0] ? relativ(d.fluege[0].ende ?? d.fluege[0].start) : 'unbekannt'}.</div>
@@ -152,6 +188,19 @@
       {#each d.startplaetze as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch kein Start bei einem bekannten Platz.</p>{/each}
     </section>
   </div>
+
+  <section class="panel" style="margin-top:12px">
+    <h3>Wo er stand, letzte 7 Tage</h3>
+    {#each d.aufenthalte as a (a.ankunft)}
+      <div class="aufenthalt klein">
+        <span class="marke art-{a.verlassen ? 'weg' : a.art}">{a.verlassen ? 'Ausser Empfang' : ARTEN[a.art]}</span>
+        <span class="wo">{a.platz ?? a.ort ?? 'Ort unbekannt'}{#if a.platz && a.ort && a.art !== 'basis'} <span class="sehr-klein gedaempft">{a.ort}</span>{/if}{#if a.signalverlust} <span class="sehr-klein gedaempft">(Signal tief verloren)</span>{/if}</span>
+        <span class="gedaempft rechts">{datumZeit(a.ankunft)}{#if !a.verlassen} · {a.bis ? dauer(a.ankunft, a.bis) : `seit ${dauer(a.ankunft, null)}`}{/if}</span>
+      </div>
+    {:else}
+      <p class="klein gedaempft">In den letzten 7 Tagen keine Landung erfasst.</p>
+    {/each}
+  </section>
 
   <section class="panel" style="margin-top:12px">
     <h3>Flüge der letzten 30 Tage</h3>
@@ -200,5 +249,54 @@
   }
   .rechts {
     text-align: right;
+  }
+  .aufenthalt {
+    display: grid;
+    grid-template-columns: 7.5em 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rand);
+  }
+  .aufenthalt:last-child {
+    border-bottom: none;
+  }
+  .aufenthalt .marke {
+    text-align: center;
+  }
+  .art-basis {
+    color: #34d399;
+  }
+  .art-spital {
+    color: #f87171;
+  }
+  .art-einsatzort {
+    color: #fbbf24;
+  }
+  .art-landeplatz {
+    color: #7dd3fc;
+  }
+  .art-weg {
+    color: var(--gedaempft, #94a3b8);
+  }
+  .ring {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px dashed #fbbf24;
+    vertical-align: middle;
+  }
+  .ring.basis {
+    border: 2px solid #34d399;
+  }
+  @media (max-width: 560px) {
+    .aufenthalt {
+      grid-template-columns: 6.5em 1fr;
+    }
+    .aufenthalt .rechts {
+      grid-column: 2;
+      text-align: left;
+    }
   }
 </style>
