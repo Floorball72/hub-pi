@@ -21,6 +21,9 @@
     proStunde: number[];
     proWochentag: number[];
     orte: [string, number][];
+    ziele: [string, number][];
+    startplaetze: [string, number][];
+    dauerMin: number | null;
     letzte: { start: string; ende: string | null; organisation: string | null; kennzeichen: string | null; start_ort: string | null; ende_ort: string | null; start_platz?: string | null; ende_platz?: string | null }[];
     laufend: number;
     organisationen: string[];
@@ -152,6 +155,7 @@
         <div class="panel"><h3>Erfasste Flüge</h3><div class="zahl gross">{stat.anzahl}</div></div>
         <div class="panel"><h3>Jetzt in der Luft</h3><div class="zahl gross">{stat.laufend}</div></div>
         <div class="panel"><h3>Pro Tag</h3><div class="zahl gross">{(stat.anzahl / zeitraum).toFixed(1)}</div></div>
+        <div class="panel"><h3>Typische Flugdauer</h3><div class="zahl gross">{stat.dauerMin !== null ? `${stat.dauerMin} min` : 'offen'}</div></div>
       </div>
       <div class="raster-2">
         <section class="panel"><Balken titel="Flüge nach Tageszeit (Start, Schweizer Zeit)" werte={stat.proStunde} beschriftung={stat.proStunde.map((_, i) => `${i}h`)} einheit="Flüge" /></section>
@@ -161,15 +165,23 @@
           {#each stat.orte as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{/each}
         </section>
         <section class="panel">
+          <h3>Häufigste Ziele (Spital oder Landeplatz)</h3>
+          {#each stat.ziele as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch keine Landung bei einem bekannten Platz erfasst. Gilt erst für neue Flüge.</p>{/each}
+        </section>
+        <section class="panel">
+          <h3>Häufigste Startplätze</h3>
+          {#each stat.startplaetze as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch kein Start bei einem bekannten Platz erfasst. Gilt erst für neue Flüge.</p>{/each}
+        </section>
+        <section class="panel">
           <h3>Letzte Flüge</h3>
           {#each stat.letzte.slice(0, 10) as f (f.start + f.kennzeichen)}
             <div class="zeile-zwischen klein"><span>{f.organisation ?? 'Heli'} {f.kennzeichen ?? ''} · {f.start_platz ?? f.start_ort ?? '?'} nach {f.ende_platz ?? f.ende_ort ?? '?'}</span><span class="gedaempft">{datumZeit(f.start)} · {dauer(f.start, f.ende)}</span></div>
           {/each}
         </section>
       </div>
-      <h3 style="margin-top:14px">Heatmap der Einsatzorte</h3>
+      <h3 style="margin-top:14px">Flugspuren und Heatmap</h3>
       <Karte hoehe="420px" gruppen={['Rettung']} zentrum={[47.38, 9.2]} zoom={9} />
-      <p class="sehr-klein gedaempft">Ebene «Rega Einsätze (Heatmap)» im Ebenen Menü einschalten. Statistik nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
+      <p class="sehr-klein gedaempft">Ebenen «Heli Flugspuren (7 Tage)» und «Rega Einsätze (Heatmap)» im Ebenen Menü einschalten. Statistik nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
     {/if}
   {:else if tab === 'Toolbox'}
     <Toolbox />

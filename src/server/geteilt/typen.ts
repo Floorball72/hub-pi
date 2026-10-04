@@ -93,6 +93,18 @@ export interface PunkteAntwort {
   hinweis?: string;
   /** Für Heatmaps: [lat, lon, gewicht] */
   heat?: [number, number, number][];
+  /** Linien, z.B. Flugspuren */
+  linien?: GeoLinie[];
+}
+
+export interface GeoLinie {
+  id: string;
+  titel: string;
+  text?: string;
+  farbe?: string;
+  /** Gestrichelt, z.B. für laufende Flüge */
+  gestrichelt?: boolean;
+  punkte: [number, number][];
 }
 
 export interface TimelineEintrag {

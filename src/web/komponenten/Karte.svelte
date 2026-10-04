@@ -158,12 +158,23 @@
           }).addTo(gruppe);
         }
       }
+      for (const li of r.linien ?? []) {
+        if (li.punkte.length < 2) continue;
+        L.polyline(li.punkte, {
+          color: li.farbe ?? '#ff5d5d',
+          weight: 3,
+          opacity: 0.75,
+          dashArray: li.gestrichelt ? '6 6' : undefined,
+        })
+          .bindPopup(popupHtml({ id: li.id, lat: 0, lon: 0, titel: li.titel, text: li.text, symbol: 'ort' }), { maxWidth: 280 })
+          .addTo(gruppe);
+      }
       for (const p of r.punkte) {
         L.marker([p.lat, p.lon], { icon: symbolIcon(p), title: p.titel, riseOnHover: true })
           .bindPopup(popupHtml(p), { maxWidth: 280 })
           .addTo(gruppe);
       }
-      infos[e.id] = { stand: r.stand, demo: r.demo, fehler: r.fehler, hinweis: r.hinweis, anzahl: r.punkte.length + (r.heat?.length ?? 0) };
+      infos[e.id] = { stand: r.stand, demo: r.demo, fehler: r.fehler, hinweis: r.hinweis, anzahl: r.punkte.length + (r.heat?.length ?? 0) + (r.linien?.length ?? 0) };
     } catch (err) {
       infos[e.id] = { stand: null, demo: false, fehler: String(err), anzahl: 0 };
     }

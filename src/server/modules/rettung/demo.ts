@@ -222,8 +222,14 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
       max_hoehe_ft: 2500 + Math.floor(zufall(i * 43) * 3000),
       spur: [
         [sLat, sLon],
+        [
+          (sLat + eLat) / 2 + (zufall(i * 47) - 0.5) * 0.05,
+          (sLon + eLon) / 2 + (zufall(i * 53) - 0.5) * 0.05,
+        ],
         [eLat, eLon],
       ],
+      start_platz: 'Rega Basis (Demo)',
+      ende_platz: ziel ? ['Kantonsspital (Demo)', 'Spital Region (Demo)'][i % 2] : null,
     });
   }
   return fluege;

@@ -1,6 +1,14 @@
 // Modul Rettung: Helikopter (ADS-B), Alertswiss, Unwetter, Erdbeben, Einsatzmeldungen, Rega Statistik und Kartenebenen.
 import type { FastifyInstance } from 'fastify';
-import type { Ampel, Ebene, GeoPunkt, Kachel, PunkteAntwort, SuchTreffer } from '../../geteilt/typen.ts';
+import type {
+  Ampel,
+  Ebene,
+  GeoLinie,
+  GeoPunkt,
+  Kachel,
+  PunkteAntwort,
+  SuchTreffer,
+} from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
 import { GEOADMIN_NAMENSNENNUNG, WMS, WMTS } from '../../quellen/geoadmin.ts';
 import { distanzKm, richtungText } from '../../quellen/geo.ts';
@@ -543,13 +551,29 @@ function rettungLaufzeit(ctx: Kontext) {
         organisation: string | null;
         kennzeichen: string | null;
         ende: string | null;
+        start_platz: string | null;
+        ende_platz: string | null;
       }>('heli_fluege', { filter, sortierung: '-start', limit: 5000 });
+      const zaehlen = (werte: (string | null)[]) => {
+        const m = new Map<string, number>();
+        for (const w of werte) if (w) m.set(w, (m.get(w) ?? 0) + 1);
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+      };
       const orte = new Map<string, number>();
       for (const f of fluege)
         for (const o of [f.start_ort, f.ende_ort]) if (o) orte.set(o, (orte.get(o) ?? 0) + 1);
       return {
         ...flugStatistik(fluege),
         orte: [...orte.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12),
+        ziele: zaehlen(fluege.map((f) => f.ende_platz)),
+        startplaetze: zaehlen(fluege.map((f) => f.start_platz)),
+        dauerMin: (() => {
+          const d = fluege
+            .filter((f) => f.ende)
+            .map((f) => (new Date(f.ende!).getTime() - new Date(f.start).getTime()) / 60000)
+            .sort((a, b) => a - b);
+          return d.length ? Math.round(d[Math.floor(d.length / 2)]) : null;
+        })(),
         letzte: fluege.slice(0, 25),
         laufend: erkennung.laufende().length,
         organisationen: [
@@ -559,6 +583,49 @@ function rettungLaufzeit(ctx: Kontext) {
             ),
           ),
         ],
+      };
+    });
+
+    app.get('/spuren', async (): Promise<PunkteAntwort> => {
+      await demoVorbereiten();
+      const seit = new Date(ctx.jetzt().getTime() - 7 * 86400000).toISOString();
+      const fluege = await daten.liste<{
+        id: string;
+        start: string;
+        ende: string | null;
+        organisation: string | null;
+        kennzeichen: string | null;
+        start_ort: string | null;
+        ende_ort: string | null;
+        start_platz: string | null;
+        ende_platz: string | null;
+        spur: [number, number][] | null;
+      }>('heli_fluege', { filter: { start: { gte: seit } }, sortierung: '-start', limit: 200 });
+      const farbe = (o: string | null) => (o === 'Rega' ? '#ff5d5d' : o ? '#fb923c' : '#94a3b8');
+      const linien: GeoLinie[] = fluege.map((f) => ({
+        id: f.id,
+        titel: `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? ''}`.trim(),
+        text: `${f.start_platz ?? f.start_ort ?? '?'} nach ${f.ende_platz ?? f.ende_ort ?? '?'}
+${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime() - new Date(f.start).getTime()) / 60000))} min` : ''}`,
+        farbe: farbe(f.organisation),
+        punkte: Array.isArray(f.spur) ? f.spur : [],
+      }));
+      for (const f of erkennung.laufende()) {
+        linien.push({
+          id: `live-${f.hex}`,
+          titel: `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? f.hex} (in der Luft)`,
+          text: `Seit ${ZEIT(new Date(f.start).toISOString())}`,
+          farbe: farbe(f.organisation),
+          gestrichelt: true,
+          punkte: f.spur.map(([la, lo]) => [la, lo]),
+        });
+      }
+      return {
+        punkte: [],
+        linien,
+        stand: ctx.jetzt().toISOString(),
+        demo: konfig.demo,
+        hinweis: 'Flüge der letzten 7 Tage, gestrichelt: gerade in der Luft',
       };
     });
 
@@ -727,6 +794,17 @@ function rettungLaufzeit(ctx: Kontext) {
         namensnennung: ADSB_NAMENSNENNUNG,
         standardAn: true,
         hinweis: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
+      },
+      {
+        id: 'rettung.spuren',
+        name: 'Heli Flugspuren (7 Tage)',
+        gruppe: 'Rettung',
+        modul: 'rettung',
+        art: 'punkte',
+        datenUrl: '/api/m/rettung/spuren',
+        aktualisierenSek: 60,
+        namensnennung: ADSB_NAMENSNENNUNG,
+        hinweis: 'Aus selbst erfassten ADS-B Daten, nicht vollständig',
       },
       {
         id: 'rettung.heatmap',
