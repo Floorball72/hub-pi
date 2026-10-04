@@ -8,7 +8,7 @@
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
-  import { type AnimHeli, HeliAnimation } from '../lib/heliAnimation.ts';
+  import { type AnimHeli, HeliAnimation, liveAnim } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
 
@@ -137,30 +137,12 @@
       navigieren(h.link);
     };
     if (live && !wiedergabe) anim.setzen(liveAnim(live.helis));
+    // Die Liste rechts deckt den Osten ab: Ausschnitt etwas nach links schieben
+    if (seiteOffen && innerWidth > 860) karte.panBy([150, 0], { animate: false });
     return () => {
       anim?.stop();
       anim = null;
     };
-  }
-
-  function liveAnim(helis: LiveHeli[]): AnimHeli[] {
-    return helis.map((h) => {
-      const b = basisAusPlatz(h.startPlatz);
-      return {
-        id: h.hex,
-        lat: h.lat,
-        lon: h.lon,
-        kurs: h.kurs,
-        kmh: h.kmh,
-        zeit: h.zeit,
-        amBoden: h.amBoden,
-        farbe: heliFarbe(h.organisation),
-        schild: `${h.kennzeichen ?? h.hex} · ${h.amBoden ? 'Boden' : h.hoeheFt !== null ? `${h.hoeheFt} ft` : 'Luft'}`,
-        spur: h.spur,
-        basis: b ? [b.lat, b.lon] : null,
-        link: `/heli?hex=${encodeURIComponent(h.hex)}`,
-      };
-    });
   }
 
   function liveHolen() {
@@ -403,7 +385,17 @@
   {#if seiteOffen}
     <aside class="hud hud-seite">
       {#if live?.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
-      <h2>In der Luft</h2>
+      <h2>{wiedergabe ? `In der Luft um ${uhr.format(wZeit)}` : 'In der Luft'}</h2>
+      {#if wiedergabe}
+        {#each wAktiv as f (f.id)}
+          <a class="lb-heli" href="/heli?hex={encodeURIComponent(f.hex)}" onclick={() => (ansicht.kiosk = false)}>
+            <span class="zeile"><span class="punkt luft" style="background:{heliFarbe(f.organisation)}"></span><strong>{f.kennzeichen ?? f.hex}</strong></span>
+            <div class="sehr-klein gedaempft">{f.organisation} · ab {uhr.format(f.start)}{f.von ? ` · ${f.von}` : ''}</div>
+          </a>
+        {:else}
+          <p class="leer klein">Zu diesem Zeitpunkt war kein erfasster Heli in der Luft.</p>
+        {/each}
+      {:else}
       {#each inDerLuft as h (h.hex)}
         <a class="lb-heli" class:neu={neu.has(h.hex)} href="/heli?hex={encodeURIComponent(h.hex)}" onclick={() => (ansicht.kiosk = false)}>
           <div class="zeile-zwischen">
@@ -417,6 +409,7 @@
       {:else}
         <p class="leer klein">Gerade ist kein Heli aus der Liste mit Transponder in der Luft.</p>
       {/each}
+      {/if}
 
       {#if basenSortiert.length}
         <h2>Rega Basen</h2>
