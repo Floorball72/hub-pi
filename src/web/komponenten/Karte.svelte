@@ -22,6 +22,7 @@
     ebenenZusatz = [],
     bereit,
     basisStart,
+    ohne = [],
   }: {
     hoehe?: string;
     /** Nur Ebenen dieser Gruppen anzeigen (null = alle) */
@@ -44,6 +45,8 @@
     ebenenZusatz?: string[];
     /** Wird einmal aufgerufen, wenn die Karte steht, für eigene Ebenen der Seite (z.B. bewegte Helis) */
     bereit?: (L: typeof Leaflet, karte: Leaflet.Map) => (() => void) | void;
+    /** Diese Ebenen nicht anbieten (z.B. wenn die Seite die Helis selbst zeichnet) */
+    ohne?: string[];
     /** Grundkarte für diese Seite, ohne die gespeicherte Wahl zu ändern */
     basisStart?: string;
   } = $props();
@@ -166,11 +169,12 @@
   }
 
   const sichtbareEbenen = $derived(
-    ebenenFest
+    (ebenenFest
       ? ebenen.filter((e) => ebenenFest!.includes(e.id) || ebenenZusatz.includes(e.id))
       : gruppen
         ? ebenen.filter((e) => gruppen!.includes(e.gruppe))
-        : ebenen,
+        : ebenen
+    ).filter((e) => !ohne.includes(e.id)),
   );
   const gruppiert = $derived(
     Object.entries(

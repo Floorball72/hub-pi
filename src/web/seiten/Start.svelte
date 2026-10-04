@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type * as Leaflet from 'leaflet';
   import { heliFarbe } from '../../server/geteilt/heli.ts';
   import type { Ampel, BriefingTeil, Kachel, ModulInfo } from '../../server/geteilt/typen.ts';
   import HeliZeitstrahl from '../komponenten/HeliZeitstrahl.svelte';
@@ -8,17 +9,13 @@
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
+  import { HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { navigieren } from '../lib/router.svelte.ts';
 
-  interface LiveHeli {
-    hex: string;
-    organisation: string;
-    kennzeichen: string | null;
-    amBoden: boolean;
-    hoeheFt: number | null;
+  interface LiveHeli extends LiveHeliPos {
     ort: string | null;
     seit: string | null;
     gestartet: boolean;
-    startPlatz: string | null;
   }
 
   let daten = $state<{ status: Ampel; kacheln: Record<string, Kachel>; module: ModulInfo[]; demo: boolean } | null>(null);
@@ -28,6 +25,21 @@
   let live = $state<{ helis: LiveHeli[]; fehler?: string } | null>(null);
   const rettungAktiv = $derived(!!daten?.module.some((m) => m.id === 'rettung' && m.aktiv));
   const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
+
+  // Bewegte Helis auf der Karte, gespeist aus /live
+  let anim = $state.raw<HeliAnimation | null>(null);
+  function animStarten(L: typeof Leaflet, karte: Leaflet.Map) {
+    const a = new HeliAnimation(L, karte);
+    a.onklick = (h) => h.link && navigieren(h.link);
+    anim = a;
+    return () => {
+      a.stop();
+      anim = null;
+    };
+  }
+  $effect(() => {
+    if (anim && live) anim.setzen(liveAnim(live.helis, true));
+  });
 
   async function laden() {
     try {
@@ -126,7 +138,7 @@
         {/each}
       </div>
       <div class="rj-karte">
-        <Karte hoehe="320px" kompakt ebenenFest={['rettung.helis']} zentrum={[46.8, 8.23]} zoom={7} />
+        <Karte hoehe="320px" kompakt ebenenFest={[]} bereit={animStarten} zentrum={[46.8, 8.23]} zoom={7} />
       </div>
       <div class="panel rj-rueckblick"><HeliZeitstrahl maxZeilen={8} /></div>
     </section>

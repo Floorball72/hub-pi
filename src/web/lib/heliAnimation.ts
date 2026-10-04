@@ -1,6 +1,7 @@
 // Bewegte Helis auf der Karte: gleiten zwischen den Abrufen, drehen in Flugrichtung,
 // Schild mit Kennzeichen und Höhe, Spur, die hinter dem Heli ausblendet.
 import type * as Leaflet from 'leaflet';
+import { basisAusPlatz, heliFarbe } from '../../server/geteilt/heli.ts';
 
 export interface AnimHeli {
   id: string;
@@ -215,4 +216,41 @@ export class HeliAnimation {
       z.basisLinie = null;
     }
   }
+}
+
+/** Heli aus /api/m/rettung/live, nur die Felder, die der Animator braucht */
+export interface LiveHeliPos {
+  hex: string;
+  organisation: string;
+  kennzeichen: string | null;
+  amBoden: boolean;
+  hoeheFt: number | null;
+  kmh: number | null;
+  startPlatz: string | null;
+  lat: number;
+  lon: number;
+  kurs: number | null;
+  zeit: number;
+  spur: [number, number][];
+}
+
+/** Live Helis für den Animator, mit Linie zur Rega Basis, wenn mitBasis */
+export function liveAnim(helis: LiveHeliPos[], mitBasis = true): AnimHeli[] {
+  return helis.map((h) => {
+    const b = mitBasis ? basisAusPlatz(h.startPlatz) : null;
+    return {
+      id: h.hex,
+      lat: h.lat,
+      lon: h.lon,
+      kurs: h.kurs,
+      kmh: h.kmh,
+      zeit: h.zeit,
+      amBoden: h.amBoden,
+      farbe: heliFarbe(h.organisation),
+      schild: `${h.kennzeichen ?? h.hex} · ${h.amBoden ? 'Boden' : h.hoeheFt !== null ? `${h.hoeheFt} ft` : 'Luft'}`,
+      spur: h.spur,
+      basis: b ? [b.lat, b.lon] : null,
+      link: `/heli?hex=${encodeURIComponent(h.hex)}`,
+    };
+  });
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type * as Leaflet from 'leaflet';
   import { heliFarbe } from '../../server/geteilt/heli.ts';
   import Balken from '../komponenten/Balken.svelte';
   import HeliZeitstrahl from '../komponenten/HeliZeitstrahl.svelte';
@@ -8,6 +9,8 @@
   import Toolbox from './Toolbox.svelte';
   import { api } from '../lib/api.ts';
   import { datumZeit, relativ } from '../lib/format.ts';
+  import { HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { navigieren } from '../lib/router.svelte.ts';
 
   interface Lage {
     alerts: { id: string; titel: string; text: string; herausgeber: string; schwere: string; ereignis: string; inRegion: boolean; link: string | null; entwarnung: boolean }[];
@@ -31,7 +34,7 @@
     organisationen: string[];
   }
   interface Live {
-    helis: { hex: string; organisation: string; kennzeichen: string | null; typ: string | null; amBoden: boolean; hoeheFt: number | null; kmh: number | null; ort: string | null; seit: string | null; gestartet: boolean; startPlatz: string | null }[];
+    helis: (LiveHeliPos & { typ: string | null; ort: string | null; seit: string | null; gestartet: boolean })[];
     stand: string | null;
     fehler?: string;
   }
@@ -61,8 +64,22 @@
     if (tab !== 'Lage') return;
     const holen = () => api.get<Live>('/api/m/rettung/live').then((l) => (live = l)).catch(() => {});
     holen();
-    const t = setInterval(holen, 30000);
+    const t = setInterval(holen, 20000);
     return () => clearInterval(t);
+  });
+  // Bewegte Helis auf der Karte, gespeist aus /live
+  let anim = $state.raw<HeliAnimation | null>(null);
+  function animStarten(L: typeof Leaflet, karte: Leaflet.Map) {
+    const a = new HeliAnimation(L, karte);
+    a.onklick = (h) => h.link && navigieren(h.link);
+    anim = a;
+    return () => {
+      a.stop();
+      anim = null;
+    };
+  }
+  $effect(() => {
+    if (anim && live) anim.setzen(liveAnim(live.helis, false));
   });
   $effect(() => {
     if (tab === 'Rega Statistik') api.get<Statistik>(`/api/m/rettung/statistik?organisation=${encodeURIComponent(organisation)}&tage=${zeitraum}`).then((s) => (stat = s));
@@ -80,7 +97,7 @@
 
 <ModulRahmen modulId="rettung" tabs={['Lage', 'Einsätze', 'Rega Statistik', 'Toolbox', 'Kennzeichen', 'Webcams']} bind:tab>
   {#if tab === 'Lage'}
-    <Karte hoehe="min(62vh, 560px)" gruppen={['Rettung', 'Gefahren', 'Wetter']} zentrum={[47.35, 9.15]} zoom={9} />
+    <Karte hoehe="min(62vh, 560px)" gruppen={['Rettung', 'Gefahren', 'Wetter']} ohne={['rettung.helis']} bereit={animStarten} zentrum={[47.35, 9.15]} zoom={9} />
     <p class="sehr-klein gedaempft">Helikopter: Es sind nur Luftfahrzeuge sichtbar, die einen Transponder (ADS-B oder Mode S mit Position) senden. Rettungswagen sind nicht öffentlich und werden nicht angezeigt.</p>
 
     {#if live}
