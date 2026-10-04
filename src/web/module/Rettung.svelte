@@ -6,6 +6,7 @@
   import Karte from '../komponenten/Karte.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
+  import WebcamWand from '../komponenten/WebcamWand.svelte';
   import Toolbox from './Toolbox.svelte';
   import { api } from '../lib/api.ts';
   import { datumZeit, relativ } from '../lib/format.ts';
@@ -279,7 +280,9 @@
     <div class="hinweis" style="margin-bottom:12px">Kennzeichen oder Präfixe (mit *) pro Organisation, z.B. Rega, Air Zermatt, Air Glaciers, Polizei. Die Standardwerte für die Rega (HB-ZR*, HB-TI*) stammen aus öffentlichen Flottenangaben und müssen geprüft werden. Bitte nur Kennzeichen eintragen, die öffentlich bekannt sind.</div>
     <div class="panel"><TabellenEditor tabelle="heli_kennungen" sort="organisation" spalten={['organisation', 'muster', 'push']} neuText="Kennzeichen" /></div>
   {:else}
-    <div class="hinweis" style="margin-bottom:12px">Eigene Webcams mit öffentlicher Bild Adresse (https). Erscheinen auf der Karte in der Ebene «Webcams».</div>
+    <WebcamWand />
+    <h2 style="margin-top:20px">Eigene Webcams</h2>
+    <div class="hinweis" style="margin-bottom:12px">Eigene Webcams mit öffentlicher Bild Adresse (https). Erscheinen in der Wand oben und auf der Karte in der Ebene «Webcams».</div>
     <div class="panel"><TabellenEditor tabelle="webcams" spalten={['name', 'lat', 'lon', 'bild_url']} neuText="Webcam" /></div>
   {/if}
 </ModulRahmen>
