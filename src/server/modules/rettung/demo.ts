@@ -277,8 +277,8 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
     ende_platz: platz,
   });
   fluege.push(
-    abgestellt('4b1demo3', 'HB-ZRS', 300, 'landung', 46.914, 9.552, 'Rega Basis Untervaz', 'Untervaz (Demo)'),
-    abgestellt('4b1demo4', 'HB-ZRL', 40, 'signalverlust', r.lat + 0.05, r.lon - 0.08, null, 'Wattwil (Demo)'),
+    abgestellt('4b1demo7', 'HB-ZRS', 300, 'landung', 46.914, 9.552, 'Rega Basis Untervaz', 'Untervaz (Demo)'),
+    abgestellt('4b1demo8', 'HB-ZRL', 40, 'signalverlust', r.lat + 0.05, r.lon - 0.08, null, 'Wattwil (Demo)'),
   );
   return fluege;
 }
