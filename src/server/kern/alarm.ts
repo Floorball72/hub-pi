@@ -246,8 +246,9 @@ export class Alarmzentrale {
         }
       }
     }
-    // Verworfene Ereignisse wegen Sperrfrist nicht speichern, sonst wächst die Tabelle unnötig
-    if (!(entscheid.aktion === 'verworfen' && grund.startsWith('Bereits'))) {
+    // Sperrfrist und nicht erreichte Schwelle nicht speichern: Messwerte wie die Temperatur kommen
+    // alle paar Minuten und würden die Alarmzentrale mit Rauschen füllen
+    if (!(entscheid.aktion === 'verworfen' && /^(Bereits|Schwelle nicht)/.test(grund))) {
       try {
         await this.daten.einfuegen('alarme', [
           {
