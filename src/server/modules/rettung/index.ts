@@ -74,19 +74,19 @@ export interface Lawine {
 
 /**
  * Air Zermatt und Air Glaciers haben keine gemeinsame Kennzeichen Reihe, darum einzeln.
- * Quelle: öffentliche Register und Flottenberichte (helis.com, HeliHub, BEA), Stand 2026, ohne Push.
+ * Quelle: öffentliche Register und Flottenberichte (helis.com, HeliHub, BEA), Stand 2026, mit Push.
  * Flotten ändern sich: im Tab Kennzeichen prüfen und ergänzen. Polizei Helis sind nicht hinterlegt.
  */
 const WEITERE_BETREIBER: (Kennung & { push: boolean })[] = [
   ...['HB-ZSU', 'HB-ZPB', 'HB-ZUO', 'HB-ZEF', 'HB-ZCX', 'HB-ZVS', 'HB-XII'].map((muster) => ({
     organisation: 'Air Zermatt',
     muster,
-    push: false,
+    push: true,
   })),
   ...['HB-ZAN', 'HB-ZNR', 'HB-ZHY', 'HB-XVB'].map((muster) => ({
     organisation: 'Air Glaciers',
     muster,
-    push: false,
+    push: true,
   })),
 ];
 
@@ -328,6 +328,16 @@ function rettungLaufzeit(ctx: Kontext) {
       'heli_kennungen',
       { limit: 200 },
     );
+    // Einmalig Push für alle erfassten Helis einschalten (Wunsch Jerome), später im Tab Kennzeichen änderbar
+    if (liste.length && !ctx.einstellungen.hole('rettung.push_alle', false)) {
+      for (const k of liste as ({ id: string } & (typeof liste)[number])[]) {
+        if (!k.push) {
+          await daten.aendern('heli_kennungen', k.id, { push: true });
+          k.push = true;
+        }
+      }
+      await ctx.einstellungen.setze('rettung.push_alle', true);
+    }
     if (!liste.length && !ctx.einstellungen.hole('rettung.kennungen_angelegt', false)) {
       await daten.einfuegen(
         'heli_kennungen',
@@ -335,6 +345,7 @@ function rettungLaufzeit(ctx: Kontext) {
       );
       await ctx.einstellungen.setze('rettung.kennungen_angelegt', true);
       await ctx.einstellungen.setze('rettung.betreiber_angelegt', true);
+      await ctx.einstellungen.setze('rettung.push_alle', true);
       return STANDARD_KENNUNGEN;
     }
     // Bestehende Listen einmal um Air Zermatt und Air Glaciers ergänzen, gelöschte bleiben gelöscht
