@@ -1,9 +1,11 @@
 <script lang="ts">
   // Lagebild Rettung für einen Bildschirm oder ein Tablet: grosse Karte der Schweiz, Helis in der Luft, Uhr, Warnungen.
+  import { heliFarbe } from '../../server/geteilt/heli.ts';
   import Karte from '../komponenten/Karte.svelte';
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
+  import { lesen, schreiben } from '../lib/speicher.ts';
 
   interface LiveHeli {
     hex: string;
@@ -31,10 +33,65 @@
   const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
   const amBoden = $derived((live?.helis ?? []).filter((h) => h.amBoden));
 
+  // Start Meldung: Ton (nur nach Klick, Browser erlauben Audio erst nach einer Geste) und Blinken
+  let tonAn = $state(lesen('lagebild.ton', false));
+  let neu = $state<Set<string>>(new Set());
+  let gesehen: Set<string> | null = null;
+  let audio: AudioContext | null = null;
+
+  function tonUmschalten() {
+    tonAn = !tonAn;
+    schreiben('lagebild.ton', tonAn);
+    if (tonAn) {
+      audio ??= new AudioContext();
+      audio.resume().catch(() => {});
+      piepen();
+    }
+  }
+
+  function piepen() {
+    if (!tonAn) return;
+    audio ??= new AudioContext();
+    if (audio.state === 'suspended') audio.resume().catch(() => {});
+    const t0 = audio.currentTime;
+    // zwei kurze Töne, hoch und tief
+    for (const [i, hz] of [880, 660].entries()) {
+      const osz = audio.createOscillator();
+      const laut = audio.createGain();
+      osz.type = 'sine';
+      osz.frequency.value = hz;
+      const s = t0 + i * 0.22;
+      laut.gain.setValueAtTime(0.0001, s);
+      laut.gain.exponentialRampToValueAtTime(0.25, s + 0.02);
+      laut.gain.exponentialRampToValueAtTime(0.0001, s + 0.2);
+      osz.connect(laut).connect(audio.destination);
+      osz.start(s);
+      osz.stop(s + 0.21);
+    }
+  }
+
+  function startsPruefen(helis: LiveHeli[]) {
+    const luft = new Set(helis.filter((h) => !h.amBoden).map((h) => h.hex));
+    if (gesehen) {
+      const frisch = [...luft].filter((hex) => !gesehen!.has(hex));
+      if (frisch.length) {
+        neu = new Set([...neu, ...frisch]);
+        piepen();
+        setTimeout(() => {
+          neu = new Set([...neu].filter((h) => !frisch.includes(h)));
+        }, 12000);
+      }
+    }
+    gesehen = luft;
+  }
+
   function liveHolen() {
     api
-      .get<typeof live>('/api/m/rettung/live')
-      .then((l) => (live = l))
+      .get<NonNullable<typeof live>>('/api/m/rettung/live')
+      .then((l) => {
+        live = l;
+        startsPruefen(l.helis);
+      })
       .catch(() => {});
   }
   function lageHolen() {
@@ -71,6 +128,7 @@
       clearInterval(c);
       document.removeEventListener('visibilitychange', wach);
       sperre?.release().catch(() => {});
+      audio?.close().catch(() => {});
     };
   });
 
@@ -81,8 +139,8 @@
 </script>
 
 <div class="lagebild" class:vollbild={ansicht.kiosk}>
-  <div class="lb-karte">
-    <Karte hoehe="100%" kompakt ebenenFest={['rettung.helis', 'rettung.spital']} zentrum={[46.8, 8.23]} zoom={8} />
+  <div class="lb-karte" class:blitz={neu.size > 0}>
+    <Karte hoehe="100%" kompakt ebenenFest={['rettung.helis', 'rettung.spital']} ebenenZusatz={['wetter.radar']} zentrum={[46.8, 8.23]} zoom={8} />
   </div>
 
   <aside class="lb-seite">
@@ -91,7 +149,10 @@
         <div class="lb-uhr zahl">{uhr.format(jetzt)}</div>
         <div class="klein gedaempft">{tag.format(jetzt)}</div>
       </div>
-      <a class="sehr-klein" href="/modul/rettung" onclick={() => (ansicht.kiosk = false)}>Schliessen</a>
+      <span class="zeile">
+        <button class="knopf klein" class:aktiv={tonAn} onclick={tonUmschalten} aria-pressed={tonAn} title="Kurzer Ton, wenn ein Heli startet">{tonAn ? 'Ton an' : 'Ton aus'}</button>
+        <a class="sehr-klein" href="/modul/rettung" onclick={() => (ansicht.kiosk = false)}>Schliessen</a>
+      </span>
     </div>
 
     <div class="lb-werte">
@@ -105,9 +166,9 @@
     <h2>In der Luft</h2>
     <div class="lb-liste">
       {#each inDerLuft as h (h.hex)}
-        <a class="lb-heli" href="/heli?hex={encodeURIComponent(h.hex)}" onclick={() => (ansicht.kiosk = false)}>
+        <a class="lb-heli" class:neu={neu.has(h.hex)} href="/heli?hex={encodeURIComponent(h.hex)}" onclick={() => (ansicht.kiosk = false)}>
           <div class="zeile-zwischen">
-            <span class="zeile"><span class="punkt {h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong></span>
+            <span class="zeile"><span class="punkt luft" style="background:{heliFarbe(h.organisation)}"></span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong></span>
             <span class="klein gedaempft">{[h.hoeheFt !== null ? `${h.hoeheFt} ft` : null, h.kmh !== null ? `${h.kmh} km/h` : null].filter(Boolean).join(' · ')}</span>
           </div>
           <div class="klein gedaempft">
@@ -203,6 +264,27 @@
   }
   .lb-heli:hover {
     border-color: var(--text-2);
+  }
+  .knopf.aktiv {
+    border-color: var(--ok);
+    color: var(--ok);
+  }
+  .lb-heli.neu {
+    animation: start-blitz 1s ease-in-out 6;
+    border-color: var(--ausfall);
+  }
+  .lb-karte.blitz {
+    animation: rand-blitz 1s ease-in-out 6;
+  }
+  @keyframes start-blitz {
+    50% {
+      background: #f8717133;
+    }
+  }
+  @keyframes rand-blitz {
+    50% {
+      box-shadow: 0 0 0 4px var(--ausfall), 0 0 30px #f8717188;
+    }
   }
   .lb-warnung {
     padding: 4px 0;
