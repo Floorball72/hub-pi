@@ -347,3 +347,21 @@ describe('Heatmap mit Filtern', () => {
     assert.equal(startPasst('2026-07-06T06:15:00Z', 'morgen', 'werktag'), true);
   });
 });
+
+describe('Rega Basen', () => {
+  it('ordnet den ersten Empfang in der Luft nahe einer Basis dieser zu', async () => {
+    const { startBasis, endeBasis, basisAusPlatz, basisName } = await import('../src/server/geteilt/heli.ts');
+    // 4 km neben Untervaz, erster Empfang in der Luft
+    const b = startBasis('Rega', 'erfasst', 46.95, 9.55);
+    assert.equal(b?.id, 'untervaz');
+    assert.equal(basisAusPlatz(basisName(b!))?.id, 'untervaz');
+    // Beobachteter Start auf einem Feld 4 km weg bleibt das Feld
+    assert.equal(startBasis('Rega', 'start', 46.95, 9.55), null);
+    // Andere Betreiber und weit weg: keine Basis
+    assert.equal(startBasis('Air Zermatt', 'erfasst', 46.95, 9.55), null);
+    assert.equal(startBasis('Rega', 'erfasst', 47.2, 8.3), null);
+    // Tief verschwunden 4 km neben Erstfeld: Basis
+    assert.equal(endeBasis('Rega', 'signalverlust', 46.87, 8.64)?.id, 'erstfeld');
+    assert.equal(endeBasis('Rega', 'landung', 46.87, 8.64), null);
+  });
+});

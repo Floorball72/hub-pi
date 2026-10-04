@@ -1,6 +1,6 @@
 <script lang="ts">
   // Ein Heli im Detail: wo er gerade ist, der laufende Flug, Flüge der letzten 30 Tage.
-  import { heliFarbe } from '../../server/geteilt/heli.ts';
+  import { basisAusPlatz, heliFarbe } from '../../server/geteilt/heli.ts';
   import type { GeoLinie, GeoPunkt } from '../../server/geteilt/typen.ts';
   import Karte from '../komponenten/Karte.svelte';
   import { api } from '../lib/api.ts';
@@ -78,8 +78,20 @@
         ]
       : [],
   );
+  // Lücke im Empfang zwischen Basis und erstem oder letztem Fix, grau gestrichelt
+  function luecken(id: string, spur: [number, number][], von: string | null, nach: string | null): GeoLinie[] {
+    const aus: GeoLinie[] = [];
+    const a = basisAusPlatz(von);
+    const b = basisAusPlatz(nach);
+    if (a && spur.length) aus.push({ id: `${id}-von`, titel: `Start ${von}`, text: 'Ohne Empfang, vermutet', farbe: '#94a3b8', gestrichelt: true, punkte: [[a.lat, a.lon], [spur[0][0], spur[0][1]]] });
+    if (b && spur.length) aus.push({ id: `${id}-nach`, titel: `Landung ${nach}`, text: 'Ohne Empfang, vermutet', farbe: '#94a3b8', gestrichelt: true, punkte: [[spur[spur.length - 1][0], spur[spur.length - 1][1]], [b.lat, b.lon]] });
+    return aus;
+  }
+
   // Laufender Flug gestrichelt, Flüge der letzten 24 Stunden durchgezogen und blasser
   const linien = $derived<GeoLinie[]>([
+    ...(d?.laufend ? luecken('laufend', d.laufend.spur, d.laufend.startPlatz, null) : []),
+    ...(d?.fluege ?? []).filter((f) => f.spur && f.spur.length).flatMap((f) => luecken(f.id, f.spur!, f.start_platz, f.ende_platz)),
     ...(d?.laufend ? [{ id: 'laufend', titel: `${name} in der Luft`, text: `Seit ${datumZeit(d.laufend.start)}`, farbe, gestrichelt: true, punkte: d.laufend.spur }] : []),
     ...(d?.fluege ?? [])
       .filter((f) => f.spur && f.spur.length > 1)

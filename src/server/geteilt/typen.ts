@@ -67,7 +67,8 @@ export type Symbol =
   | 'warnung'
   | 'einsatz'
   | 'halt'
-  | 'parken';
+  | 'parken'
+  | 'basis';
 
 export interface GeoPunkt {
   id: string;

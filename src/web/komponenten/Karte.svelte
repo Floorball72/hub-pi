@@ -105,6 +105,7 @@
     einsatz: '#f43f5e',
     halt: '#94a3b8',
     parken: '#38bdf8',
+    basis: '#ff5d5d',
   };
 
   const SYMBOLE: Record<string, string> = {
@@ -121,6 +122,7 @@
     warnung: '<path d="M12 3l10 18H2zM12 10v5M12 18h.01"/>',
     einsatz: '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v6M12 16h.01"/>',
     halt: '<rect x="6" y="5" width="12" height="12" rx="2"/><path d="M9 21l3-4 3 4"/>',
+    basis: '<path d="M3 11l9-7 9 7v9H3z"/><path d="M12 10v6M9 13h6"/>',
     parken: '<path d="M9 19V5h4.5a4 4 0 0 1 0 8H9" stroke-width="2.6"/>',
   };
 

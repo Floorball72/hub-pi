@@ -64,7 +64,7 @@ import {
   warnungFuerGebiete,
 } from './quellen.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
-import { heliFarbe } from '../../geteilt/heli.ts';
+import { basisName, endeBasis, heliFarbe, REGA_BASEN, startBasis } from '../../geteilt/heli.ts';
 
 export interface Lawine {
   region: string;
@@ -414,11 +414,21 @@ function rettungLaufzeit(ctx: Kontext) {
       const f = e.flug;
       const name = `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? f.hex}`;
       const mitPush = !!f.organisation && k.some((x) => x.push && x.organisation === f.organisation);
-      // Nur ein echter Start hat einen Startplatz, beim Erfassen ist der Heli schon unterwegs
-      const startPlatz = f.startArt === 'start' ? await platzName(f.startLat, f.startLon) : null;
+      // Rega Basis in der Nähe zählt als Start, auch beim ersten Empfang in der Luft (ADS-B Lücke am Boden).
+      // Sonst hat nur ein echter Start einen Startplatz, beim Erfassen ist der Heli schon unterwegs.
+      const sb = startBasis(f.organisation, f.startArt, f.startLat, f.startLon);
+      const startPlatz = sb
+        ? basisName(sb)
+        : f.startArt === 'start'
+          ? await platzName(f.startLat, f.startLon)
+          : null;
       if (e.art === 'landung' || e.art === 'signalverlust') {
         startPlaetze.delete(f.hex);
-        const endePlatz = await platzName(f.endeLat, f.endeLon);
+        const eb =
+          f.endeLat !== null && f.endeLon !== null
+            ? endeBasis(f.organisation, e.art, f.endeLat, f.endeLon)
+            : null;
+        const endePlatz = eb ? basisName(eb) : await platzName(f.endeLat, f.endeLon);
         await flugSpeichern(f, startPlatz, endePlatz);
         const wo = endePlatz ? ` bei ${endePlatz}` : '';
         await ctx.aktivitaet(
@@ -510,6 +520,62 @@ function rettungLaufzeit(ctx: Kontext) {
       });
     }
     return { titel: f.titel, von: f.von.toISOString(), fluege };
+  }
+
+  interface BasisStatus {
+    id: string;
+    name: string;
+    lat: number;
+    lon: number;
+    status: 'unterwegs' | 'zuhause' | 'unbekannt';
+    unterwegs: { hex: string; kennzeichen: string | null; lat: number; lon: number }[];
+    zuHause: string[];
+    heute: number;
+  }
+
+  async function basenStatus(): Promise<BasisStatus[]> {
+    const von = rueckblickFenster(ctx.jetzt()).von.toISOString();
+    const heute = await daten.liste<{ start_platz: string | null }>('heli_fluege', {
+      filter: { start: { gte: von }, organisation: 'Rega' },
+      limit: 1000,
+    });
+    const laufende = erkennung.laufende();
+    return REGA_BASEN.map((b) => {
+      const name = basisName(b);
+      const unterwegs = laufende
+        .filter((f) => startPlaetze.get(f.hex) === name)
+        .map((f) => {
+          const p = positionen.find((x) => x.hex === f.hex);
+          const letzter = f.spur[f.spur.length - 1];
+          return {
+            hex: f.hex,
+            kennzeichen: f.kennzeichen,
+            lat: p?.lat ?? letzter[0],
+            lon: p?.lon ?? letzter[1],
+          };
+        });
+      const zuHause = positionen
+        .filter(
+          (p) =>
+            p.organisation === 'Rega' &&
+            (p.amBoden || (p.speedKn ?? 0) < 25) &&
+            distanzKm(p.lat, p.lon, b.lat, b.lon) <= 2,
+        )
+        .map((p) => p.kennzeichen ?? p.hex);
+      return {
+        id: b.id,
+        name,
+        lat: b.lat,
+        lon: b.lon,
+        status: unterwegs.length ? 'unterwegs' : zuHause.length ? 'zuhause' : 'unbekannt',
+        unterwegs,
+        zuHause,
+        heute:
+          heute.filter((f) => f.start_platz === name).length +
+          laufende.filter((f) => startPlaetze.get(f.hex) === name && f.start >= new Date(von).getTime())
+            .length,
+      };
+    });
   }
 
   async function demoVorbereiten() {
@@ -680,6 +746,51 @@ function rettungLaufzeit(ctx: Kontext) {
         demo: konfig.demo,
         fehler: positionenFehler,
         hinweis: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
+      };
+    });
+
+    // Rega Basen mit Status: Heli zu Hause, unterwegs (Linie zur Basis) oder keine Daten
+    app.get('/basen', async (): Promise<PunkteAntwort & { basen: BasisStatus[] }> => {
+      await demoVorbereiten();
+      if (!positionenStand) await heliRunde().catch(() => undefined);
+      const basen = await basenStatus();
+      const punkte: GeoPunkt[] = basen.map((b) => ({
+        id: `basis-${b.id}`,
+        lat: b.lat,
+        lon: b.lon,
+        titel: b.name,
+        text: [
+          b.status === 'unterwegs'
+            ? `Unterwegs: ${b.unterwegs.map((u) => u.kennzeichen ?? u.hex).join(', ')}`
+            : b.status === 'zuhause'
+              ? `Heli an der Basis: ${b.zuHause.join(', ')}`
+              : 'Kein Heli erfasst (am Boden oft kein Empfang)',
+          `Heute ${b.heute} ${b.heute === 1 ? 'Start' : 'Starts'}`,
+        ].join(' · '),
+        symbol: 'basis',
+        farbe: b.status === 'unterwegs' ? '#ff5d5d' : b.status === 'zuhause' ? '#34d399' : '#94a3b8',
+        groesse: b.status === 'unterwegs' ? 32 : 26,
+      }));
+      const linien: GeoLinie[] = basen.flatMap((b) =>
+        b.unterwegs.map((u) => ({
+          id: `basis-${b.id}-${u.hex}`,
+          titel: `${b.name} zu ${u.kennzeichen ?? u.hex}`,
+          text: 'Luftlinie von der Basis zum Heli',
+          farbe: '#ff5d5d',
+          gestrichelt: true,
+          punkte: [
+            [b.lat, b.lon],
+            [u.lat, u.lon],
+          ] as [number, number][],
+        })),
+      );
+      return {
+        punkte,
+        linien,
+        basen,
+        stand: positionenStand,
+        demo: konfig.demo,
+        hinweis: 'Koordinaten der Basen aus OpenStreetMap. Status nur aus ADS-B, am Boden oft ohne Empfang.',
       };
     });
 
@@ -1094,6 +1205,18 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
         namensnennung: ADSB_NAMENSNENNUNG,
         standardAn: true,
         hinweis: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
+      },
+      {
+        id: 'rettung.basen',
+        name: 'Rega Basen',
+        gruppe: 'Rettung',
+        modul: 'rettung',
+        art: 'punkte',
+        datenUrl: '/api/m/rettung/basen',
+        aktualisierenSek: 30,
+        namensnennung: 'Basen: rega.ch, Koordinaten: © OpenStreetMap',
+        standardAn: true,
+        hinweis: 'Status nur aus ADS-B. Am Boden ist oft kein Empfang, dann steht keine Daten.',
       },
       {
         id: 'rettung.spuren',
