@@ -147,19 +147,15 @@ function rettungLaufzeit(ctx: Kontext) {
     namensnennung: ADSB_NAMENSNENNUNG,
     beschreibung: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
   });
-  // Organisationen wie die Rega in der ganzen Schweiz: Abfrage nach Typ ist viel kleiner als ein
-  // grosser Radius (EC45 weltweit rund 10 KB statt 170 KB für die ganze Schweiz)
+  // Organisationen wie die Rega in der ganzen Schweiz: eine Abfrage nach Typ ist viel kleiner als
+  // ein grosser Radius (rund 20 KB weltweit statt 170 KB für die ganze Schweiz)
   const adsbSchweiz = ctx.quelle<void, AdsbFlugzeug[]>({
     id: 'rettung.adsb.schweiz',
     wichtig: true,
     name: 'ADS-B Schweiz nach Typ (adsb.lol)',
     modul: 'rettung',
     ttlSek: 30,
-    abruf: async () => {
-      const alle: AdsbFlugzeug[] = [];
-      for (const typ of konfig.heliTypen) alle.push(...(await adsbTypHolen(typ)));
-      return alle;
-    },
+    abruf: () => adsbTypHolen(konfig.heliTypen),
     demo: () => [],
     namensnennung: ADSB_NAMENSNENNUNG,
     beschreibung: `Typen ${konfig.heliTypen.join(', ')}, gefiltert auf die Kennzeichen Liste und die Schweiz.`,

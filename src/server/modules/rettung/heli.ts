@@ -53,10 +53,10 @@ export async function adsbHolen(lat: number, lon: number, radiusKm: number): Pro
   return d.ac ?? [];
 }
 
-/** Alle Flugzeuge eines Typs weltweit (ICAO Typ, z.B. EC45 für H145). Antworten sind klein. */
-export async function adsbTypHolen(typ: string): Promise<AdsbFlugzeug[]> {
+/** Alle Flugzeuge bestimmter Typen weltweit in einer Abfrage (ICAO Typen, z.B. EC45 für H145) */
+export async function adsbTypHolen(typen: string[]): Promise<AdsbFlugzeug[]> {
   const d = await httpJson<{ ac?: AdsbFlugzeug[] }>(
-    `https://api.adsb.lol/v2/type/${encodeURIComponent(typ)}`,
+    `https://api.adsb.lol/v2/type/${typen.map(encodeURIComponent).join(',')}`,
     { timeoutMs: 12000, abstandMs: 5000 },
   );
   return d.ac ?? [];
