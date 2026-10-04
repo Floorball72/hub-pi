@@ -147,6 +147,10 @@ h3 {
   flex: none;
   background: var(--neutral);
 }
+.punkt.luft {
+  box-shadow: 0 0 10px #ffffff40;
+  animation: pulsieren 1.6s ease-in-out infinite;
+}
 .punkt.ok {
   background: var(--ok);
   box-shadow: 0 0 10px #34d39966;

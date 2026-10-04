@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { heliFarbe } from '../../server/geteilt/heli.ts';
   import type { Ampel, BriefingTeil, Kachel, ModulInfo } from '../../server/geteilt/typen.ts';
+  import HeliZeitstrahl from '../komponenten/HeliZeitstrahl.svelte';
   import Icon from '../komponenten/Icon.svelte';
   import Karte from '../komponenten/Karte.svelte';
   import KachelAnsicht from '../komponenten/KachelAnsicht.svelte';
@@ -116,7 +118,7 @@
         {#if live?.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
         {#each inDerLuft.slice(0, 6) as h (h.hex)}
           <a class="zeile-zwischen klein rj-heli" href="/heli?hex={encodeURIComponent(h.hex)}">
-            <span class="zeile"><span class="punkt {h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span><span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span></span></span>
+            <span class="zeile"><span class="punkt luft" style="background:{heliFarbe(h.organisation)}"></span><span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span></span></span>
             <span class="gedaempft">{h.seit ? `${h.gestartet ? 'Start' : 'seit'} ${relativ(h.seit)}` : h.hoeheFt !== null ? `${h.hoeheFt} ft` : ''}</span>
           </a>
         {:else}
@@ -126,6 +128,7 @@
       <div class="rj-karte">
         <Karte hoehe="320px" kompakt ebenenFest={['rettung.helis']} zentrum={[46.8, 8.23]} zoom={7} />
       </div>
+      <div class="panel rj-rueckblick"><HeliZeitstrahl maxZeilen={8} /></div>
     </section>
   {/if}
 
@@ -173,6 +176,9 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
     gap: 12px;
     margin-bottom: 18px;
+  }
+  .rj-rueckblick {
+    grid-column: 1 / -1;
   }
   .rj-karte {
     border-radius: 14px;

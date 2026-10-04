@@ -18,6 +18,8 @@
     ebenenFest = null,
     linien = [],
     einpassen = false,
+    heat = [],
+    ebenenZusatz = [],
   }: {
     hoehe?: string;
     /** Nur Ebenen dieser Gruppen anzeigen (null = alle) */
@@ -34,6 +36,10 @@
     linien?: GeoLinie[];
     /** Ausschnitt einmal auf die Punkte und Linien der Seite setzen */
     einpassen?: boolean;
+    /** Heatmap der Seite als [lat, lon, gewicht] */
+    heat?: [number, number, number][];
+    /** Zu ebenenFest zusätzlich wählbare Ebenen, am Anfang aus */
+    ebenenZusatz?: string[];
   } = $props();
 
   const BASIS = [
@@ -143,7 +149,7 @@
 
   const sichtbareEbenen = $derived(
     ebenenFest
-      ? ebenen.filter((e) => ebenenFest!.includes(e.id))
+      ? ebenen.filter((e) => ebenenFest!.includes(e.id) || ebenenZusatz.includes(e.id))
       : gruppen
         ? ebenen.filter((e) => gruppen!.includes(e.gruppe))
         : ebenen,
@@ -157,22 +163,26 @@
     ),
   );
 
+  function heatZeichnen(werte: [number, number, number][], gruppe: Leaflet.LayerGroup) {
+    // Wurzel dämpft einzelne Hotspots, damit auch seltene Orte sichtbar bleiben
+    const max = Math.sqrt(Math.max(1, ...werte.map((h) => h[2])));
+    for (const [lat, lon, w] of werte) {
+      const a = Math.sqrt(w) / max;
+      L.circleMarker([lat, lon], {
+        radius: 5 + a * 18,
+        stroke: false,
+        fillColor: a > 0.66 ? '#f43f5e' : a > 0.33 ? '#fb923c' : '#fbbf24',
+        fillOpacity: 0.15 + a * 0.45,
+        interactive: false,
+      }).addTo(gruppe);
+    }
+  }
+
   async function punkteLaden(e: Ebene, gruppe: Leaflet.LayerGroup) {
     try {
       const r = await api.get<PunkteAntwort>(e.datenUrl!);
       gruppe.clearLayers();
-      if (e.art === 'heatmap' && r.heat) {
-        const max = Math.max(1, ...r.heat.map((h) => h[2]));
-        for (const [lat, lon, w] of r.heat) {
-          L.circleMarker([lat, lon], {
-            radius: 6 + (w / max) * 22,
-            stroke: false,
-            fillColor: w / max > 0.66 ? '#f43f5e' : w / max > 0.33 ? '#fb923c' : '#fbbf24',
-            fillOpacity: 0.18 + (w / max) * 0.45,
-            interactive: false,
-          }).addTo(gruppe);
-        }
-      }
+      if (e.art === 'heatmap' && r.heat) heatZeichnen(r.heat, gruppe);
       for (const li of r.linien ?? []) {
         if (li.punkte.length < 2) continue;
         L.polyline(li.punkte, {
@@ -254,10 +264,11 @@
   }
 
   let eingepasst = false;
-  function seitenPunkteZeichnen(liste: GeoPunkt[], striche: GeoLinie[]) {
+  function seitenPunkteZeichnen(liste: GeoPunkt[], striche: GeoLinie[], waerme: [number, number, number][]) {
     if (!karte || !L) return;
     seitenPunkte ??= L.layerGroup().addTo(karte);
     seitenPunkte.clearLayers();
+    if (waerme.length) heatZeichnen(waerme, seitenPunkte);
     const grenzen: [number, number][] = [];
     for (const li of striche) {
       if (li.punkte.length < 2) continue;
@@ -291,7 +302,7 @@
       const start = new Set(ebenenFest ?? gespeichert ?? r.ebenen.filter((e) => e.standardAn).map((e) => e.id));
       aktiv = start;
       for (const e of sichtbareEbenen) if (start.has(e.id)) ebeneAn(e);
-      seitenPunkteZeichnen(punkte, linien);
+      seitenPunkteZeichnen(punkte, linien, heat);
     })();
     return () => {
       abgebrochen = true;
@@ -304,7 +315,7 @@
   });
 
   $effect(() => {
-    seitenPunkteZeichnen(punkte, linien);
+    seitenPunkteZeichnen(punkte, linien, heat);
   });
 
   export function fliegen(lat: number, lon: number, z = 12) {

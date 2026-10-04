@@ -1,5 +1,6 @@
 <script lang="ts">
   // Ein Heli im Detail: wo er gerade ist, der laufende Flug, Flüge der letzten 30 Tage.
+  import { heliFarbe } from '../../server/geteilt/heli.ts';
   import type { GeoLinie, GeoPunkt } from '../../server/geteilt/typen.ts';
   import Karte from '../komponenten/Karte.svelte';
   import { api } from '../lib/api.ts';
@@ -56,7 +57,7 @@
     return () => clearInterval(t);
   });
 
-  const farbe = $derived(d?.organisation === 'Rega' ? '#ff5d5d' : d?.organisation ? '#fb923c' : '#94a3b8');
+  const farbe = $derived(heliFarbe(d?.organisation));
   const name = $derived(d ? `${d.organisation ?? 'Helikopter'} ${d.kennzeichen ?? d.hex}` : '');
   const minuten = (a: string, b: string | null) => Math.max(1, Math.round(((b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime()) / 60000));
 
@@ -101,7 +102,7 @@
 {:else if d}
   <div class="kopf">
     <div>
-      <h1><span class="punkt {d.position && !d.position.amBoden ? (d.organisation === 'Rega' ? 'ausfall' : 'warnung') : 'neutral'}"></span> {name}</h1>
+      <h1><span class="punkt" class:luft={d.position && !d.position.amBoden} style="background:{d.position && !d.position.amBoden ? farbe : ''}"></span> {name}</h1>
       <p class="gedaempft klein">{[d.typ, `Transponder ${d.hex.toUpperCase()}`].filter(Boolean).join(' · ')}{#if d.demo} <span class="marke demo">Demo</span>{/if}</p>
     </div>
     <div class="zustand panel">

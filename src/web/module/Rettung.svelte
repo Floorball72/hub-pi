@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { heliFarbe } from '../../server/geteilt/heli.ts';
   import Balken from '../komponenten/Balken.svelte';
+  import HeliZeitstrahl from '../komponenten/HeliZeitstrahl.svelte';
   import Karte from '../komponenten/Karte.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
@@ -46,6 +48,10 @@
   let live = $state<Live | null>(null);
   let organisation = $state('Rega');
   let zeitraum = $state(90);
+  let basis = $state('');
+  let tageszeit = $state('alle');
+  let wochentage = $state('alle');
+  let heat = $state<{ heat: [number, number, number][]; hinweis: string } | null>(null);
 
   $effect(() => {
     if (tab === 'Lage') api.get<Lage>('/api/m/rettung/lage').then((l) => (lage = l));
@@ -60,6 +66,11 @@
   });
   $effect(() => {
     if (tab === 'Rega Statistik') api.get<Statistik>(`/api/m/rettung/statistik?organisation=${encodeURIComponent(organisation)}&tage=${zeitraum}`).then((s) => (stat = s));
+  });
+  $effect(() => {
+    if (tab !== 'Rega Statistik') return;
+    const q = new URLSearchParams({ organisation, tage: String(zeitraum), tageszeit, wochentage, basis });
+    api.get<{ heat: [number, number, number][]; hinweis: string }>(`/api/m/rettung/heatmap?${q}`).then((h) => (heat = h)).catch(() => (heat = null));
   });
 
   const LAWINE: Record<string, string> = { low: '1 gering', moderate: '2 mässig', considerable: '3 erheblich', high: '4 gross', very_high: '5 sehr gross' };
@@ -82,7 +93,7 @@
         {#each live.helis as h (h.hex)}
           <a class="zeile-zwischen klein heli" href="/heli?hex={encodeURIComponent(h.hex)}">
             <span class="zeile">
-              <span class="punkt {h.amBoden ? 'neutral' : h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span>
+              <span class="punkt" class:luft={!h.amBoden} style="background:{h.amBoden ? '' : heliFarbe(h.organisation)}"></span>
               <span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span>
                 {#if h.startPlatz}<br /><span class="sehr-klein gedaempft">gestartet bei {h.startPlatz}</span>{/if}</span>
             </span>
@@ -96,6 +107,7 @@
         {/each}
       </section>
     {/if}
+    <section class="panel" style="margin-top:12px"><HeliZeitstrahl maxZeilen={20} /></section>
 
     {#if lage}
       <div class="raster-2" style="margin-top:12px">
@@ -217,9 +229,29 @@
           {/each}
         </section>
       </div>
-      <h3 style="margin-top:14px">Flugspuren und Heatmap</h3>
-      <Karte hoehe="420px" gruppen={['Rettung']} zentrum={[46.8, 8.23]} zoom={7} />
-      <p class="sehr-klein gedaempft">Ebenen «Heli Flugspuren (7 Tage)» und «Rega Einsätze (Heatmap)» im Ebenen Menü einschalten. Statistik nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
+      <div class="zeile-zwischen" style="margin-top:14px">
+        <h3>Heatmap Schweiz</h3>
+        <div class="zeile">
+          <select bind:value={basis} style="width:auto" aria-label="Basis">
+            <option value="">Alle Basen</option>
+            {#each stat.startplaetze as [o] (o)}<option value={o}>{o}</option>{/each}
+          </select>
+          <select bind:value={tageszeit} style="width:auto" aria-label="Tageszeit">
+            <option value="alle">Ganzer Tag</option>
+            <option value="morgen">Morgen 6 bis 10 Uhr</option>
+            <option value="tag">Tag 10 bis 17 Uhr</option>
+            <option value="abend">Abend 17 bis 22 Uhr</option>
+            <option value="nacht">Nacht 22 bis 6 Uhr</option>
+          </select>
+          <select bind:value={wochentage} style="width:auto" aria-label="Wochentage">
+            <option value="alle">Alle Tage</option>
+            <option value="werktag">Werktage</option>
+            <option value="wochenende">Wochenende</option>
+          </select>
+        </div>
+      </div>
+      <Karte hoehe="460px" ebenenFest={[]} heat={heat?.heat ?? []} zentrum={[46.8, 8.23]} zoom={7} />
+      <p class="sehr-klein gedaempft">{heat?.hinweis ?? 'Lade…'}. Start und Landung zählen doppelt. Nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
     {/if}
   {:else if tab === 'Toolbox'}
     <Toolbox />
