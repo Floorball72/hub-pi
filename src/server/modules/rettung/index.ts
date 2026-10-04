@@ -384,7 +384,7 @@ function rettungLaufzeit(ctx: Kontext) {
             text: `${e.art === 'landung' ? 'Gelandet' : 'Signal tief verloren, wahrscheinlich gelandet'} bei ${endePlatz}${startPlatz ? `, gestartet bei ${startPlatz}` : ''}. Flugdauer ${Math.max(1, Math.round(((f.ende ?? jetzt) - f.start) / 60000))} min. Nur Daten des Transponders, ohne Gewähr.`,
             schluessel: `heli-landung:${f.hex}`,
             tags: ['helicopter', 'hospital'],
-            link: '/modul/rettung',
+            link: `/heli?hex=${encodeURIComponent(f.hex)}`,
           });
         }
         continue;
@@ -400,7 +400,7 @@ function rettungLaufzeit(ctx: Kontext) {
           text: `${e.art === 'start' ? 'Start' : 'Erfasst'} bei ${wo}${f.typ ? `, Typ ${f.typ}` : ''}. Nur Daten des Transponders, zeitnah aber ohne Gewähr.`,
           schluessel: `heli:${f.hex}`,
           tags: ['helicopter'],
-          link: '/modul/rettung',
+          link: `/heli?hex=${encodeURIComponent(f.hex)}`,
         });
       }
     }
@@ -548,9 +548,23 @@ function rettungLaufzeit(ctx: Kontext) {
         farbe: p.organisation === 'Rega' ? '#ff5d5d' : p.organisation ? '#fb923c' : '#94a3b8',
         richtung: p.kurs ?? undefined,
         zeit: new Date(p.zeit).toISOString(),
+        link: p.organisation ? `/heli?hex=${encodeURIComponent(p.hex)}` : undefined,
       }));
+      // Spur des laufenden Flugs, damit Richtung und Weg sichtbar sind
+      const linien: GeoLinie[] = erkennung
+        .laufende()
+        .filter((f) => f.spur.length > 1)
+        .map((f) => ({
+          id: `spur-${f.hex}`,
+          titel: `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? f.hex}`,
+          text: `In der Luft seit ${ZEIT(new Date(f.start).toISOString())}`,
+          farbe: f.organisation === 'Rega' ? '#ff5d5d' : f.organisation ? '#fb923c' : '#94a3b8',
+          gestrichelt: true,
+          punkte: f.spur.map(([la, lo]) => [la, lo]),
+        }));
       return {
         punkte,
+        linien,
         stand: positionenStand,
         demo: konfig.demo,
         fehler: positionenFehler,
@@ -595,6 +609,86 @@ function rettungLaufzeit(ctx: Kontext) {
           (a.kennzeichen ?? '').localeCompare(b.kennzeichen ?? ''),
       );
       return { helis, stand: positionenStand, fehler: positionenFehler };
+    });
+
+    // Ein Heli im Detail: Position, laufender Flug, Flüge der letzten 30 Tage
+    app.get<{ Params: { hex: string } }>('/heli/:hex', async (req, rep) => {
+      const hex = req.params.hex.toLowerCase();
+      if (!/^[0-9a-z~]{1,12}$/.test(hex)) return rep.code(400).send({ fehler: 'Ungültige Kennung' });
+      await demoVorbereiten();
+      if (!positionenStand) await heliRunde().catch(() => undefined);
+      const p = positionen.find((x) => x.hex === hex) ?? null;
+      const laufend = erkennung.laufende().find((f) => f.hex === hex) ?? null;
+      const seit = new Date(ctx.jetzt().getTime() - 30 * 86400000).toISOString();
+      const fluege = await daten.liste<{
+        id: string;
+        kennzeichen: string | null;
+        typ: string | null;
+        organisation: string | null;
+        start: string;
+        start_art: string | null;
+        start_ort: string | null;
+        start_platz: string | null;
+        ende: string | null;
+        ende_art: string | null;
+        ende_ort: string | null;
+        ende_platz: string | null;
+        max_hoehe_ft: number | null;
+        spur: [number, number][] | null;
+      }>('heli_fluege', { filter: { hex, start: { gte: seit } }, sortierung: '-start', limit: 300 });
+      const neuester = fluege[0];
+      const dauern = fluege
+        .filter((f) => f.ende)
+        .map((f) => (new Date(f.ende!).getTime() - new Date(f.start).getTime()) / 60000)
+        .sort((a, b) => a - b);
+      const zaehlen = (werte: (string | null)[]) => {
+        const m = new Map<string, number>();
+        for (const w of werte) if (w) m.set(w, (m.get(w) ?? 0) + 1);
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+      };
+      // Spuren nur für die letzten 24 Stunden und den letzten Flug mitschicken, ältere braucht die Karte nicht
+      const grenze = ctx.jetzt().getTime() - 86400000;
+      return {
+        hex,
+        organisation: p?.organisation ?? laufend?.organisation ?? neuester?.organisation ?? null,
+        kennzeichen: p?.kennzeichen ?? laufend?.kennzeichen ?? neuester?.kennzeichen ?? null,
+        typ: p?.typ ?? laufend?.typ ?? neuester?.typ ?? null,
+        position: p
+          ? {
+              lat: p.lat,
+              lon: p.lon,
+              amBoden: p.amBoden,
+              hoeheFt: p.hoeheFt,
+              kmh: p.speedKn !== null ? Math.round(p.speedKn * 1.852) : null,
+              kurs: p.kurs,
+              zeit: new Date(p.zeit).toISOString(),
+              ort: await Promise.race([
+                ortName(p.lat, p.lon).catch(() => null),
+                new Promise<null>((ok) => setTimeout(() => ok(null), 2000)),
+              ]),
+            }
+          : null,
+        laufend: laufend
+          ? {
+              start: new Date(laufend.start).toISOString(),
+              gestartet: laufend.startArt === 'start',
+              startPlatz: startPlaetze.get(hex) ?? null,
+              maxHoeheFt: laufend.maxHoeheFt,
+              spur: laufend.spur.map(([la, lo]) => [la, lo] as [number, number]),
+            }
+          : null,
+        anzahl30: fluege.length,
+        heute: fluege.filter((f) => new Date(f.start).getTime() >= grenze).length,
+        dauerMin: dauern.length ? Math.round(dauern[Math.floor(dauern.length / 2)]) : null,
+        ziele: zaehlen(fluege.map((f) => f.ende_platz)),
+        startplaetze: zaehlen(fluege.map((f) => f.start_platz)),
+        fluege: fluege.slice(0, 50).map(({ spur, ...f }, i) => ({
+          ...f,
+          spur: (i === 0 || new Date(f.start).getTime() >= grenze) && Array.isArray(spur) ? spur : null,
+        })),
+        stand: positionenStand,
+        demo: konfig.demo,
+      };
     });
 
     app.get<{ Querystring: { organisation?: string; tage?: string } }>('/statistik', async (req) => {
@@ -791,7 +885,9 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
       const art = req.params.art;
       if (!['spital', 'wache', 'landeplatz', 'defi'].includes(art))
         return { punkte: [], stand: null, demo: false, fehler: 'Unbekannt' };
-      const r = await osm.hole(art);
+      // Defis gibt es zu viele für eine Abfrage der ganzen Schweiz, sie bleiben regional
+      let r = await osm.hole(art === 'defi' ? art : `${art}.ch`);
+      if (!r.daten?.length && art !== 'defi') r = await osm.hole(art);
       const punkte: GeoPunkt[] = (r.daten ?? []).map((o) => ({
         id: o.id,
         lat: o.lat,

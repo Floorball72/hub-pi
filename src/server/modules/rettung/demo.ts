@@ -204,9 +204,11 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
     const sLon = 9.3889 + (zufall(i * 23) - 0.5) * 0.02;
     const eLat = r.lat + (zufall(i * 29) - 0.5) * (ziel ? 0.25 : 0.6);
     const eLon = r.lon + (zufall(i * 31) - 0.5) * (ziel ? 0.35 : 0.8);
+    // Gleiche Kennung wie die Demo Helis, damit die Detailseite eine Geschichte zeigt
+    const zrx = zufall(i * 37) > 0.5;
     fluege.push({
-      hex: `demo${i}`,
-      kennzeichen: zufall(i * 37) > 0.5 ? 'HB-ZRX' : 'HB-TIE',
+      hex: zrx ? '4b1demo1' : '4b1demo2',
+      kennzeichen: zrx ? 'HB-ZRX' : 'HB-TIE',
       typ: 'A109',
       organisation: zufall(i * 41) > 0.15 ? 'Rega' : null,
       start: start.toISOString(),

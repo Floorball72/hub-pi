@@ -39,7 +39,7 @@ export const HELI_FLUEGE = tabelle({
     { name: 'start_platz', typ: 'text' },
     { name: 'ende_platz', typ: 'text' },
   ],
-  indizes: [['start'], ['organisation', 'start']],
+  indizes: [['start'], ['organisation', 'start'], ['hex', 'start']],
 });
 
 export const MELDUNGEN = tabelle({
