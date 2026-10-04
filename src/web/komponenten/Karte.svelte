@@ -1,7 +1,7 @@
 <script lang="ts">
   // Die eine Karten Komponente für alle Module. Ebenen kommen vom Backend, die Auswahl wird gespeichert.
   import type * as Leaflet from 'leaflet';
-  import type { Ebene, GeoPunkt, PunkteAntwort } from '../../server/geteilt/typen.ts';
+  import type { Ebene, GeoLinie, GeoPunkt, PunkteAntwort } from '../../server/geteilt/typen.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
@@ -16,6 +16,8 @@
     onklick,
     kompakt = false,
     ebenenFest = null,
+    linien = [],
+    einpassen = false,
   }: {
     hoehe?: string;
     /** Nur Ebenen dieser Gruppen anzeigen (null = alle) */
@@ -28,6 +30,10 @@
     kompakt?: boolean;
     /** Genau diese Ebenen zeigen und einschalten, Auswahl wird nicht gespeichert */
     ebenenFest?: string[] | null;
+    /** Zusätzliche Linien der Seite (z.B. Flugspuren eines Helis) */
+    linien?: GeoLinie[];
+    /** Ausschnitt einmal auf die Punkte und Linien der Seite setzen */
+    einpassen?: boolean;
   } = $props();
 
   const BASIS = [
@@ -247,12 +253,26 @@
     basisLayer.bringToBack();
   }
 
-  function seitenPunkteZeichnen(liste: GeoPunkt[]) {
+  let eingepasst = false;
+  function seitenPunkteZeichnen(liste: GeoPunkt[], striche: GeoLinie[]) {
     if (!karte || !L) return;
     seitenPunkte ??= L.layerGroup().addTo(karte);
     seitenPunkte.clearLayers();
+    const grenzen: [number, number][] = [];
+    for (const li of striche) {
+      if (li.punkte.length < 2) continue;
+      L.polyline(li.punkte, { color: li.farbe ?? '#ff5d5d', weight: 3, opacity: 0.8, dashArray: li.gestrichelt ? '6 6' : undefined })
+        .bindPopup(popupHtml({ id: li.id, lat: 0, lon: 0, titel: li.titel, text: li.text, symbol: 'ort' }), { maxWidth: 280 })
+        .addTo(seitenPunkte);
+      grenzen.push(...li.punkte);
+    }
     for (const p of liste) {
       L.marker([p.lat, p.lon], { icon: symbolIcon(p), title: p.titel }).bindPopup(popupHtml(p)).addTo(seitenPunkte);
+      grenzen.push([p.lat, p.lon]);
+    }
+    if (einpassen && !eingepasst && grenzen.length) {
+      eingepasst = true;
+      karte.fitBounds(L.latLngBounds(grenzen), { padding: [30, 30], maxZoom: 10 });
     }
   }
 
@@ -271,7 +291,7 @@
       const start = new Set(ebenenFest ?? gespeichert ?? r.ebenen.filter((e) => e.standardAn).map((e) => e.id));
       aktiv = start;
       for (const e of sichtbareEbenen) if (start.has(e.id)) ebeneAn(e);
-      seitenPunkteZeichnen(punkte);
+      seitenPunkteZeichnen(punkte, linien);
     })();
     return () => {
       abgebrochen = true;
@@ -284,7 +304,7 @@
   });
 
   $effect(() => {
-    seitenPunkteZeichnen(punkte);
+    seitenPunkteZeichnen(punkte, linien);
   });
 
   export function fliegen(lat: number, lon: number, z = 12) {

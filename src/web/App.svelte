@@ -22,6 +22,8 @@
     '/timeline': () => import('./seiten/Timeline.svelte'),
     '/karte': () => import('./seiten/KarteSeite.svelte'),
     '/notizen': () => import('./seiten/Notizen.svelte'),
+    '/heli': () => import('./seiten/Heli.svelte'),
+    '/lagebild': () => import('./seiten/Lagebild.svelte'),
   };
   const MODULSEITEN: Record<string, () => Promise<{ default: Component }>> = {
     zentrale: () => import('./module/Zentrale.svelte'),
