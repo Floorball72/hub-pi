@@ -30,8 +30,9 @@ export function demoHelis(jetzt: number, r: Region): AdsbFlugzeug[] {
       t: 'EC45',
       flight: 'REGA4',
       category: 'A7',
-      lat: 47.4318,
-      lon: 9.3889,
+      // An der Rega Basis St. Gallen
+      lat: 47.40559,
+      lon: 9.29009,
       alt_baro: 'ground',
       gs: 0,
       track: 0,
@@ -199,10 +200,13 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
     const start = new Date(jetzt.getTime() - tageZurueck * 86400000);
     start.setUTCHours(stunde - 2, Math.floor(zufall(i * 11) * 60), 0, 0);
     if (start.getTime() > jetzt.getTime()) start.setTime(start.getTime() - 86400000);
+    // Einige Flüge in den letzten 24 Stunden, damit die Wiedergabe etwas zeigt
+    if (i < 10) start.setTime(jetzt.getTime() - (i * 2.3 + 1.2) * 3600000);
     const dauer = 20 + Math.floor(zufall(i * 13) * 50);
     const ziel = zufall(i * 17) > 0.6;
-    const sLat = 47.4318 + (zufall(i * 19) - 0.5) * 0.02;
-    const sLon = 9.3889 + (zufall(i * 23) - 0.5) * 0.02;
+    // Erster Empfang einige Kilometer neben der Basis St. Gallen, wie in echt
+    const sLat = 47.40559 + (zufall(i * 19) - 0.5) * 0.06;
+    const sLon = 9.29009 + (zufall(i * 23) - 0.5) * 0.08;
     const eLat = r.lat + (zufall(i * 29) - 0.5) * (ziel ? 0.25 : 0.6);
     const eLon = r.lon + (zufall(i * 31) - 0.5) * (ziel ? 0.35 : 0.8);
     // Gleiche Kennung wie die Demo Helis, damit die Detailseite eine Geschichte zeigt
@@ -223,15 +227,17 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
       ende_lon: eLon,
       ende_ort: ['Wattwil (Demo)', 'Wil (Demo)', 'Herisau (Demo)', 'Kirchberg (Demo)', 'Uzwil (Demo)'][i % 5],
       max_hoehe_ft: 2500 + Math.floor(zufall(i * 43) * 3000),
-      spur: [
-        [sLat, sLon],
-        [
-          (sLat + eLat) / 2 + (zufall(i * 47) - 0.5) * 0.05,
-          (sLon + eLon) / 2 + (zufall(i * 53) - 0.5) * 0.05,
-        ],
-        [eLat, eLon],
-      ],
-      start_platz: 'Rega Basis (Demo)',
+      // Bogen vom Start zum Ziel, Zeit als Sekunden seit dem Start
+      spur: Array.from({ length: 16 }, (_, k) => {
+        const t = k / 15;
+        const bogen = Math.sin(t * Math.PI) * (zufall(i * 47) - 0.5) * 0.12;
+        return [
+          Math.round((sLat + (eLat - sLat) * t + bogen) * 1e5) / 1e5,
+          Math.round((sLon + (eLon - sLon) * t - bogen) * 1e5) / 1e5,
+          Math.round(t * dauer * 60),
+        ];
+      }),
+      start_platz: 'Rega Basis St. Gallen',
       ende_platz: ziel ? ['Kantonsspital (Demo)', 'Spital Region (Demo)'][i % 2] : null,
     });
   }

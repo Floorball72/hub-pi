@@ -365,3 +365,39 @@ describe('Rega Basen', () => {
     assert.equal(endeBasis('Rega', 'landung', 46.87, 8.64), null);
   });
 });
+
+describe('Wiedergabe', () => {
+  it('nutzt gespeicherte Zeiten und verteilt alte Spuren gleichmässig', async () => {
+    const { wiedergabePunkte } = await import('../src/server/modules/rettung/heli.ts');
+    const mit = wiedergabePunkte(
+      [
+        [47, 9, 0],
+        [47.1, 9.1, 60],
+      ],
+      1000,
+      999999,
+    );
+    assert.deepEqual(mit, {
+      punkte: [
+        [47, 9, 1000],
+        [47.1, 9.1, 61000],
+      ],
+      geschaetzt: false,
+    });
+    const ohne = wiedergabePunkte(
+      [
+        [47, 9],
+        [47.1, 9.1],
+        [47.2, 9.2],
+      ],
+      0,
+      100,
+    );
+    assert.equal(ohne.geschaetzt, true);
+    assert.deepEqual(
+      ohne.punkte.map((p) => p[2]),
+      [0, 50, 100],
+    );
+    assert.deepEqual(wiedergabePunkte(null, 0, 1).punkte, []);
+  });
+});

@@ -388,6 +388,28 @@ export function heatRaster(
   });
 }
 
+/**
+ * Punkte eines gespeicherten Flugs mit Zeit in ms für die Wiedergabe. Neuere Spuren tragen als drittes
+ * Element die Sekunden seit dem Start. Ältere Spuren ohne Zeit werden gleichmässig zwischen Start und Ende verteilt.
+ */
+export function wiedergabePunkte(
+  spur: unknown,
+  startMs: number,
+  endeMs: number,
+): { punkte: [number, number, number][]; geschaetzt: boolean } {
+  const liste = (Array.isArray(spur) ? spur : []).filter(
+    (p): p is number[] => Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number',
+  );
+  if (!liste.length) return { punkte: [], geschaetzt: false };
+  const mitZeit = liste.every((p) => typeof p[2] === 'number');
+  if (mitZeit) return { punkte: liste.map((p) => [p[0], p[1], startMs + p[2] * 1000]), geschaetzt: false };
+  const schritt = liste.length > 1 ? (endeMs - startMs) / (liste.length - 1) : 0;
+  return {
+    punkte: liste.map((p, i) => [p[0], p[1], Math.round(startMs + i * schritt)]),
+    geschaetzt: true,
+  };
+}
+
 export type Tageszeit = 'alle' | 'morgen' | 'tag' | 'abend' | 'nacht';
 const TAGESZEITEN: Record<Exclude<Tageszeit, 'alle'>, [number, number]> = {
   morgen: [6, 10],

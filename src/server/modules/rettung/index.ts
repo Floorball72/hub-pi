@@ -39,6 +39,7 @@ import {
   rueckblickFenster,
   schweizFiltern,
   startPasst,
+  wiedergabePunkte,
   type Tageszeit,
   type Kennung,
 } from './heli.ts';
@@ -382,7 +383,8 @@ function rettungLaufzeit(ctx: Kontext) {
         ende_lon: f.endeLon,
         ende_ort: f.endeLat !== null && f.endeLon !== null ? await ortName(f.endeLat, f.endeLon) : null,
         max_hoehe_ft: f.maxHoeheFt,
-        spur: f.spur.map(([la, lo]) => [la, lo]),
+        // Zeit als Sekunden seit dem Start, für die Wiedergabe
+        spur: f.spur.map(([la, lo, t]) => [la, lo, Math.round((t - f.start) / 1000)]),
         start_platz: startPlatz,
         ende_platz: endePlatz,
       },
@@ -821,6 +823,12 @@ function rettungLaufzeit(ctx: Kontext) {
               seit: f ? new Date(f.start).toISOString() : null,
               gestartet: f?.startArt === 'start',
               startPlatz: startPlaetze.get(p.hex) ?? null,
+              lat: p.lat,
+              lon: p.lon,
+              kurs: p.kurs,
+              zeit: p.zeit,
+              // Letzte Punkte des laufenden Flugs für die Spur auf der Karte
+              spur: f ? f.spur.slice(-40).map(([la, lo]) => [la, lo] as [number, number]) : [],
             };
           }),
       );
@@ -831,6 +839,64 @@ function rettungLaufzeit(ctx: Kontext) {
           (a.kennzeichen ?? '').localeCompare(b.kennzeichen ?? ''),
       );
       return { helis, stand: positionenStand, fehler: positionenFehler };
+    });
+
+    // Wiedergabe: alle Flüge der Helis aus der Liste der letzten Stunden mit Zeit pro Punkt
+    app.get<{ Querystring: { stunden?: string } }>('/wiedergabe', async (req) => {
+      await demoVorbereiten();
+      const stunden = Math.min(72, Math.max(1, Number(req.query.stunden) || 24));
+      const jetzt = ctx.jetzt().getTime();
+      const von = jetzt - stunden * 3600000;
+      const gespeichert = await daten.liste<{
+        id: string;
+        hex: string;
+        organisation: string | null;
+        kennzeichen: string | null;
+        start: string;
+        ende: string | null;
+        start_platz: string | null;
+        start_ort: string | null;
+        ende_platz: string | null;
+        ende_ort: string | null;
+        spur: unknown;
+      }>('heli_fluege', {
+        filter: { start: { gte: new Date(von - 6 * 3600000).toISOString() } },
+        sortierung: 'start',
+        limit: 400,
+      });
+      const fluege = gespeichert
+        .filter((f) => f.organisation && (f.ende ? new Date(f.ende).getTime() : jetzt) >= von)
+        .map((f) => {
+          const s = new Date(f.start).getTime();
+          const e = f.ende ? new Date(f.ende).getTime() : s;
+          return {
+            id: f.id,
+            hex: f.hex,
+            organisation: f.organisation!,
+            kennzeichen: f.kennzeichen,
+            von: f.start_platz ?? f.start_ort,
+            nach: f.ende_platz ?? f.ende_ort,
+            start: s,
+            ende: e,
+            ...wiedergabePunkte(f.spur, s, e),
+          };
+        });
+      for (const l of erkennung.laufende()) {
+        if (!l.organisation) continue;
+        fluege.push({
+          id: `live-${l.hex}`,
+          hex: l.hex,
+          organisation: l.organisation,
+          kennzeichen: l.kennzeichen,
+          von: startPlaetze.get(l.hex) ?? null,
+          nach: null,
+          start: l.start,
+          ende: jetzt,
+          punkte: l.spur.map(([la, lo, t]) => [la, lo, t] as [number, number, number]),
+          geschaetzt: false,
+        });
+      }
+      return { von, bis: jetzt, fluege: fluege.filter((f) => f.punkte.length), demo: konfig.demo };
     });
 
     // Ein Heli im Detail: Position, laufender Flug, Flüge der letzten 30 Tage
@@ -913,7 +979,10 @@ function rettungLaufzeit(ctx: Kontext) {
         startplaetze: zaehlen(fluege.map((f) => f.start_platz)),
         fluege: fluege.slice(0, 50).map(({ spur, ...f }, i) => ({
           ...f,
-          spur: (i === 0 || new Date(f.start).getTime() >= grenze) && Array.isArray(spur) ? spur : null,
+          spur:
+            (i === 0 || new Date(f.start).getTime() >= grenze) && Array.isArray(spur)
+              ? spur.map(([la, lo]) => [la, lo] as [number, number])
+              : null,
         })),
         stand: positionenStand,
         demo: konfig.demo,
