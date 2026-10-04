@@ -12,6 +12,9 @@ import {
   inSchweiz,
   platzBei,
   positionenVereinen,
+  heatRaster,
+  rueckblickFenster,
+  startPasst,
   schweizFiltern,
   musterPasst,
   organisationFinden,
@@ -290,5 +293,57 @@ describe('Ganze Schweiz', () => {
         ['d', 47],
       ],
     );
+  });
+});
+
+describe('Rückblick Fenster', () => {
+  it('vormittags ab 20 Uhr des Vortags (Sommerzeit)', () => {
+    const f = rueckblickFenster(new Date('2026-07-15T05:00:00Z')); // 07:00 lokal
+    assert.equal(f.von.toISOString(), '2026-07-14T18:00:00.000Z');
+    assert.equal(f.titel, 'Seit gestern 20 Uhr');
+  });
+  it('nachmittags ab Mitternacht (Winterzeit)', () => {
+    const f = rueckblickFenster(new Date('2026-01-15T14:00:00Z')); // 15:00 lokal
+    assert.equal(f.von.toISOString(), '2026-01-14T23:00:00.000Z');
+    assert.equal(f.titel, 'Heute');
+  });
+  it('kurz nach Mitternacht zählt die Nacht ab dem Vorabend', () => {
+    const f = rueckblickFenster(new Date('2026-03-01T23:30:00Z')); // 00:30 lokal am 2. März
+    assert.equal(f.von.toISOString(), '2026-03-01T19:00:00.000Z');
+  });
+});
+
+describe('Heatmap mit Filtern', () => {
+  it('zählt jede Zelle einmal pro Flug, Start und Landung doppelt', () => {
+    const h = heatRaster([
+      {
+        start_lat: 47.0,
+        start_lon: 9.0,
+        ende_lat: 47.2,
+        ende_lon: 9.2,
+        spur: [
+          [47.0, 9.0],
+          [47.1, 9.1],
+          [47.1, 9.1],
+          [47.2, 9.2],
+        ],
+      },
+    ]);
+    const wert = (la: number, lo: number) =>
+      h.find(([a, b]) => Math.abs(a - la) < 1e-6 && Math.abs(b - lo) < 1e-6)?.[2];
+    assert.equal(wert(47.0, 9.0), 2);
+    assert.equal(wert(47.1, 9.1), 1);
+    assert.equal(wert(47.2, 9.2), 2);
+    assert.equal(h.length, 3);
+  });
+  it('filtert nach Tageszeit und Wochentag in Schweizer Zeit', () => {
+    // Samstag 4. Juli 2026, 23:30 lokal
+    const sa = '2026-07-04T21:30:00Z';
+    assert.equal(startPasst(sa, 'nacht', 'alle'), true);
+    assert.equal(startPasst(sa, 'tag', 'alle'), false);
+    assert.equal(startPasst(sa, 'alle', 'wochenende'), true);
+    assert.equal(startPasst(sa, 'alle', 'werktag'), false);
+    // Montag 6. Juli 2026, 08:15 lokal
+    assert.equal(startPasst('2026-07-06T06:15:00Z', 'morgen', 'werktag'), true);
   });
 });

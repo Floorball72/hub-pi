@@ -135,7 +135,7 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     einsatzFeeds: feedsParsen(e.EINSATZ_FEEDS),
     warnGebiete: liste(e.WARN_GEBIETE ?? 'St. Gallen;Appenzell;Thurgau;Toggenburg', ';'),
     heliAlle: e.HELI_ALLE !== 'false',
-    heliTypen: (e.HELI_TYPEN ?? 'A109,EC45,A169')
+    heliTypen: (e.HELI_TYPEN ?? 'A109,EC45,A169,AS50,EC30,EC35,B429,LAMA')
       .split(',')
       .map((t) => t.trim().toUpperCase())
       .filter(Boolean),

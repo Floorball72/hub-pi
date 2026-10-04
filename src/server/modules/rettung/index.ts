@@ -34,8 +34,12 @@ import {
   type HeliPosition,
   heliFiltern,
   platzBei,
+  heatRaster,
   positionenVereinen,
+  rueckblickFenster,
   schweizFiltern,
+  startPasst,
+  type Tageszeit,
   type Kennung,
 } from './heli.ts';
 import {
@@ -60,6 +64,7 @@ import {
   warnungFuerGebiete,
 } from './quellen.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
+import { heliFarbe } from '../../geteilt/heli.ts';
 
 export interface Lawine {
   region: string;
@@ -67,12 +72,31 @@ export interface Lawine {
   gueltigBis: string | null;
 }
 
+/**
+ * Air Zermatt und Air Glaciers haben keine gemeinsame Kennzeichen Reihe, darum einzeln.
+ * Quelle: öffentliche Register und Flottenberichte (helis.com, HeliHub, BEA), Stand 2026, ohne Push.
+ * Flotten ändern sich: im Tab Kennzeichen prüfen und ergänzen. Polizei Helis sind nicht hinterlegt.
+ */
+const WEITERE_BETREIBER: (Kennung & { push: boolean })[] = [
+  ...['HB-ZSU', 'HB-ZPB', 'HB-ZUO', 'HB-ZEF', 'HB-ZCX', 'HB-ZVS', 'HB-XII'].map((muster) => ({
+    organisation: 'Air Zermatt',
+    muster,
+    push: false,
+  })),
+  ...['HB-ZAN', 'HB-ZNR', 'HB-ZHY', 'HB-XVB'].map((muster) => ({
+    organisation: 'Air Glaciers',
+    muster,
+    push: false,
+  })),
+];
+
 const LAWINEN_STUFE: Record<string, number> = { low: 1, moderate: 2, considerable: 3, high: 4, very_high: 5 };
 
-export const STANDARD_KENNUNGEN: Kennung[] = [
+export const STANDARD_KENNUNGEN: (Kennung & { push: boolean })[] = [
   // Quelle: Flottenangaben Rega (AW109SP HB-ZRx, H145 HB-TIx). Bitte zuhause prüfen und ergänzen.
-  { organisation: 'Rega', muster: 'HB-ZR*' },
-  { organisation: 'Rega', muster: 'HB-TI*' },
+  { organisation: 'Rega', muster: 'HB-ZR*', push: true },
+  { organisation: 'Rega', muster: 'HB-TI*', push: true },
+  ...WEITERE_BETREIBER,
 ];
 
 export const rettung: ModulDef = {
@@ -307,10 +331,24 @@ function rettungLaufzeit(ctx: Kontext) {
     if (!liste.length && !ctx.einstellungen.hole('rettung.kennungen_angelegt', false)) {
       await daten.einfuegen(
         'heli_kennungen',
-        STANDARD_KENNUNGEN.map((k) => ({ ...k, push: true, notizen: 'Standard, bitte prüfen' })),
+        STANDARD_KENNUNGEN.map((k) => ({ ...k, notizen: 'Standard, bitte prüfen' })),
       );
       await ctx.einstellungen.setze('rettung.kennungen_angelegt', true);
-      return STANDARD_KENNUNGEN.map((k) => ({ ...k, push: true }));
+      await ctx.einstellungen.setze('rettung.betreiber_angelegt', true);
+      return STANDARD_KENNUNGEN;
+    }
+    // Bestehende Listen einmal um Air Zermatt und Air Glaciers ergänzen, gelöschte bleiben gelöscht
+    if (!ctx.einstellungen.hole('rettung.betreiber_angelegt', false)) {
+      const vorhanden = new Set(liste.map((k) => k.muster.toUpperCase()));
+      const neu = WEITERE_BETREIBER.filter((k) => !vorhanden.has(k.muster));
+      if (neu.length) {
+        await daten.einfuegen(
+          'heli_kennungen',
+          neu.map((k) => ({ ...k, notizen: 'Standard, bitte prüfen' })),
+        );
+      }
+      await ctx.einstellungen.setze('rettung.betreiber_angelegt', true);
+      return [...liste, ...neu];
     }
     return liste;
   }
@@ -405,6 +443,62 @@ function rettungLaufzeit(ctx: Kontext) {
       }
     }
     return positionen.length ? `${positionen.length} Helikopter` : undefined;
+  }
+
+  interface RueckblickFlug {
+    id: string;
+    hex: string;
+    organisation: string;
+    kennzeichen: string | null;
+    start: string;
+    ende: string | null;
+    von: string | null;
+    nach: string | null;
+    laufend: boolean;
+  }
+
+  async function rueckblick(): Promise<{ titel: string; von: string; fluege: RueckblickFlug[] }> {
+    const f = rueckblickFenster(ctx.jetzt());
+    const gespeichert = await daten.liste<{
+      id: string;
+      hex: string;
+      organisation: string | null;
+      kennzeichen: string | null;
+      start: string;
+      ende: string | null;
+      start_ort: string | null;
+      start_platz: string | null;
+      ende_ort: string | null;
+      ende_platz: string | null;
+    }>('heli_fluege', { filter: { start: { gte: f.von.toISOString() } }, sortierung: 'start', limit: 300 });
+    const fluege: RueckblickFlug[] = gespeichert
+      .filter((x) => x.organisation)
+      .map((x) => ({
+        id: x.id,
+        hex: x.hex,
+        organisation: x.organisation!,
+        kennzeichen: x.kennzeichen,
+        start: x.start,
+        ende: x.ende,
+        von: x.start_platz ?? x.start_ort,
+        nach: x.ende_platz ?? x.ende_ort,
+        laufend: false,
+      }));
+    for (const l of erkennung.laufende()) {
+      if (!l.organisation) continue;
+      fluege.push({
+        id: `live-${l.hex}`,
+        hex: l.hex,
+        organisation: l.organisation,
+        kennzeichen: l.kennzeichen,
+        start: new Date(Math.max(l.start, f.von.getTime())).toISOString(),
+        ende: null,
+        von: startPlaetze.get(l.hex) ?? null,
+        nach: null,
+        laufend: true,
+      });
+    }
+    return { titel: f.titel, von: f.von.toISOString(), fluege };
   }
 
   async function demoVorbereiten() {
@@ -520,6 +614,12 @@ function rettungLaufzeit(ctx: Kontext) {
     },
   ];
 
+  const UHRZEIT = (iso: string) =>
+    new Date(iso).toLocaleTimeString('de-CH', {
+      timeZone: 'Europe/Zurich',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   const ZEIT = (iso: string) =>
     new Date(iso).toLocaleString('de-CH', {
       timeZone: 'Europe/Zurich',
@@ -545,7 +645,7 @@ function rettungLaufzeit(ctx: Kontext) {
           .filter(Boolean)
           .join(' · '),
         symbol: 'heli',
-        farbe: p.organisation === 'Rega' ? '#ff5d5d' : p.organisation ? '#fb923c' : '#94a3b8',
+        farbe: heliFarbe(p.organisation),
         richtung: p.kurs ?? undefined,
         zeit: new Date(p.zeit).toISOString(),
         link: p.organisation ? `/heli?hex=${encodeURIComponent(p.hex)}` : undefined,
@@ -558,7 +658,7 @@ function rettungLaufzeit(ctx: Kontext) {
           id: `spur-${f.hex}`,
           titel: `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? f.hex}`,
           text: `In der Luft seit ${ZEIT(new Date(f.start).toISOString())}`,
-          farbe: f.organisation === 'Rega' ? '#ff5d5d' : f.organisation ? '#fb923c' : '#94a3b8',
+          farbe: heliFarbe(f.organisation),
           gestrichelt: true,
           punkte: f.spur.map(([la, lo]) => [la, lo]),
         }));
@@ -612,6 +712,13 @@ function rettungLaufzeit(ctx: Kontext) {
     });
 
     // Ein Heli im Detail: Position, laufender Flug, Flüge der letzten 30 Tage
+    // Rückblick: alle Flüge der Helis aus der Kennzeichen Liste seit gestern Abend oder seit Mitternacht
+    app.get('/rueckblick', async () => {
+      await demoVorbereiten();
+      if (!positionenStand) await heliRunde().catch(() => undefined);
+      return { ...(await rueckblick()), stand: positionenStand, demo: konfig.demo };
+    });
+
     app.get<{ Params: { hex: string } }>('/heli/:hex', async (req, rep) => {
       const hex = req.params.hex.toLowerCase();
       if (!/^[0-9a-z~]{1,12}$/.test(hex)) return rep.code(400).send({ fehler: 'Ungültige Kennung' });
@@ -759,7 +866,7 @@ function rettungLaufzeit(ctx: Kontext) {
         ende_platz: string | null;
         spur: [number, number][] | null;
       }>('heli_fluege', { filter: { start: { gte: seit } }, sortierung: '-start', limit: 200 });
-      const farbe = (o: string | null) => (o === 'Rega' ? '#ff5d5d' : o ? '#fb923c' : '#94a3b8');
+      const farbe = heliFarbe;
       const linien: GeoLinie[] = fluege.map((f) => ({
         id: f.id,
         titel: `${f.organisation ?? 'Helikopter'} ${f.kennzeichen ?? ''}`.trim(),
@@ -787,23 +894,45 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
       };
     });
 
-    app.get('/heatmap', async (): Promise<PunkteAntwort> => {
+    // Heatmap aus Start, Landung und Flugspuren. Ohne Parameter: Rega, ein Jahr (Kartenebene)
+    app.get<{
+      Querystring: {
+        organisation?: string;
+        tage?: string;
+        tageszeit?: string;
+        wochentage?: string;
+        basis?: string;
+      };
+    }>('/heatmap', async (req): Promise<PunkteAntwort> => {
       await demoVorbereiten();
-      const fluege = await daten.liste<{
-        start: string;
-        start_lat: number | null;
-        start_lon: number | null;
-        ende_lat: number | null;
-        ende_lon: number | null;
-      }>('heli_fluege', {
-        filter: { organisation: 'Rega' },
-        limit: 5000,
-      });
+      const q = req.query;
+      const tage = Math.min(Number(q.tage) || 365, 730);
+      const tageszeit = (
+        ['morgen', 'tag', 'abend', 'nacht'].includes(q.tageszeit ?? '') ? q.tageszeit : 'alle'
+      ) as Tageszeit;
+      const wochentage = q.wochentage === 'werktag' || q.wochentage === 'wochenende' ? q.wochentage : 'alle';
+      const filter: Record<string, unknown> = {
+        start: { gte: new Date(ctx.jetzt().getTime() - tage * 86400000).toISOString() },
+      };
+      const organisation = q.organisation ?? 'Rega';
+      if (organisation !== 'alle') filter.organisation = organisation;
+      if (q.basis) filter.start_platz = q.basis.slice(0, 120);
+      const fluege = (
+        await daten.liste<{
+          start: string;
+          start_lat: number | null;
+          start_lon: number | null;
+          ende_lat: number | null;
+          ende_lon: number | null;
+          spur: [number, number][] | null;
+        }>('heli_fluege', { filter, sortierung: '-start', limit: 3000 })
+      ).filter((f) => startPasst(f.start, tageszeit, wochentage));
       return {
         punkte: [],
-        heat: flugStatistik(fluege).heat,
+        heat: heatRaster(fluege),
         stand: ctx.jetzt().toISOString(),
         demo: konfig.demo,
+        hinweis: `${fluege.length} Flüge, Start, Landung und Flugspuren`,
       };
     });
 
@@ -974,7 +1103,7 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
         art: 'heatmap',
         datenUrl: '/api/m/rettung/heatmap',
         namensnennung: ADSB_NAMENSNENNUNG,
-        hinweis: 'Start und Landeorte der erfassten Flüge',
+        hinweis: 'Start, Landung und Flugspuren der letzten 12 Monate',
       },
       {
         id: 'rettung.spital',
@@ -1179,33 +1308,36 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
 
   async function briefing() {
     await demoVorbereiten();
-    const seit = new Date(ctx.jetzt().getTime() - 12 * 3600000).toISOString();
-    const fluege = await daten.liste<{
-      organisation: string | null;
-      kennzeichen: string | null;
-      start: string;
-      start_ort: string | null;
-    }>('heli_fluege', {
-      filter: { start: { gte: seit } },
-      sortierung: '-start',
-      limit: 10,
-    });
+    const rb = await rueckblick();
+    const fluege = rb.fluege.filter((f) => !f.laufend).reverse();
     const meld = await daten.liste<{ titel: string; zeit: string; kategorie: string }>('einsatz_meldungen', {
       filter: { zeit: { gte: new Date(ctx.jetzt().getTime() - 24 * 3600000).toISOString() } },
       sortierung: '-zeit',
       limit: 5,
     });
     const zeilen = [
-      ...fluege.slice(0, 3).map((f) => ({
-        text: `${f.organisation ?? 'Heli'} ${f.kennzeichen ?? ''} ${f.start_ort ? `bei ${f.start_ort}` : ''}`,
-        wert: ZEIT(f.start),
+      ...(fluege.length
+        ? [
+            {
+              text: `${rb.titel}: ${fluege.length} ${fluege.length === 1 ? 'Heli Flug' : 'Heli Flüge'}`,
+              wert: '',
+            },
+          ]
+        : []),
+      ...fluege.slice(0, 4).map((f) => ({
+        text: `${f.organisation} ${f.kennzeichen ?? ''}: ${f.von ?? '?'} nach ${f.nach ?? '?'}`,
+        wert: UHRZEIT(f.start),
       })),
       ...meld
         .filter((m) => m.kategorie !== 'Mitteilung')
         .slice(0, 3)
         .map((m) => ({ text: m.titel, wert: m.kategorie })),
     ];
-    if (!zeilen.length) zeilen.push({ text: 'Ruhige Nacht, keine Flüge erfasst', wert: '' });
+    if (!zeilen.length)
+      zeilen.push({
+        text: `Ruhig: keine Heli Flüge ${rb.titel === 'Heute' ? 'heute' : 'seit gestern 20 Uhr'}`,
+        wert: '',
+      });
     return {
       modul: 'rettung',
       titel: 'Einsätze der Nacht',

@@ -2,6 +2,7 @@
 // Erkennung von Start und Landung aus aufeinanderfolgenden Positionen.
 import { distanzKm } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
+import { lokal, vonLokal } from '../../kern/zeit.ts';
 
 export const ADSB_NAMENSNENNUNG = 'ADS-B Daten: adsb.lol (ODbL)';
 
@@ -336,4 +337,79 @@ export function flugStatistik(
       return [la, lo, n] as [number, number, number];
     }),
   };
+}
+
+/**
+ * Zeitfenster für den Rückblick: vormittags die Nacht ab 20 Uhr des Vortags, danach der laufende Tag.
+ * Zeiten in Europe/Zurich.
+ */
+export function rueckblickFenster(jetzt: Date): { von: Date; titel: string } {
+  const l = lokal(jetzt);
+  if (l.stunde < 12) {
+    const gestern = lokal(new Date(vonLokal(l.jahr, l.monat, l.tag, 12).getTime() - 86400000));
+    return { von: vonLokal(gestern.jahr, gestern.monat, gestern.tag, 20), titel: 'Seit gestern 20 Uhr' };
+  }
+  return { von: vonLokal(l.jahr, l.monat, l.tag), titel: 'Heute' };
+}
+
+/**
+ * Heatmap Raster aus Flügen: Start und Landung zählen doppelt, jede überflogene Zelle einmal pro Flug,
+ * damit kreisende Helis eine Stelle nicht überbewerten.
+ */
+export function heatRaster(
+  fluege: {
+    start_lat: number | null;
+    start_lon: number | null;
+    ende_lat: number | null;
+    ende_lon: number | null;
+    spur?: [number, number][] | null;
+  }[],
+  raster = 0.02,
+): [number, number, number][] {
+  const heat = new Map<string, number>();
+  const zelle = (la: number, lo: number) =>
+    `${(Math.round(la / raster) * raster).toFixed(3)},${(Math.round(lo / raster) * raster).toFixed(3)}`;
+  for (const f of fluege) {
+    const zellen = new Map<string, number>();
+    for (const p of Array.isArray(f.spur) ? f.spur : []) {
+      if (typeof p[0] === 'number' && typeof p[1] === 'number') zellen.set(zelle(p[0], p[1]), 1);
+    }
+    for (const [la, lo] of [
+      [f.start_lat, f.start_lon],
+      [f.ende_lat, f.ende_lon],
+    ]) {
+      if (la !== null && lo !== null) zellen.set(zelle(la, lo), 2);
+    }
+    for (const [k, w] of zellen) heat.set(k, (heat.get(k) ?? 0) + w);
+  }
+  return [...heat.entries()].map(([k, n]) => {
+    const [la, lo] = k.split(',').map(Number);
+    return [la, lo, n];
+  });
+}
+
+export type Tageszeit = 'alle' | 'morgen' | 'tag' | 'abend' | 'nacht';
+const TAGESZEITEN: Record<Exclude<Tageszeit, 'alle'>, [number, number]> = {
+  morgen: [6, 10],
+  tag: [10, 17],
+  abend: [17, 22],
+  nacht: [22, 6],
+};
+
+/** Passt der Start (Schweizer Zeit) zu Tageszeit und Wochentag (alle, werktag, wochenende)? */
+export function startPasst(
+  start: string,
+  tageszeit: Tageszeit,
+  tage: 'alle' | 'werktag' | 'wochenende',
+): boolean {
+  const l = lokal(new Date(start));
+  if (tageszeit !== 'alle') {
+    const [von, bis] = TAGESZEITEN[tageszeit];
+    if (von < bis ? l.stunde < von || l.stunde >= bis : l.stunde < von && l.stunde >= bis) return false;
+  }
+  // wochentag: 0 = Sonntag, 6 = Samstag
+  const wochenende = l.wochentag === 0 || l.wochentag === 6;
+  if (tage === 'werktag' && wochenende) return false;
+  if (tage === 'wochenende' && !wochenende) return false;
+  return true;
 }

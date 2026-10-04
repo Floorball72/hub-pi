@@ -39,8 +39,9 @@ export function demoHelis(jetzt: number, r: Region): AdsbFlugzeug[] {
     },
     {
       hex: '4b1demo3',
-      r: 'HB-ZDM',
-      t: 'AS50',
+      r: 'HB-ZEF',
+      t: 'EC35',
+      flight: 'HBZEF',
       category: 'A7',
       lat: r.lat - 0.2 + 0.08 * Math.sin(w2),
       lon: r.lon - 0.25 + 0.1 * Math.cos(w2),
