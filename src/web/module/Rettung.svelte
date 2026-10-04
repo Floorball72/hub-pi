@@ -76,11 +76,11 @@
       <section class="panel" style="margin-top:12px">
         <div class="zeile-zwischen">
           <h2>Jetzt erfasst, ganze Schweiz</h2>
-          <span class="sehr-klein gedaempft">{live.stand ? `Stand ${relativ(live.stand)}` : ''}</span>
+          <span class="zeile sehr-klein gedaempft">{live.stand ? `Stand ${relativ(live.stand)}` : ''}<a href="/lagebild?kiosk=1">Lagebild im Vollbild</a></span>
         </div>
         {#if live.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
         {#each live.helis as h (h.hex)}
-          <div class="zeile-zwischen klein heli">
+          <a class="zeile-zwischen klein heli" href="/heli?hex={encodeURIComponent(h.hex)}">
             <span class="zeile">
               <span class="punkt {h.amBoden ? 'neutral' : h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span>
               <span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span>
@@ -90,7 +90,7 @@
               {h.amBoden ? 'am Boden' : [h.hoeheFt !== null ? `${h.hoeheFt} ft` : null, h.kmh !== null ? `${h.kmh} km/h` : null].filter(Boolean).join(' · ')}
               {#if h.seit}<br /><span class="sehr-klein">{h.gestartet ? 'Start' : 'erfasst'} {relativ(h.seit)}</span>{/if}
             </span>
-          </div>
+          </a>
         {:else}
           <p class="leer">Gerade kein Heli aus der Kennzeichen Liste mit Transponder erfasst.</p>
         {/each}
@@ -236,6 +236,11 @@
   .heli {
     padding: 6px 0;
     border-bottom: 1px solid var(--rand);
+    color: inherit;
+    text-decoration: none;
+  }
+  .heli:hover strong {
+    text-decoration: underline;
   }
   .heli .rechts {
     text-align: right;

@@ -110,15 +110,15 @@
       <div class="panel rj-liste">
         <div class="zeile-zwischen">
           <h2><Icon name="rettung" groesse={18} /> Rettung jetzt</h2>
-          <a class="sehr-klein" href="/modul/rettung">Mehr</a>
+          <span class="zeile sehr-klein"><a href="/lagebild?kiosk=1">Lagebild</a><a href="/modul/rettung">Mehr</a></span>
         </div>
         <div class="rj-zahl zahl">{inDerLuft.length}<span class="gedaempft klein"> {inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft'}, ganze Schweiz</span></div>
         {#if live?.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
         {#each inDerLuft.slice(0, 6) as h (h.hex)}
-          <div class="zeile-zwischen klein rj-heli">
+          <a class="zeile-zwischen klein rj-heli" href="/heli?hex={encodeURIComponent(h.hex)}">
             <span class="zeile"><span class="punkt {h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span><span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span></span></span>
             <span class="gedaempft">{h.seit ? `${h.gestartet ? 'Start' : 'seit'} ${relativ(h.seit)}` : h.hoeheFt !== null ? `${h.hoeheFt} ft` : ''}</span>
-          </div>
+          </a>
         {:else}
           <p class="leer">Gerade ist kein Heli aus deiner Liste mit Transponder in der Luft.</p>
         {/each}
@@ -185,6 +185,11 @@
   .rj-heli {
     padding: 5px 0;
     border-bottom: 1px solid var(--rand);
+    color: inherit;
+    text-decoration: none;
+  }
+  .rj-heli:hover strong {
+    text-decoration: underline;
   }
   @media (max-width: 760px) {
     .rettung-jetzt {
