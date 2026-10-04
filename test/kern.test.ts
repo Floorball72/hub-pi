@@ -143,6 +143,38 @@ describe('Alarmregeln', () => {
     assert.equal(z2.regel('test.r')?.nachts, true);
     assert.equal(z2.regel('test.r')?.name, 'R neu');
   });
+
+  it('übernimmt die neue Ruhezeit für Regeln mit dem alten Standard', async () => {
+    const daten = new Daten(new LokalTreiber(':memory:'), null);
+    await daten.vorbereiten(ALARM_TABELLEN);
+    const vorlage = { modul: 'test', vorlage: { id: 'r', name: 'R', beschreibung: '' } };
+    const z = new Alarmzentrale(
+      daten,
+      () => ({ server: '', thema: '', token: '' }),
+      () => true,
+    );
+    await z.regelnLaden([vorlage]);
+    await z.regelAendern('test.r', { ruhe_von: '22:00', ruhe_bis: '07:00' });
+    const z2 = new Alarmzentrale(
+      daten,
+      () => ({ server: '', thema: '', token: '' }),
+      () => true,
+    );
+    await z2.regelnLaden([vorlage]);
+    assert.equal(z2.regel('test.r')?.ruhe_von, '00:00');
+    assert.equal(z2.regel('test.r')?.ruhe_bis, '06:00');
+    const gespeichert = await daten.hole<{ ruhe_von: string }>('alarm_regeln', 'test.r');
+    assert.equal(gespeichert?.ruhe_von, '00:00');
+    // Eigene Ruhezeit bleibt
+    await z2.regelAendern('test.r', { ruhe_von: '23:00' });
+    const z3 = new Alarmzentrale(
+      daten,
+      () => ({ server: '', thema: '', token: '' }),
+      () => true,
+    );
+    await z3.regelnLaden([vorlage]);
+    assert.equal(z3.regel('test.r')?.ruhe_von, '23:00');
+  });
 });
 
 describe('Scheduler', () => {

@@ -92,7 +92,7 @@
 <div class="zeile-zwischen kopf">
   <div>
     <h1>Alarmzentrale</h1>
-    <p class="gedaempft klein">Alle Push Meldungen laufen hier durch. Module melden Ereignisse, die Regeln entscheiden, ob ntfy sendet. In der Ruhezeit (Standard 22:00 bis 07:00) wird nur gesendet, wenn «auch nachts» an ist.</p>
+    <p class="gedaempft klein">Alle Push Meldungen laufen hier durch. Module melden Ereignisse, die Regeln entscheiden, ob ntfy sendet. In der Ruhezeit (Standard 00:00 bis 06:00) wird nur gesendet, wenn «auch nachts» an ist.</p>
   </div>
   <button onclick={test}><Icon name="alarm" groesse={16} />Testnachricht</button>
 </div>

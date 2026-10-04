@@ -76,7 +76,9 @@ export interface Ereignis {
 
 export type Entscheid = { aktion: 'senden' | 'unterdrueckt' | 'verworfen'; grund: string };
 
-export const STANDARD_RUHE = { von: '22:00', bis: '07:00' };
+export const STANDARD_RUHE = { von: '00:00', bis: '06:00' };
+/** Früherer Standard: Regeln, die noch so stehen, übernehmen den neuen Standard */
+const ALTE_RUHE = { von: '22:00', bis: '07:00' };
 
 /** Reine Entscheidungslogik, ohne Seiteneffekte (getestet). */
 export function entscheiden(
@@ -155,10 +157,16 @@ export class Alarmzentrale {
     }
     const bekannt = new Map(gespeichert.map((r) => [r.id, r]));
     const neu: AlarmRegel[] = [];
+    const ruheAngepasst: string[] = [];
     for (const { modul, vorlage } of vorlagen) {
       const standard = regelAusVorlage(modul, vorlage);
       const r = bekannt.get(standard.id);
       if (r) {
+        if (r.ruhe_von === ALTE_RUHE.von && r.ruhe_bis === ALTE_RUHE.bis) {
+          r.ruhe_von = STANDARD_RUHE.von;
+          r.ruhe_bis = STANDARD_RUHE.bis;
+          ruheAngepasst.push(r.id);
+        }
         // Name und Beschreibung kommen immer aus dem Code, Einstellungen bleiben
         this.regeln.set(r.id, {
           ...r,
@@ -169,6 +177,16 @@ export class Alarmzentrale {
       } else {
         this.regeln.set(standard.id, standard);
         neu.push(standard);
+      }
+    }
+    for (const id of ruheAngepasst) {
+      try {
+        await this.daten.aendern('alarm_regeln', id, {
+          ruhe_von: STANDARD_RUHE.von,
+          ruhe_bis: STANDARD_RUHE.bis,
+        });
+      } catch {
+        // nächster Start versucht es wieder
       }
     }
     if (neu.length) {
