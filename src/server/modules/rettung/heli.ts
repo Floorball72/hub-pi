@@ -515,3 +515,29 @@ export function letzteStandorte(
   }
   return [...aus.values()].sort((a, b) => b.zeit - a.zeit);
 }
+
+/** Art eines Landeorts: Rega Basis, Spital, anderer Landeplatz oder Einsatzort ohne bekannten Platz */
+export function ortArt(platz: string | null | undefined): 'basis' | 'spital' | 'landeplatz' | 'einsatzort' {
+  if (basisAusPlatz(platz)) return 'basis';
+  if (!platz) return 'einsatzort';
+  return /spital|klinik|hospital|ospedale|h[oô]pital|notfall|universit/i.test(platz)
+    ? 'spital'
+    : 'landeplatz';
+}
+
+/**
+ * Landung eines Rega Helis in der Region ausserhalb einer Basis, meist ein Einsatzort.
+ * Nur echte Landungen (am Boden gesehen), kein Signalverlust, und nur ohne bekannten Platz:
+ * Landungen bei Spitälern meldet schon die Regel für Heli Aktivität.
+ */
+export function einsatzLandung(
+  organisation: string | null,
+  art: string,
+  platz: string | null,
+  lat: number | null,
+  lon: number | null,
+  region: { lat: number; lon: number; radiusKm: number },
+): boolean {
+  if (organisation !== 'Rega' || art !== 'landung' || platz || lat === null || lon === null) return false;
+  return distanzKm(region.lat, region.lon, lat, lon) <= region.radiusKm;
+}

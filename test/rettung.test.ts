@@ -520,3 +520,19 @@ describe('Webcams', () => {
     );
   });
 });
+
+describe('Rega Landung beim Einsatzort', () => {
+  it('meldet nur Rega Landungen ohne Basis und Platz in der Region', async () => {
+    const { einsatzLandung, ortArt } = await import('../src/server/modules/rettung/heli.ts');
+    const region = { lat: 47.3, lon: 9.1, radiusKm: 40 };
+    assert.equal(einsatzLandung('Rega', 'landung', null, 47.35, 9.2, region), true);
+    assert.equal(einsatzLandung('Rega', 'signalverlust', null, 47.35, 9.2, region), false);
+    assert.equal(einsatzLandung('Rega', 'landung', 'Kantonsspital St. Gallen', 47.35, 9.2, region), false);
+    assert.equal(einsatzLandung('Rega', 'landung', null, 46.2, 7.3, region), false);
+    assert.equal(einsatzLandung('Air Zermatt', 'landung', null, 47.35, 9.2, region), false);
+    assert.equal(ortArt('Rega Basis Untervaz'), 'basis');
+    assert.equal(ortArt('Kantonsspital St. Gallen'), 'spital');
+    assert.equal(ortArt('Helikopterlandeplatz'), 'landeplatz');
+    assert.equal(ortArt(null), 'einsatzort');
+  });
+});

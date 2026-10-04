@@ -37,7 +37,9 @@ import {
   platzBei,
   heatRaster,
   type FlugEnde,
+  einsatzLandung,
   letzteStandorte,
+  ortArt,
   positionenVereinen,
   rueckblickFenster,
   schweizFiltern,
@@ -120,6 +122,14 @@ export const rettung: ModulDef = {
         'Ein Helikopter aus der Kennzeichen Liste (mit Push) startet irgendwo in der Schweiz oder landet bei einem Spital. Andere Helikopter nur in der Region.',
       prioritaet: 3,
       cooldownMin: 20,
+    },
+    {
+      id: 'landung',
+      name: 'Rega Landung beim Einsatzort',
+      beschreibung:
+        'Ein Rega Helikopter landet in der Region ausserhalb einer Basis und ohne bekannten Landeplatz, meist an einem Einsatzort. Keine Meldungen in der Nacht.',
+      prioritaet: 3,
+      cooldownMin: 15,
     },
     {
       id: 'alertswiss',
@@ -462,6 +472,16 @@ function rettungLaufzeit(ctx: Kontext) {
             text: `${e.art === 'landung' ? 'Gelandet' : 'Signal tief verloren, wahrscheinlich gelandet'} bei ${endePlatz}${startPlatz ? `, gestartet bei ${startPlatz}` : ''}. Flugdauer ${Math.max(1, Math.round(((f.ende ?? jetzt) - f.start) / 60000))} min. Nur Daten des Transponders, ohne Gewähr.`,
             schluessel: `heli-landung:${f.hex}`,
             tags: ['helicopter', 'hospital'],
+            link: `/heli?hex=${encodeURIComponent(f.hex)}`,
+          });
+        } else if (einsatzLandung(f.organisation, e.art, endePlatz, f.endeLat, f.endeLon, region)) {
+          const ort = await ortName(f.endeLat!, f.endeLon!);
+          await ctx.alarm.melden({
+            regel: 'rettung.landung',
+            titel: `${name} gelandet${ort ? ` bei ${ort}` : ''}`,
+            text: `Landung ausserhalb einer Basis, wahrscheinlich beim Einsatzort${startPlatz ? `. Gestartet bei ${startPlatz}` : ''}. Flugdauer ${Math.max(1, Math.round(((f.ende ?? jetzt) - f.start) / 60000))} min. Nur Daten des Transponders, ohne Gewähr.`,
+            schluessel: `rega-landung:${f.hex}`,
+            tags: ['helicopter', 'round_pushpin'],
             link: `/heli?hex=${encodeURIComponent(f.hex)}`,
           });
         }
@@ -968,6 +988,27 @@ function rettungLaufzeit(ctx: Kontext) {
         spur: [number, number][] | null;
       }>('heli_fluege', { filter: { hex, start: { gte: seit } }, sortierung: '-start', limit: 300 });
       const neuester = fluege[0];
+      // Wo der Heli ohne Signal zuletzt stand, und wo er in den letzten 7 Tagen gelandet ist
+      const zuletzt = p
+        ? null
+        : ((await abgestellteHelis(new Set(positionen.map((x) => x.hex)))).find((a) => a.hex === hex) ??
+          null);
+      const grenze7 = ctx.jetzt().getTime() - 7 * 86400000;
+      const aufenthalte = fluege
+        .map((f, i) => ({
+          f,
+          bis: i > 0 ? fluege[i - 1].start : laufend ? new Date(laufend.start).toISOString() : null,
+        }))
+        .filter(({ f }) => f.ende && new Date(f.ende).getTime() >= grenze7)
+        .map(({ f, bis }) => ({
+          ankunft: f.ende!,
+          bis,
+          art: ortArt(f.ende_platz),
+          platz: f.ende_platz,
+          ort: f.ende_ort,
+          signalverlust: f.ende_art === 'signalverlust',
+          verlassen: f.ende_art === 'verlassen',
+        }));
       const dauern = fluege
         .filter((f) => f.ende)
         .map((f) => (new Date(f.ende!).getTime() - new Date(f.start).getTime()) / 60000)
@@ -1008,6 +1049,8 @@ function rettungLaufzeit(ctx: Kontext) {
               spur: laufend.spur.map(([la, lo]) => [la, lo] as [number, number]),
             }
           : null,
+        zuletzt,
+        aufenthalte,
         anzahl30: fluege.length,
         heute: fluege.filter((f) => new Date(f.start).getTime() >= grenze).length,
         dauerMin: dauern.length ? Math.round(dauern[Math.floor(dauern.length / 2)]) : null,
