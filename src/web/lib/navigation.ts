@@ -15,17 +15,31 @@ export interface NavGruppe {
 }
 
 const GRUPPEN: { id: string; name: string; module: string[] }[] = [
-  { id: 'alltag', name: 'Alltag', module: ['wetter', 'mobilitaet', 'parken', 'veranstaltungen'] },
   { id: 'rettung', name: 'Rettung', module: ['rettung'] },
-  {
-    id: 'scont',
-    name: 'scont',
-    module: ['scont', 'aenderungen', 'sicherheit', 'abhaengigkeiten', 'dienste'],
-  },
-  { id: 'drohne', name: 'Drohne und Content', module: ['drohne', 'drehwetter', 'content', 'events'] },
+  { id: 'alltag', name: 'Alltag', module: ['wetter', 'mobilitaet', 'parken'] },
   { id: 'sport', name: 'Sport', module: ['swissunihockey', 'unihockey', 'teams'] },
+  { id: 'drohne', name: 'Drohne', module: ['drohne'] },
   { id: 'hub', name: 'Hub', module: ['auffaelligkeiten', 'abrufe', 'selbstheilung', 'updates'] },
+  // Selten gebraucht, standardmässig zugeklappt
+  {
+    id: 'selten',
+    name: 'Wenig genutzt',
+    module: [
+      'scont',
+      'aenderungen',
+      'sicherheit',
+      'abhaengigkeiten',
+      'dienste',
+      'drehwetter',
+      'content',
+      'events',
+      'veranstaltungen',
+    ],
+  },
 ];
+
+/** Gruppen, die beim ersten Besuch zugeklappt sind */
+export const STANDARD_ZU = ['selten'];
 
 const HUB_SEITEN: NavSeite[] = [
   { pfad: '/alarme', name: 'Alarmzentrale', symbol: 'alarm' },
@@ -51,7 +65,9 @@ export function gruppieren(module: ModulInfo[]): NavGruppe[] {
     }),
   }));
   const rest = module.filter((m) => m.id !== 'zentrale' && !zugeordnet.has(m.id)).map(seite);
-  if (rest.length) gruppen.splice(gruppen.length - 1, 0, { id: 'weitere', name: 'Weitere', seiten: rest });
+  // Neue Module ohne Zuordnung vor «Hub»
+  const hubIndex = gruppen.findIndex((g) => g.id === 'hub');
+  if (rest.length) gruppen.splice(hubIndex, 0, { id: 'weitere', name: 'Weitere', seiten: rest });
   const hub = gruppen.find((g) => g.id === 'hub');
   if (hub) hub.seiten = [...HUB_SEITEN, ...hub.seiten, EINRICHTUNG];
   return gruppen.filter((g) => g.seiten.length);
