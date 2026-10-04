@@ -18,6 +18,7 @@ import {
 } from '../src/server/kern/auth.ts';
 import { envLesen, envSchreiben, parseEnv } from '../src/server/kern/env-datei.ts';
 import { erlaubteAdresse, imNetz } from '../src/server/kern/netz.ts';
+import { klickAdresse } from '../src/server/kern/ntfy.ts';
 import { Scheduler } from '../src/server/kern/scheduler.ts';
 import { imFenster, lokalDatum, lokalZeit, vonLokal } from '../src/server/kern/zeit.ts';
 
@@ -275,5 +276,20 @@ describe('.env und Geheimnisse', () => {
     assert.equal(schwaerzen('Fehler bei abc123xyz', ['abc123xyz']), 'Fehler bei ***');
     assert.equal(schwaerzen('postgres://user:pw@host/db'), 'postgres://***@host/db');
     assert.equal(schwaerzen('https://x.ch/?key=GEHEIM&a=1'), 'https://x.ch/?key=***&a=1');
+  });
+});
+
+describe('ntfy Links', () => {
+  const k = { server: 'https://ntfy.sh', thema: 't', token: '' };
+  it('ergänzt relative Links mit der Hub Adresse', () => {
+    assert.equal(
+      klickAdresse({ ...k, adresse: 'https://hub.example' }, '/modul/rettung'),
+      'https://hub.example/modul/rettung',
+    );
+  });
+  it('lässt relative Links ohne Adresse weg und absolute unverändert', () => {
+    assert.equal(klickAdresse(k, '/modul/rettung'), undefined);
+    assert.equal(klickAdresse(k, 'https://a.ch/x'), 'https://a.ch/x');
+    assert.equal(klickAdresse(k, undefined), undefined);
   });
 });

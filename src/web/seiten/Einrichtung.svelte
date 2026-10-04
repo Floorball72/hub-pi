@@ -138,6 +138,7 @@
         <div class="feld"><label for="ns">Server</label><input id="ns" bind:value={w.NTFY_SERVER} /></div>
         <div class="feld"><label for="nt">Thema</label><input id="nt" type="password" bind:value={w.NTFY_THEMA} placeholder={geheimPlatzhalter('NTFY_THEMA')} /></div>
         <div class="feld"><label for="nk">Zugangstoken (optional)</label><input id="nk" type="password" bind:value={w.NTFY_TOKEN} placeholder={geheimPlatzhalter('NTFY_TOKEN')} /></div>
+        <div class="feld"><label for="na">Adresse des Hubs (für Links im Push)</label><input id="na" bind:value={w.HUB_ADRESSE} placeholder="https://hub-pi.tailXXXX.ts.net" /></div>
         {@render pruefung('ntfy', 'Testnachricht senden')}
       {:else if schritt === 3}
         <h2>Orte für Wetter und ÖV</h2>

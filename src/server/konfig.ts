@@ -26,7 +26,7 @@ export interface Konfig {
   einrichtungAbgeschlossen: boolean;
   erlaubteNetze: string[];
   supabase: { url: string; anonKey: string; serviceKey: string; dbUrl: string; erlaubteEmails: string[] };
-  ntfy: { server: string; thema: string; token: string };
+  ntfy: { server: string; thema: string; token: string; adresse: string };
   wetterOrte: Ort[];
   oevHaltestellen: string[];
   icalUrl: string;
@@ -119,6 +119,8 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
       server: (e.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$/, ''),
       thema: e.NTFY_THEMA ?? '',
       token: e.NTFY_TOKEN ?? '',
+      // Adresse des Hubs (z.B. https://hub-pi.tailXXXX.ts.net), damit ein Tipp auf den Push die Seite öffnet
+      adresse: (e.HUB_ADRESSE ?? '').replace(/\/+$/, ''),
     },
     wetterOrte: orteParsen(e.WETTER_ORTE ?? 'Kirchberg SG|47.41079|9.04110;St. Gallen|47.42358|9.38851'),
     oevHaltestellen: liste(e.OEV_HALTESTELLEN ?? 'Kirchberg SG, Post;St. Gallen', ';'),
