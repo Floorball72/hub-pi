@@ -311,3 +311,82 @@ export function kategorie(m: { titel: string; text: string }): string {
   const t = `${m.titel} ${m.text.slice(0, 300)}`;
   return EINSATZ_WOERTER.find(([, re]) => re.test(t))?.[0] ?? 'Mitteilung';
 }
+
+// Webcams von foto-webcam.eu: Metadaten aller Kameras, die Bilder lädt der Browser direkt
+
+export interface Webcam {
+  id: string;
+  name: string;
+  titel: string;
+  lat: number;
+  lon: number;
+  hoehe: number | null;
+  /** Blickrichtung in Grad */
+  richtung: number | null;
+  bild: string;
+  bildGross: string;
+  link: string | null;
+  /** Zeit des aktuellen Bildes in ms */
+  zeit: number | null;
+  /** Abstand der Bilder in Sekunden */
+  takt: number | null;
+  land: string | null;
+  quelle: string;
+}
+
+export const FOTOWEBCAM_URL = 'https://www.foto-webcam.eu/webcam/include/metadata.php';
+
+interface FotoWebcamRoh {
+  id?: string;
+  name?: string;
+  title?: string;
+  offline?: boolean;
+  hidden?: boolean;
+  imgurl?: string;
+  link?: string;
+  modtime?: number;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  elevation?: number;
+  direction?: number;
+  captureInterval?: number;
+}
+
+export function fotoWebcamParsen(d: { cams?: FotoWebcamRoh[] }): Webcam[] {
+  const aus: Webcam[] = [];
+  for (const c of d.cams ?? []) {
+    if (!c.id || c.offline || c.hidden || !c.imgurl?.startsWith('https://')) continue;
+    if (typeof c.latitude !== 'number' || typeof c.longitude !== 'number') continue;
+    aus.push({
+      id: `fw-${c.id}`,
+      name: c.name ?? c.id,
+      titel: c.title ?? c.name ?? c.id,
+      lat: c.latitude,
+      lon: c.longitude,
+      hoehe: c.elevation ?? null,
+      richtung: c.direction ?? null,
+      bild: c.imgurl,
+      bildGross: c.imgurl.replace(/\/400\.jpg$/, '/1200.jpg'),
+      link: c.link ?? null,
+      zeit: c.modtime ? c.modtime * 1000 : null,
+      takt: c.captureInterval ?? null,
+      land: c.country ?? null,
+      quelle: 'foto-webcam.eu',
+    });
+  }
+  return aus;
+}
+
+/** Kameras in der Schweiz oder nahe der Region, die nächsten zuerst */
+export function webcamsAuswaehlen(cams: Webcam[], r: Region, maxKm = 120): (Webcam & { km: number })[] {
+  return cams
+    .map((c) => ({ ...c, km: Math.round(distanzKm(r.lat, r.lon, c.lat, c.lon)) }))
+    .filter((c) => c.land === 'ch' || c.km <= maxKm)
+    .sort((a, b) => a.km - b.km);
+}
+
+export async function fotoWebcamsHolen(r: Region): Promise<(Webcam & { km: number })[]> {
+  // Nur die Auswahl bleibt im Cache, nicht alle Kameras der Alpen
+  return webcamsAuswaehlen(fotoWebcamParsen(await httpJson(FOTOWEBCAM_URL, { timeoutMs: 20000 })), r);
+}

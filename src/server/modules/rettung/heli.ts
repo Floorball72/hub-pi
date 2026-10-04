@@ -3,6 +3,7 @@
 import { distanzKm } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
 import { lokal, vonLokal } from '../../kern/zeit.ts';
+import { basisAusPlatz, basisName, endeBasis } from '../../geteilt/heli.ts';
 
 export const ADSB_NAMENSNENNUNG = 'ADS-B Daten: adsb.lol (ODbL)';
 
@@ -434,4 +435,83 @@ export function startPasst(
   if (tage === 'werktag' && wochenende) return false;
   if (tage === 'wochenende' && !wochenende) return false;
   return true;
+}
+
+/** Heli ohne aktuelles Signal: wo er zuletzt gesehen wurde (Basis, Einsatzort, Spital) */
+export interface Abgestellt {
+  hex: string;
+  organisation: string;
+  kennzeichen: string | null;
+  lat: number;
+  lon: number;
+  /** Zeit des letzten Signals in ms */
+  zeit: number;
+  /** landung: am Boden gesehen, signalverlust: tief verschwunden, laufend: Flug offen, Signal weg */
+  art: 'landung' | 'signalverlust' | 'laufend';
+  platz: string | null;
+  anBasis: boolean;
+}
+
+export interface FlugEnde {
+  hex: string;
+  organisation: string | null;
+  kennzeichen: string | null;
+  ende: string | null;
+  ende_art: string | null;
+  ende_lat: number | null;
+  ende_lon: number | null;
+  ende_platz: string | null;
+  ende_ort: string | null;
+}
+
+/**
+ * Letzter bekannter Standort pro Heli, der gerade kein Signal sendet. Laufende Flüge ohne Position
+ * zählen mit dem letzten Spurpunkt. Ein Ende an einer Rega Basis wird auf die Basis gesetzt.
+ * Flüge, die den Empfangsbereich hoch verlassen haben, sagen nichts über den Standort und fallen weg.
+ */
+export function letzteStandorte(
+  fluege: FlugEnde[],
+  laufende: Flug[],
+  aktuell: Set<string>,
+  ortVon?: (lat: number, lon: number) => string | null,
+): Abgestellt[] {
+  const aus = new Map<string, Abgestellt>();
+  for (const f of laufende) {
+    const l = f.spur.at(-1);
+    if (aktuell.has(f.hex) || !f.organisation || !l) continue;
+    aus.set(f.hex, {
+      hex: f.hex,
+      organisation: f.organisation,
+      kennzeichen: f.kennzeichen,
+      lat: l[0],
+      lon: l[1],
+      zeit: l[2],
+      art: 'laufend',
+      platz: ortVon?.(l[0], l[1]) ?? null,
+      anBasis: false,
+    });
+  }
+  const erledigt = new Set(aus.keys());
+  const neueste = [...fluege].sort((a, b) => (b.ende ?? '').localeCompare(a.ende ?? ''));
+  for (const f of neueste) {
+    if (aktuell.has(f.hex) || erledigt.has(f.hex) || !f.organisation || !f.ende) continue;
+    // Pro Heli zählt nur der letzte Flug, auch wenn er hoch verschwunden ist
+    erledigt.add(f.hex);
+    if (f.ende_lat === null || f.ende_lon === null) continue;
+    if (f.ende_art !== 'landung' && f.ende_art !== 'signalverlust') continue;
+    const art = f.ende_art;
+    const basis = basisAusPlatz(f.ende_platz) ?? endeBasis(f.organisation, art, f.ende_lat, f.ende_lon);
+    aus.set(f.hex, {
+      hex: f.hex,
+      organisation: f.organisation,
+      kennzeichen: f.kennzeichen,
+      lat: basis?.lat ?? f.ende_lat,
+      lon: basis?.lon ?? f.ende_lon,
+      zeit: new Date(f.ende).getTime(),
+      art,
+      platz: basis ? basisName(basis) : (f.ende_platz ?? f.ende_ort),
+      anBasis: !!basis,
+    });
+  }
+  return [...aus.values()].sort((a, b) => b.zeit - a.zeit);
 }

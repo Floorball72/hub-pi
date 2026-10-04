@@ -401,3 +401,122 @@ describe('Wiedergabe', () => {
     assert.deepEqual(wiedergabePunkte(null, 0, 1).punkte, []);
   });
 });
+
+describe('Letzter Standort', () => {
+  it('zeigt Helis ohne Signal an der Basis oder am letzten Ort', async () => {
+    const { letzteStandorte } = await import('../src/server/modules/rettung/heli.ts');
+    const ende = (
+      hex: string,
+      zeit: string,
+      art: string,
+      lat: number,
+      lon: number,
+      platz: string | null = null,
+    ) => ({
+      hex,
+      organisation: 'Rega',
+      kennzeichen: hex.toUpperCase(),
+      ende: zeit,
+      ende_art: art,
+      ende_lat: lat,
+      ende_lon: lon,
+      ende_platz: platz,
+      ende_ort: 'Feld',
+    });
+    const liste = letzteStandorte(
+      [
+        // Älterer Flug von a zählt nicht, nur der letzte
+        ende('a', '2026-10-01T08:00:00Z', 'landung', 47.0, 9.0),
+        ende('a', '2026-10-01T10:00:00Z', 'landung', 46.914, 9.552),
+        ende('b', '2026-10-01T11:00:00Z', 'signalverlust', 47.3, 9.1),
+        // Hoch verschwunden: Standort unbekannt
+        ende('c', '2026-10-01T12:00:00Z', 'verlassen', 47.3, 9.1),
+        ende('c', '2026-10-01T09:00:00Z', 'landung', 47.3, 9.1),
+        // Sendet gerade, erscheint live
+        ende('d', '2026-10-01T09:00:00Z', 'landung', 47.3, 9.1),
+      ],
+      [
+        {
+          hex: 'e',
+          kennzeichen: 'E',
+          typ: null,
+          organisation: 'Rega',
+          start: 0,
+          startArt: 'start',
+          startLat: 47,
+          startLon: 9,
+          ende: null,
+          endeArt: null,
+          endeLat: null,
+          endeLon: null,
+          maxHoeheFt: null,
+          spur: [[47.2, 9.2, Date.parse('2026-10-01T13:00:00Z')]],
+        },
+      ],
+      new Set(['d']),
+    );
+    assert.deepEqual(
+      liste.map((h) => [h.hex, h.art, h.anBasis]),
+      [
+        ['e', 'laufend', false],
+        ['b', 'signalverlust', false],
+        ['a', 'landung', true],
+      ],
+    );
+    // Landung neben Untervaz steht auf der Basis
+    const a = liste.find((h) => h.hex === 'a')!;
+    assert.equal(a.platz, 'Rega Basis Untervaz');
+    assert.equal(a.lat, 46.9131);
+  });
+});
+
+describe('Webcams', () => {
+  it('liest foto-webcam.eu und wählt die Kameras nahe der Region', async () => {
+    const { fotoWebcamParsen, webcamsAuswaehlen } = await import('../src/server/modules/rettung/quellen.ts');
+    const cams = fotoWebcamParsen({
+      cams: [
+        {
+          id: 'wildhaus',
+          name: 'Wildhaus',
+          imgurl: 'https://www.foto-webcam.eu/webcam/wildhaus/current/400.jpg',
+          latitude: 47.2,
+          longitude: 9.35,
+          country: 'ch',
+          modtime: 1000,
+        },
+        {
+          id: 'aus',
+          name: 'Aus',
+          offline: true,
+          imgurl: 'https://x/400.jpg',
+          latitude: 47.2,
+          longitude: 9.35,
+        },
+        {
+          id: 'garda',
+          name: 'Garda',
+          imgurl: 'https://x/garda/current/400.jpg',
+          latitude: 45.5,
+          longitude: 10.7,
+          country: 'it',
+        },
+        {
+          id: 'feldkirch',
+          name: 'Feldkirch',
+          imgurl: 'https://x/feldkirch/current/400.jpg',
+          latitude: 47.24,
+          longitude: 9.6,
+          country: 'at',
+        },
+      ],
+    });
+    assert.equal(cams.length, 3);
+    assert.equal(cams[0].bildGross, 'https://www.foto-webcam.eu/webcam/wildhaus/current/1200.jpg');
+    assert.equal(cams[0].zeit, 1000000);
+    const nah = webcamsAuswaehlen(cams, { lat: 47.3, lon: 9.1, radiusKm: 30 });
+    assert.deepEqual(
+      nah.map((c) => c.name),
+      ['Wildhaus', 'Feldkirch'],
+    );
+  });
+});

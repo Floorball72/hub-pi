@@ -9,7 +9,7 @@
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
-  import { HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
 
   interface LiveHeli extends LiveHeliPos {
@@ -22,7 +22,7 @@
   let briefing = $state<{ teile: BriefingTeil[] } | null>(null);
   let jetzt = $state(new Date());
   let fehler = $state(false);
-  let live = $state<{ helis: LiveHeli[]; fehler?: string } | null>(null);
+  let live = $state<{ helis: LiveHeli[]; abgestellt?: AbgestellterHeli[]; fehler?: string } | null>(null);
   const rettungAktiv = $derived(!!daten?.module.some((m) => m.id === 'rettung' && m.aktiv));
   const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
 
@@ -38,7 +38,9 @@
     };
   }
   $effect(() => {
-    if (anim && live) anim.setzen(liveAnim(live.helis, true));
+    if (!anim || !live) return;
+    anim.setzen(liveAnim(live.helis, true));
+    anim.abgestellt(live.abgestellt ?? []);
   });
 
   async function laden() {
@@ -49,7 +51,7 @@
       fehler = true;
     }
     api
-      .get<{ helis: LiveHeli[]; fehler?: string }>('/api/m/rettung/live')
+      .get<NonNullable<typeof live>>('/api/m/rettung/live')
       .then((l) => (live = l))
       .catch(() => (live = null));
     api.get<{ teile: BriefingTeil[] }>('/api/briefing').then((b) => (briefing = b)).catch(() => {});

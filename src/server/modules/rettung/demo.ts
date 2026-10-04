@@ -1,6 +1,7 @@
 // Demo Daten für das Modul Rettung. Erfunden, aber plausibel. Klar als Demo gekennzeichnet.
 import type { AdsbFlugzeug } from './heli.ts';
-import type { Alert, Erdbeben, Meldung, OsmObjekt, Region, Warnung } from './quellen.ts';
+import { distanzKm } from '../../quellen/geo.ts';
+import type { Alert, Erdbeben, Meldung, OsmObjekt, Region, Warnung, Webcam } from './quellen.ts';
 
 function zufall(n: number): number {
   const x = Math.sin(n * 12.9898) * 43758.5453;
@@ -241,5 +242,76 @@ export function demoFluege(jetzt: Date, r: Region): Record<string, unknown>[] {
       ende_platz: ziel ? ['Kantonsspital (Demo)', 'Spital Region (Demo)'][i % 2] : null,
     });
   }
+  // Zwei Helis ohne Signal: einer steht an der Basis, einer ist beim Einsatzort verschwunden
+  const vor = (min: number) => new Date(jetzt.getTime() - min * 60000).toISOString();
+  const abgestellt = (
+    hex: string,
+    kz: string,
+    ende: number,
+    art: string,
+    lat: number,
+    lon: number,
+    platz: string | null,
+    ort: string,
+  ) => ({
+    hex,
+    kennzeichen: kz,
+    typ: 'H145',
+    organisation: 'Rega',
+    start: vor(ende + 35),
+    start_art: 'start',
+    start_lat: 46.9131,
+    start_lon: 9.55096,
+    start_ort: 'Untervaz (Demo)',
+    ende: vor(ende),
+    ende_art: art,
+    ende_lat: lat,
+    ende_lon: lon,
+    ende_ort: ort,
+    max_hoehe_ft: 4200,
+    spur: [
+      [46.9131, 9.55096, 0],
+      [lat, lon, 35 * 60],
+    ],
+    start_platz: 'Rega Basis Untervaz',
+    ende_platz: platz,
+  });
+  fluege.push(
+    abgestellt('4b1demo3', 'HB-ZRS', 300, 'landung', 46.914, 9.552, 'Rega Basis Untervaz', 'Untervaz (Demo)'),
+    abgestellt('4b1demo4', 'HB-ZRL', 40, 'signalverlust', r.lat + 0.05, r.lon - 0.08, null, 'Wattwil (Demo)'),
+  );
   return fluege;
+}
+
+/** Demo Webcams mit gezeichnetem Bild, ohne Abruf von aussen */
+export function demoWebcams(jetzt: Date, r: Region): (Webcam & { km: number })[] {
+  const orte = [
+    ['Säntis Gipfel', 47.249, 9.343, 2502, '#3b6ea8'],
+    ['Wildhaus', 47.205, 9.354, 1090, '#4f7c5a'],
+    ['Hochhamm', 47.338, 9.27, 1275, '#7a5f94'],
+    ['Pizol', 46.99, 9.42, 2220, '#a8763b'],
+    ['Brunnen', 46.995, 8.605, 440, '#3b8fa8'],
+    ['Feldkirch', 47.24, 9.6, 460, '#8a4a4a'],
+  ] as const;
+  return orte.map(([name, lat, lon, hoehe, farbe], i) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 225"><defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${farbe}"/><stop offset="1" stop-color="#0b1016"/></linearGradient></defs><rect width="400" height="225" fill="url(#h)"/><path d="M0 170 L80 ${90 + i * 6} L150 150 L230 ${70 + i * 5} L320 140 L400 110 L400 225 L0 225Z" fill="#e6edf5" fill-opacity=".85"/><path d="M0 200 L120 160 L260 190 L400 165 L400 225 L0 225Z" fill="#1f2a36"/><text x="12" y="24" font-family="sans-serif" font-size="14" fill="#fff">${name} (Demo)</text></svg>`;
+    const bild = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    return {
+      id: `demo-cam-${i}`,
+      name,
+      titel: `${name} (Demo)`,
+      lat,
+      lon,
+      hoehe,
+      richtung: (i * 60) % 360,
+      bild,
+      bildGross: bild,
+      link: null,
+      zeit: jetzt.getTime() - (i + 1) * 4 * 60000,
+      takt: 600,
+      land: 'ch',
+      quelle: 'Demo',
+      km: Math.round(distanzKm(r.lat, r.lon, lat, lon)),
+    };
+  });
 }

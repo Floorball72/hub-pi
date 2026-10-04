@@ -8,7 +8,7 @@
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
-  import { type AnimHeli, HeliAnimation, liveAnim } from '../lib/heliAnimation.ts';
+  import { type AbgestellterHeli, type AnimHeli, abgestelltOrt, abgestelltTitel, HeliAnimation, liveAnim } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
 
@@ -64,7 +64,7 @@
     laufend: boolean;
   }
 
-  let live = $state<{ helis: LiveHeli[]; stand: string | null; fehler?: string } | null>(null);
+  let live = $state<{ helis: LiveHeli[]; abgestellt?: AbgestellterHeli[]; stand: string | null; fehler?: string } | null>(null);
   let lage = $state<Lage | null>(null);
   let basen = $state<{ basen: Basis[]; punkte: GeoPunkt[] } | null>(null);
   let starts = $state<RueckblickFlug[]>([]);
@@ -74,6 +74,14 @@
 
   const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
   const amBoden = $derived((live?.helis ?? []).filter((h) => h.amBoden));
+  const abgestellt = $derived(live?.abgestellt ?? []);
+  // Vermutlich an der Basis abgestellte Helis pro Basis Name
+  const anBasis = $derived(
+    abgestellt.reduce((m, h) => {
+      if (h.anBasis && h.platz) m.set(h.platz, [...(m.get(h.platz) ?? []), h.kennzeichen ?? h.hex]);
+      return m;
+    }, new Map<string, string[]>()),
+  );
 
   // Start Meldung: Ton (nur nach Klick, Browser erlauben Audio erst nach einer Geste) und Blinken
   let tonAn = $state(lesen('lagebild.ton', false));
@@ -136,7 +144,10 @@
       ansicht.kiosk = false;
       navigieren(h.link);
     };
-    if (live && !wiedergabe) anim.setzen(liveAnim(live.helis));
+    if (live && !wiedergabe) {
+      anim.setzen(liveAnim(live.helis));
+      anim.abgestellt(live.abgestellt ?? []);
+    }
     // Die Liste rechts deckt den Osten ab: Ausschnitt etwas nach links schieben
     if (seiteOffen && innerWidth > 860) karte.panBy([150, 0], { animate: false });
     return () => {
@@ -151,7 +162,10 @@
       .then((l) => {
         live = l;
         startsPruefen(l.helis);
-        if (!wiedergabe) anim?.setzen(liveAnim(l.helis));
+        if (!wiedergabe) {
+          anim?.setzen(liveAnim(l.helis));
+          anim?.abgestellt(l.abgestellt ?? []);
+        }
       })
       .catch(() => {});
     api
@@ -220,6 +234,7 @@
       wZeit = w.von;
       if (anim) {
         anim.setzen([]);
+        anim.abgestellt([]);
         anim.direkt = true;
       }
       bildZeigen();
@@ -236,7 +251,10 @@
     if (anim) {
       anim.setzen([]);
       anim.direkt = false;
-      if (live) anim.setzen(liveAnim(live.helis));
+      if (live) {
+        anim.setzen(liveAnim(live.helis));
+        anim.abgestellt(live.abgestellt ?? []);
+      }
     }
   }
 
@@ -409,16 +427,30 @@
       {:else}
         <p class="leer klein">Gerade ist kein Heli aus der Liste mit Transponder in der Luft.</p>
       {/each}
+      {#if abgestellt.length}
+        <h2>Zuletzt gesehen</h2>
+        {#each abgestellt as h (h.hex)}
+          <a class="lb-heli geparkt" href="/heli?hex={encodeURIComponent(h.hex)}" title={abgestelltTitel(h)} onclick={() => (ansicht.kiosk = false)}>
+            <div class="zeile-zwischen">
+              <span class="zeile"><span class="punkt ring" class:basis={h.anBasis}></span><strong>{h.kennzeichen ?? h.hex}</strong></span>
+              <span class="sehr-klein gedaempft">{relativ(new Date(h.zeit).toISOString())}</span>
+            </div>
+            <div class="sehr-klein gedaempft">
+              {h.anBasis ? 'Steht an der' : h.art === 'landung' ? 'Gelandet bei' : 'Letztes Signal bei'} {abgestelltOrt(h) || 'unbekanntem Ort'}
+            </div>
+          </a>
+        {/each}
+      {/if}
       {/if}
 
       {#if basenSortiert.length}
         <h2>Rega Basen</h2>
         <div class="lb-basen">
           {#each basenSortiert as b (b.id)}
-            <div class="lb-basis {b.status}" title={b.status === 'unbekannt' ? 'Am Boden ist oft kein Empfang' : ''}>
+            <div class="lb-basis {b.status}" class:steht={b.status === 'unbekannt' && anBasis.has(b.name)} title={b.status === 'unbekannt' ? 'Am Boden ist oft kein Empfang' : ''}>
               <span class="punkt"></span>
               <span class="wachsen">{b.name.replace('Rega Basis ', '')}</span>
-              <span class="sehr-klein gedaempft">{b.status === 'unterwegs' ? b.unterwegs.map((u) => u.kennzeichen ?? u.hex).join(', ') : STATUS_TEXT[b.status]}{b.heute ? ` · ${b.heute}` : ''}</span>
+              <span class="sehr-klein gedaempft">{b.status === 'unterwegs' ? b.unterwegs.map((u) => u.kennzeichen ?? u.hex).join(', ') : b.status === 'unbekannt' && anBasis.has(b.name) ? `${anBasis.get(b.name)?.join(', ')} steht` : STATUS_TEXT[b.status]}{b.heute ? ` · ${b.heute}` : ''}</span>
             </div>
           {/each}
         </div>
@@ -613,6 +645,24 @@
   }
   .lb-basis.unbekannt {
     color: var(--text-3);
+  }
+  .lb-basis.steht {
+    color: inherit;
+  }
+  .lb-basis.steht .punkt {
+    background: transparent;
+    border: 2px solid #34d399;
+  }
+  .lb-heli.geparkt {
+    border-style: dashed;
+    opacity: 0.85;
+  }
+  .punkt.ring {
+    background: transparent;
+    border: 2px dashed #fbbf24;
+  }
+  .punkt.ring.basis {
+    border: 2px solid #34d399;
   }
   .knopf.aktiv {
     border-color: var(--ok);

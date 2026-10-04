@@ -21,6 +21,19 @@ export interface AnimHeli {
   link?: string;
 }
 
+/** Heli ohne aktuelles Signal, aus /api/m/rettung/live (abgestellt) */
+export interface AbgestellterHeli {
+  hex: string;
+  organisation: string;
+  kennzeichen: string | null;
+  lat: number;
+  lon: number;
+  zeit: number;
+  art: 'landung' | 'signalverlust' | 'laufend';
+  platz: string | null;
+  anBasis: boolean;
+}
+
 interface Zustand {
   daten: AnimHeli;
   lat: number;
@@ -59,6 +72,8 @@ export class HeliAnimation {
   private L: typeof Leaflet;
   private gruppe: Leaflet.LayerGroup;
   private helis = new Map<string, Zustand>();
+  private parkGruppe: Leaflet.LayerGroup;
+  private geparkt = new Map<string, { marker: Leaflet.Marker; schluessel: string }>();
   private rahmen = 0;
   private letzte = 0;
   /** Bei true gelten die Positionen genau (Wiedergabe), sonst wird geschätzt und geglättet */
@@ -67,6 +82,7 @@ export class HeliAnimation {
 
   constructor(L: typeof Leaflet, karte: Leaflet.Map) {
     this.L = L;
+    this.parkGruppe = L.layerGroup().addTo(karte);
     this.gruppe = L.layerGroup().addTo(karte);
     this.rahmen = requestAnimationFrame((t) => this.schritt(t));
   }
@@ -107,6 +123,62 @@ export class HeliAnimation {
     for (const z of this.helis.values()) this.entfernen(z);
     this.helis.clear();
     this.gruppe.remove();
+    this.parkGruppe.remove();
+    this.geparkt.clear();
+  }
+
+  /** Helis ohne Signal am letzten bekannten Ort: stehend, grau oder gelb umrandet, ohne Rotor */
+  abgestellt(liste: AbgestellterHeli[]) {
+    const L = this.L;
+    const ids = new Set(liste.map((h) => h.hex));
+    for (const [id, g] of this.geparkt) {
+      if (ids.has(id)) continue;
+      g.marker.remove();
+      this.geparkt.delete(id);
+    }
+    // Mehrere Helis am gleichen Ort: Schilder untereinander
+    const proOrt = new Map<string, number>();
+    for (const h of liste) {
+      const ort = `${h.lat.toFixed(3)},${h.lon.toFixed(3)}`;
+      const n = proOrt.get(ort) ?? 0;
+      proOrt.set(ort, n + 1);
+      const schild = abgestelltSchild(h);
+      const schluessel = `${h.lat},${h.lon},${schild},${n},${h.anBasis}`;
+      const alt = this.geparkt.get(h.hex);
+      if (alt?.schluessel === schluessel) continue;
+      alt?.marker.remove();
+      const farbe = heliFarbe(h.organisation);
+      const icon = L.divIcon({
+        className: 'heli-anim',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        html: `<div class="heli-oben geparkt${h.anBasis ? ' basis' : ''}" style="--farbe:${farbe}">${SVG}</div>`,
+      });
+      const marker = L.marker([h.lat, h.lon], { icon, title: abgestelltTitel(h), zIndexOffset: 500 })
+        .bindTooltip(schild, {
+          permanent: true,
+          direction: 'right',
+          offset: [14, n * 20],
+          className: `heli-schild geparkt${h.anBasis ? ' basis' : ''}`,
+        })
+        .addTo(this.parkGruppe);
+      marker.on('click', () =>
+        this.onklick?.({
+          id: h.hex,
+          lat: h.lat,
+          lon: h.lon,
+          kurs: null,
+          kmh: null,
+          zeit: h.zeit,
+          amBoden: true,
+          farbe,
+          schild,
+          spur: [],
+          link: `/heli?hex=${encodeURIComponent(h.hex)}`,
+        }),
+      );
+      this.geparkt.set(h.hex, { marker, schluessel });
+    }
   }
 
   private anlegen(h: AnimHeli): Zustand {
@@ -253,4 +325,32 @@ export function liveAnim(helis: LiveHeliPos[], mitBasis = true): AnimHeli[] {
       link: `/heli?hex=${encodeURIComponent(h.hex)}`,
     };
   });
+}
+
+function zeitKurz(ms: number): string {
+  const d = new Date(ms);
+  const uhr = d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return uhr;
+  return `${d.toLocaleDateString('de-CH', { weekday: 'short' })} ${uhr}`;
+}
+
+/** Ort ohne Zusatz: «Rega Basis Untervaz» wird «Basis Untervaz» */
+export function abgestelltOrt(h: AbgestellterHeli): string {
+  return (h.platz ?? '').replace(/^Rega /, '');
+}
+
+function abgestelltSchild(h: AbgestellterHeli): string {
+  const kz = h.kennzeichen ?? h.hex;
+  if (h.anBasis) return `${kz} · ${abgestelltOrt(h)}`;
+  return `${kz} · ${zeitKurz(h.zeit)}${h.platz ? ` ${abgestelltOrt(h)}` : ''}`;
+}
+
+export function abgestelltTitel(h: AbgestellterHeli): string {
+  const was =
+    h.art === 'landung'
+      ? 'Gelandet'
+      : h.art === 'laufend'
+        ? 'Signal verloren, Flug offen'
+        : 'Signal tief verloren';
+  return `${h.kennzeichen ?? h.hex}: ${was} ${zeitKurz(h.zeit)}${h.platz ? `, ${abgestelltOrt(h)}` : ''}. Letzter bekannter Standort, kein aktuelles Signal.`;
 }

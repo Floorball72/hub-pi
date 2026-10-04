@@ -22,6 +22,7 @@ import {
   demoMeldungen,
   demoOsm,
   demoWarnungen,
+  demoWebcams,
 } from './demo.ts';
 import {
   type AdsbFlugzeug,
@@ -35,6 +36,8 @@ import {
   heliFiltern,
   platzBei,
   heatRaster,
+  type FlugEnde,
+  letzteStandorte,
   positionenVereinen,
   rueckblickFenster,
   schweizFiltern,
@@ -50,6 +53,7 @@ import {
   type Erdbeben,
   erdbebenHolen,
   feedHolen,
+  fotoWebcamsHolen,
   istErdbeben,
   kategorie,
   type Meldung,
@@ -63,6 +67,7 @@ import {
   STAPO_SG_URL,
   type Warnung,
   warnungFuerGebiete,
+  type Webcam,
 } from './quellen.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
 import { basisName, endeBasis, heliFarbe, REGA_BASEN, startBasis } from '../../geteilt/heli.ts';
@@ -186,6 +191,17 @@ function rettungLaufzeit(ctx: Kontext) {
     demo: () => [],
     namensnennung: ADSB_NAMENSNENNUNG,
     beschreibung: `Typen ${konfig.heliTypen.join(', ')}, gefiltert auf die Kennzeichen Liste und die Schweiz.`,
+  });
+  const fotoWebcams = ctx.quelle<void, (Webcam & { km: number })[]>({
+    id: 'rettung.webcams.fotowebcam',
+    name: 'Webcams (foto-webcam.eu)',
+    modul: 'rettung',
+    ttlSek: 3600,
+    abruf: () => fotoWebcamsHolen(region),
+    demo: () => demoWebcams(ctx.jetzt(), region),
+    namensnennung: 'Bilder: foto-webcam.eu und die Betreiber der Kameras',
+    beschreibung:
+      'Liste der Kameras in der Schweiz und bis 120 km um die Region. Die Bilder lädt der Browser direkt.',
   });
   const alertswiss = ctx.quelle<void, Alert[]>({
     id: 'rettung.alertswiss',
@@ -389,6 +405,7 @@ function rettungLaufzeit(ctx: Kontext) {
         ende_platz: endePlatz,
       },
     ]);
+    letzteFluege = null;
   }
 
   const helisMetrik = ctx.metrik({
@@ -578,6 +595,24 @@ function rettungLaufzeit(ctx: Kontext) {
             .length,
       };
     });
+  }
+
+  // Letzte Flüge pro Heli, eine Minute im Speicher, damit /live die Datenbank nicht alle 20 s abfragt
+  let letzteFluege: { zeit: number; liste: FlugEnde[] } | null = null;
+  async function abgestellteHelis(aktuell: Set<string>) {
+    await demoVorbereiten();
+    const jetzt = ctx.jetzt().getTime();
+    if (!letzteFluege || jetzt - letzteFluege.zeit > 60000) {
+      const liste = await daten
+        .liste<FlugEnde>('heli_fluege', {
+          filter: { ende: { gte: new Date(jetzt - 7 * 86400000).toISOString() } },
+          sortierung: '-ende',
+          limit: 300,
+        })
+        .catch(() => letzteFluege?.liste ?? []);
+      letzteFluege = { zeit: jetzt, liste };
+    }
+    return letzteStandorte(letzteFluege.liste, erkennung.laufende(), aktuell);
   }
 
   async function demoVorbereiten() {
@@ -838,7 +873,8 @@ function rettungLaufzeit(ctx: Kontext) {
           Number(b.organisation === 'Rega') - Number(a.organisation === 'Rega') ||
           (a.kennzeichen ?? '').localeCompare(b.kennzeichen ?? ''),
       );
-      return { helis, stand: positionenStand, fehler: positionenFehler };
+      const abgestellt = await abgestellteHelis(new Set(helis.map((h) => h.hex)));
+      return { helis, abgestellt, stand: positionenStand, fehler: positionenFehler };
     });
 
     // Wiedergabe: alle Flüge der Helis aus der Liste der letzten Stunden mit Zeit pro Punkt
@@ -1233,29 +1269,89 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
       return { punkte, stand: r.stand, demo: r.demo, fehler: r.fehler };
     });
 
-    app.get('/webcams/punkte', async (): Promise<PunkteAntwort> => {
+    // Eigene Webcams und die von foto-webcam.eu, die nächsten zuerst
+    async function alleWebcams() {
       await demoVorbereiten();
-      const liste = await daten.liste<{
-        id: string;
-        name: string;
-        lat: number;
-        lon: number;
-        bild_url: string | null;
-        link: string | null;
-      }>('webcams', { limit: 200 });
+      const [eigene, fw] = await Promise.all([
+        daten.liste<{
+          id: string;
+          name: string;
+          lat: number;
+          lon: number;
+          bild_url: string | null;
+          link: string | null;
+        }>('webcams', { limit: 200 }),
+        fotoWebcams.hole(),
+      ]);
+      const cams: (Webcam & { km: number })[] = [
+        ...eigene
+          .filter((w) => w.bild_url)
+          .map((w) => ({
+            id: w.id,
+            name: w.name,
+            titel: w.name,
+            lat: w.lat,
+            lon: w.lon,
+            hoehe: null,
+            richtung: null,
+            bild: w.bild_url!,
+            bildGross: w.bild_url!,
+            link: w.link,
+            zeit: null,
+            takt: null,
+            land: null,
+            quelle: 'Eigene',
+            km: Math.round(distanzKm(region.lat, region.lon, w.lat, w.lon)),
+          })),
+        ...(fw.daten ?? []),
+      ].sort((a, b) => a.km - b.km);
+      return { cams, eigene, fw };
+    }
+
+    app.get('/webcams', async () => {
+      const { cams, fw } = await alleWebcams();
       return {
-        punkte: liste.map((w) => ({
-          id: w.id,
-          lat: w.lat,
-          lon: w.lon,
-          titel: w.name,
-          symbol: 'webcam',
-          bild: w.bild_url ?? undefined,
-          link: w.link ?? undefined,
-        })),
-        stand: ctx.jetzt().toISOString(),
+        cams,
+        stand: fw.stand,
+        demo: fw.demo,
+        fehler: fw.fehler,
+        namensnennung: 'Bilder: foto-webcam.eu und die Betreiber der Kameras',
+      };
+    });
+
+    app.get('/webcams/punkte', async (): Promise<PunkteAntwort> => {
+      const { cams, eigene, fw } = await alleWebcams();
+      return {
+        punkte: [
+          // Eigene ohne Bild erscheinen trotzdem auf der Karte
+          ...eigene
+            .filter((w) => !w.bild_url)
+            .map((w) => ({
+              id: w.id,
+              lat: w.lat,
+              lon: w.lon,
+              titel: w.name,
+              symbol: 'webcam' as const,
+              link: w.link ?? undefined,
+            })),
+          ...cams.map((c) => ({
+            id: c.id,
+            lat: c.lat,
+            lon: c.lon,
+            titel: c.name,
+            text: [c.titel !== c.name ? c.titel : '', c.hoehe ? `${c.hoehe} m ü. M.` : '', c.quelle]
+              .filter(Boolean)
+              .join(' · '),
+            symbol: 'webcam' as const,
+            bild: c.bild,
+            link: c.link ?? undefined,
+            zeit: c.zeit ? new Date(c.zeit).toISOString() : undefined,
+          })),
+        ],
+        stand: fw.stand ?? ctx.jetzt().toISOString(),
         demo: konfig.demo,
-        hinweis: 'Eigene Liste im Modul Rettung, Tab Webcams',
+        fehler: fw.fehler,
+        hinweis: 'foto-webcam.eu und eigene Liste im Modul Rettung, Tab Webcams',
       };
     });
   }
@@ -1463,7 +1559,7 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
         modul: 'rettung',
         art: 'punkte',
         datenUrl: '/api/m/rettung/webcams/punkte',
-        namensnennung: 'Betreiber der Webcams',
+        namensnennung: 'foto-webcam.eu und Betreiber der Webcams',
       },
     ];
   }

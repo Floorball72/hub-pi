@@ -529,6 +529,39 @@
   :global(.heli-schild::before) {
     display: none;
   }
+  /* Abgestellte Helis: kein Signal, letzter bekannter Ort. Grün an der Basis, gelb anderswo */
+  :global(.heli-oben.geparkt) {
+    --ring: #fbbf24;
+    color: #8b98a8;
+    filter: none;
+    opacity: 0.9;
+    position: relative;
+  }
+  :global(.heli-oben.geparkt.basis) {
+    --ring: #34d399;
+  }
+  :global(.heli-oben.geparkt::after) {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 2px dashed var(--ring);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+  :global(.heli-oben.geparkt.basis::after) {
+    border-style: solid;
+  }
+  :global(.heli-oben.geparkt .rotor) {
+    animation: none;
+  }
+  :global(.heli-schild.geparkt) {
+    border-color: #fbbf2466 !important;
+    color: #c3ccd6 !important;
+    font-weight: 500 !important;
+  }
+  :global(.heli-schild.geparkt.basis) {
+    border-color: #34d39966 !important;
+  }
   :global(.leaflet-container) {
     background: #0b1016;
     font: inherit;

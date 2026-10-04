@@ -9,7 +9,7 @@
   import Toolbox from './Toolbox.svelte';
   import { api } from '../lib/api.ts';
   import { datumZeit, relativ } from '../lib/format.ts';
-  import { HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
 
   interface Lage {
@@ -35,6 +35,7 @@
   }
   interface Live {
     helis: (LiveHeliPos & { typ: string | null; ort: string | null; seit: string | null; gestartet: boolean })[];
+    abgestellt?: AbgestellterHeli[];
     stand: string | null;
     fehler?: string;
   }
@@ -79,7 +80,9 @@
     };
   }
   $effect(() => {
-    if (anim && live) anim.setzen(liveAnim(live.helis, false));
+    if (!anim || !live) return;
+    anim.setzen(liveAnim(live.helis, false));
+    anim.abgestellt(live.abgestellt ?? []);
   });
   $effect(() => {
     if (tab === 'Rega Statistik') api.get<Statistik>(`/api/m/rettung/statistik?organisation=${encodeURIComponent(organisation)}&tage=${zeitraum}`).then((s) => (stat = s));
