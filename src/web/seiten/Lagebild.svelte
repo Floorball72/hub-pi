@@ -30,6 +30,17 @@
     zeit: number;
     spur: [number, number][];
   }
+  interface Cam {
+    id: string;
+    name: string;
+    lat: number;
+    lon: number;
+    hoehe: number | null;
+    bild: string;
+    bildGross: string;
+    link: string | null;
+    zeit: number | null;
+  }
   interface Lage {
     alerts: { id: string; titel: string; herausgeber: string; inRegion: boolean }[];
     warnungen: { id: string; ereignis: string; gebiet: string; stufe: number }[];
@@ -136,10 +147,58 @@
   }
 
   // Bewegte Helis auf der Karte
+  // Kamera beim Heli: nächste Webcam bis 25 km, Bild alle 2 Minuten frisch
+  const CAM_KM = 25;
+  let cams = $state<Cam[]>([]);
+  let camRunde = $state(0);
+  let camGross = $state<{ cam: Cam; km: number; hex: string; name: string } | null>(null);
+  function camsHolen() {
+    api
+      .get<{ cams: Cam[] }>('/api/m/rettung/webcams')
+      .then((x) => (cams = x.cams))
+      .catch(() => {});
+  }
+  function km(a: number, b: number, c: number, d: number): number {
+    const r = Math.PI / 180;
+    const x = Math.sin(((c - a) * r) / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(((d - b) * r) / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(x));
+  }
+  function naechsteCam(lat: number, lon: number): { cam: Cam; km: number } | null {
+    let best: { cam: Cam; km: number } | null = null;
+    for (const c of cams) {
+      const k = km(lat, lon, c.lat, c.lon);
+      if (k <= CAM_KM && (!best || k < best.km)) best = { cam: c, km: k };
+    }
+    return best;
+  }
+  const camBeiHeli = $derived(new Map(inDerLuft.map((h) => [h.hex, naechsteCam(h.lat, h.lon)])));
+  function camSrc(adresse: string): string {
+    if (!adresse.startsWith('http') || camRunde === 0) return adresse;
+    return `${adresse}${adresse.includes('?') ? '&' : '?'}t=${camRunde}`;
+  }
+  function camZeigen(h: LiveHeli) {
+    const c = camBeiHeli.get(h.hex);
+    if (c) camGross = { ...c, hex: h.hex, name: h.kennzeichen ?? h.hex };
+  }
+  $effect(() => {
+    camsHolen();
+    const t = setInterval(camsHolen, 30 * 60000);
+    const b = setInterval(() => {
+      if (document.visibilityState === 'visible') camRunde++;
+    }, 120000);
+    return () => {
+      clearInterval(t);
+      clearInterval(b);
+    };
+  });
+
   let anim: HeliAnimation | null = null;
   function animStarten(L: typeof Leaflet, karte: Leaflet.Map) {
     anim = new HeliAnimation(L, karte);
     anim.onklick = (h) => {
+      // Heli in der Luft mit Kamera in der Nähe: zuerst das Bild zeigen
+      const l = !wiedergabe ? inDerLuft.find((x) => x.hex === h.id) : null;
+      if (l && camBeiHeli.get(l.hex)) return camZeigen(l);
       if (!h.link) return;
       ansicht.kiosk = false;
       navigieren(h.link);
@@ -358,6 +417,8 @@
   const STATUS_TEXT = { unterwegs: 'unterwegs', zuhause: 'zu Hause', unbekannt: 'keine Daten' };
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && camGross) camGross = null; }} />
+
 <div class="lagebild" class:vollbild={ansicht.kiosk}>
   <div class="lb-karte" class:blitz={neu.size > 0}>
     <Karte
@@ -415,7 +476,9 @@
         {/each}
       {:else}
       {#each inDerLuft as h (h.hex)}
-        <a class="lb-heli" class:neu={neu.has(h.hex)} href="/heli?hex={encodeURIComponent(h.hex)}" onclick={() => (ansicht.kiosk = false)}>
+        {@const c = camBeiHeli.get(h.hex)}
+        <div class="lb-heli-block">
+        <a class="lb-heli" class:neu={neu.has(h.hex)} class:mit-cam={!!c} href="/heli?hex={encodeURIComponent(h.hex)}" onclick={() => (ansicht.kiosk = false)}>
           <div class="zeile-zwischen">
             <span class="zeile"><span class="punkt luft" style="background:{heliFarbe(h.organisation)}"></span><strong>{h.kennzeichen ?? h.hex}</strong></span>
             <span class="sehr-klein gedaempft">{[h.hoeheFt !== null ? `${h.hoeheFt} ft` : null, h.kmh !== null ? `${h.kmh} km/h` : null].filter(Boolean).join(' · ')}</span>
@@ -424,6 +487,13 @@
             {h.organisation} · {h.ort ?? 'unterwegs'}{#if h.startPlatz} · ab {h.startPlatz.replace('Rega Basis ', 'Basis ')}{/if}{#if h.seit} · {relativ(h.seit)}{/if}
           </div>
         </a>
+        {#if c}
+          <button class="lb-cam" onclick={() => camZeigen(h)} title="Webcam {c.cam.name} gross zeigen">
+            <img src={camSrc(c.cam.bild)} alt="Webcam {c.cam.name}" loading="lazy" />
+            <span class="lb-cam-text sehr-klein"><span class="rec"></span>{c.cam.name} · {c.km < 1 ? '<1' : Math.round(c.km)} km</span>
+          </button>
+        {/if}
+        </div>
       {:else}
         <p class="leer klein">Gerade ist kein Heli aus der Liste mit Transponder in der Luft.</p>
       {/each}
@@ -470,6 +540,24 @@
         Nur Luftfahrzeuge mit eingeschaltetem Transponder. {live?.stand ? `Stand ${relativ(live.stand)}.` : ''} Start an einer Rega Basis ist vermutet, wenn der erste Empfang nahe der Basis liegt. ADS-B Daten: adsb.lol (ODbL), Basen: rega.ch und OpenStreetMap
       </p>
     </aside>
+  {/if}
+
+  {#if camGross}
+    <div class="lb-cam-gross" role="dialog" aria-modal="true" aria-label="Webcam beim Heli">
+      <button class="lb-cam-zu" aria-label="Schliessen" onclick={() => (camGross = null)}></button>
+      <figure>
+        <img src={camSrc(camGross.cam.bildGross)} alt="Webcam {camGross.cam.name}" />
+        <figcaption class="zeile-zwischen">
+          <span><span class="rec"></span><strong>{camGross.cam.name}</strong> <span class="gedaempft klein">{Math.round(camGross.km)} km von {camGross.name}{camGross.cam.hoehe ? ` · ${camGross.cam.hoehe} m` : ''}{camGross.cam.zeit ? ` · Bild ${relativ(new Date(camGross.cam.zeit).toISOString())}` : ''}</span></span>
+          <span class="zeile">
+            {#if camGross.cam.link}<a class="knopf klein" href={camGross.cam.link} target="_blank" rel="noopener">Zur Quelle</a>{/if}
+            <a class="knopf klein" href="/heli?hex={encodeURIComponent(camGross.hex)}" onclick={() => (ansicht.kiosk = false)}>Heli Details</a>
+            <button class="knopf klein" onclick={() => (camGross = null)}>Schliessen</button>
+          </span>
+        </figcaption>
+        <p class="sehr-klein gedaempft">Nächste Webcam zur Position des Helis. Der Heli ist meist nicht im Bild.</p>
+      </figure>
+    </div>
   {/if}
 
   <!-- Wiedergabe der letzten 24 Stunden -->
@@ -652,6 +740,88 @@
   .lb-basis.steht .punkt {
     background: transparent;
     border: 2px solid #34d399;
+  }
+  .lb-heli-block {
+    display: flex;
+    flex-direction: column;
+  }
+  .lb-heli.mit-cam {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .lb-cam {
+    position: relative;
+    display: block;
+    padding: 0;
+    border: 1px solid #ffffff12;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+    background: #000;
+    cursor: zoom-in;
+    aspect-ratio: 16 / 7;
+  }
+  .lb-cam img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.85);
+  }
+  .lb-cam-text {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 3px 7px;
+    text-align: left;
+    color: #e2e8f0;
+    background: linear-gradient(transparent, #000c);
+    font-family: ui-monospace, monospace;
+  }
+  .rec {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 5px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: pulsieren 1.6s infinite;
+  }
+  .lb-cam-gross {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: #000d;
+  }
+  .lb-cam-zu {
+    position: absolute;
+    inset: 0;
+    background: none;
+    border: none;
+    cursor: zoom-out;
+  }
+  .lb-cam-gross figure {
+    position: relative;
+    margin: 0;
+    max-width: min(1200px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lb-cam-gross img {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+  }
+  .lb-cam-gross figcaption {
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .lb-heli.geparkt {
     border-style: dashed;
