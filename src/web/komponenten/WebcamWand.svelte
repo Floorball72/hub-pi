@@ -34,6 +34,11 @@
   let gross = $state<Cam | null>(null);
   let wand = $state<HTMLElement | null>(null);
   let uhr = $state(new Date());
+  // Rundgang: das grosse Bild wechselt von selbst, wie ein Monitor in der Leitstelle
+  const TAKTE = [5, 8, 15, 30];
+  let rundgang = $state(false);
+  let rundgangTakt = $state<number>(lesen('webcams.rundgang', 8));
+  let rundgangStart = $state(0);
 
   const gefiltert = $derived.by(() => {
     const cams = antwort?.cams ?? [];
@@ -93,11 +98,50 @@
     if (!gross) return;
     const i = sichtbar.findIndex((c) => c.id === gross?.id);
     gross = sichtbar[(i + schritt + sichtbar.length) % sichtbar.length] ?? null;
+    rundgangStart = Date.now();
   }
+  const naechste = $derived.by(() => {
+    if (!gross || !rundgang) return null;
+    const i = sichtbar.findIndex((c) => c.id === gross?.id);
+    return sichtbar[(i + 1) % sichtbar.length] ?? null;
+  });
+
+  function rundgangStarten() {
+    if (!sichtbar.length) return;
+    gross ??= sichtbar[0];
+    rundgang = true;
+    rundgangStart = Date.now();
+  }
+  function schliessen() {
+    gross = null;
+    rundgang = false;
+  }
+  function taktSetzen(t: number) {
+    rundgangTakt = t;
+    rundgangStart = Date.now();
+    schreiben('webcams.rundgang', t);
+  }
+  $effect(() => {
+    if (!rundgang) return;
+    const t = setInterval(() => {
+      // Versteckt zählt nicht: danach mit der vollen Zeit weiter statt zu springen
+      if (document.hidden || !gross) {
+        rundgangStart = Date.now();
+        return;
+      }
+      if (Date.now() - rundgangStart >= rundgangTakt * 1000) blaettern(1);
+    }, 250);
+    return () => clearInterval(t);
+  });
 
   function taste(e: KeyboardEvent) {
     if (!gross) return;
-    if (e.key === 'Escape') gross = null;
+    if (e.key === 'Escape') schliessen();
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (rundgang) rundgang = false;
+      else rundgangStarten();
+    }
     if (e.key === 'ArrowRight') blaettern(1);
     if (e.key === 'ArrowLeft') blaettern(-1);
   }
@@ -124,6 +168,7 @@
       <button class:aktiv={filter === 'favoriten'} onclick={() => (filter = 'favoriten')} disabled={!favoriten.length}>Favoriten {favoriten.length || ''}</button>
       <button class:aktiv={filter === 'alle'} onclick={() => (filter = 'alle')}>Alle</button>
     </div>
+    <button class="knopf klein" onclick={rundgangStarten} disabled={!sichtbar.length} title="Die Kameras nacheinander gross zeigen">Rundgang</button>
     <button class="knopf klein" onclick={vollbild}>Vollbild</button>
   </div>
 
@@ -166,17 +211,30 @@
 
   {#if gross}
     <div class="gross" role="dialog" aria-modal="true" aria-label={gross.titel}>
-      <button class="hintergrund" aria-label="Schliessen" onclick={() => (gross = null)}></button>
+      <button class="hintergrund" aria-label="Schliessen" onclick={schliessen}></button>
       <figure>
         <img src={src(gross.bildGross)} alt={gross.titel} />
+        {#if rundgang}
+          {#key `${gross.id}-${rundgangStart}-${rundgangTakt}`}<div class="fortschritt" style="animation-duration:{rundgangTakt}s"></div>{/key}
+          <span class="rg-marke"><span class="rec"></span>RUNDGANG {sichtbar.findIndex((c) => c.id === gross?.id) + 1}/{sichtbar.length}</span>
+          {#if naechste}<img class="vorladen" src={src(naechste.bildGross)} alt="" aria-hidden="true" />{/if}
+        {/if}
         <figcaption>
           <strong>{gross.titel}</strong>
           <span class="gedaempft klein">{gross.km} km{gross.hoehe ? ` · ${gross.hoehe} m ü. M.` : ''} · {gross.quelle}{gross.zeit ? ` · Liste ${relativ(new Date(gross.zeit).toISOString())}` : ''}</span>
           <span class="wachsen"></span>
           <button class="knopf klein" onclick={() => blaettern(-1)} aria-label="Vorherige">‹</button>
           <button class="knopf klein" onclick={() => blaettern(1)} aria-label="Nächste">›</button>
+          {#if rundgang}
+            <span class="takt" role="group" aria-label="Wechsel alle">
+              {#each TAKTE as t (t)}<button class:aktiv={rundgangTakt === t} onclick={() => taktSetzen(t)}>{t} s</button>{/each}
+            </span>
+            <button class="knopf klein" onclick={() => (rundgang = false)}>Anhalten</button>
+          {:else}
+            <button class="knopf klein" onclick={rundgangStarten}>Rundgang</button>
+          {/if}
           {#if gross.link}<a class="knopf klein" href={gross.link} target="_blank" rel="noopener noreferrer">Zur Quelle</a>{/if}
-          <button class="knopf klein" onclick={() => (gross = null)}>Schliessen</button>
+          <button class="knopf klein" onclick={schliessen}>Schliessen</button>
         </figcaption>
       </figure>
     </div>
@@ -370,6 +428,61 @@
     object-fit: contain;
     border-radius: 8px;
     background: #0b1016;
+  }
+  .fortschritt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 3px;
+    width: 100%;
+    background: #ef4444;
+    border-radius: 8px 8px 0 0;
+    transform-origin: left;
+    animation: ablauf linear forwards;
+  }
+  @keyframes ablauf {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .rg-marke {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #000a;
+    color: #e6edf5;
+    font: 600 0.72rem ui-monospace, monospace;
+    letter-spacing: 0.08em;
+  }
+  .vorladen {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .takt {
+    display: inline-flex;
+    border: 1px solid #ffffff22;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .takt button {
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .takt button.aktiv {
+    background: #ffffff1f;
+    color: #fff;
   }
   figcaption {
     display: flex;
