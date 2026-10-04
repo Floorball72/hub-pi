@@ -680,7 +680,11 @@ function einsatzAus(fl: ChronikFlug[]): Einsatz {
         ? { name: ort.nach ?? 'Unbekannter Ort', lat: ort.lat, lon: ort.lon }
         : null,
     spitaeler,
-    flugMin: etappen.reduce((s, e) => s + (e.minuten ?? 0), 0),
+    // Überlappende Flüge in den Rohdaten: Flugzeit nie länger als die Dauer
+    flugMin: Math.min(
+      etappen.reduce((s, e) => s + (e.minuten ?? 0), 0),
+      minZwischen(erster.start, letzter.ende) ?? Number.POSITIVE_INFINITY,
+    ),
     dauerMin: minZwischen(erster.start, letzter.ende),
     etappen,
   };

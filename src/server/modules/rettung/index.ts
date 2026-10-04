@@ -1088,7 +1088,7 @@ function rettungLaufzeit(ctx: Kontext) {
       const einsaetze = einsaetzeBilden(fluege).filter((e) => new Date(e.start).getTime() >= grenze);
       const laufend = new Set(erkennung.laufende().map((f) => f.hex));
       return {
-        einsaetze: einsaetze.slice(0, 80).map((e) => ({ ...e, inDerLuft: !e.zurueck && laufend.has(e.hex) })),
+        einsaetze: einsaetze.slice(0, 80).map((e) => ({ ...e, inDerLuft: !e.ende && laufend.has(e.hex) })),
         anzahl: einsaetze.length,
         tage,
         stand: positionenStand,
