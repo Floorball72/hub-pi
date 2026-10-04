@@ -1,7 +1,9 @@
 <script lang="ts">
   import type * as Leaflet from 'leaflet';
+  import type { GeoPunkt } from '../../server/geteilt/typen.ts';
   import { heliFarbe } from '../../server/geteilt/heli.ts';
   import Balken from '../komponenten/Balken.svelte';
+  import EinsatzChronik from '../komponenten/EinsatzChronik.svelte';
   import HeliZeitstrahl from '../komponenten/HeliZeitstrahl.svelte';
   import Karte from '../komponenten/Karte.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
@@ -33,6 +35,13 @@
     letzte: { start: string; ende: string | null; organisation: string | null; kennzeichen: string | null; start_ort: string | null; ende_ort: string | null; start_platz?: string | null; ende_platz?: string | null }[];
     laufend: number;
     organisationen: string[];
+    einsatz?: {
+      anzahl: number;
+      proBasis: { basis: string; anzahl: number; flugMin: number; dauerMin: number | null }[];
+      spitaeler: [string, number][];
+      orte: { name: string; lat: number; lon: number; basis: string | null; start: string; kennzeichen: string | null }[];
+      woche: Record<'diese' | 'vorher', { einsaetze: number; mitEinsatzort: number; flugMin: number }>;
+    };
   }
   interface Live {
     helis: (LiveHeliPos & { typ: string | null; ort: string | null; seit: string | null; gestartet: boolean })[];
@@ -96,10 +105,30 @@
 
   const LAWINE: Record<string, string> = { low: '1 gering', moderate: '2 mässig', considerable: '3 erheblich', high: '4 gross', very_high: '5 sehr gross' };
   const FARBE: Record<number, string> = { 1: 'ok', 2: 'warnung', 3: 'warnung', 4: 'ausfall' };
+  const BASIS_FARBEN = ['#4aa3ff', '#ffb020', '#3ecf8e', '#ef5350', '#b388ff', '#26c6da', '#ff7043', '#d4e157', '#f06292', '#8d6e63', '#90a4ae', '#ffd54f', '#81c784'];
+  const basisFarbe = (b: string | null) => {
+    if (!b) return '#8a97a8';
+    const i = stat?.einsatz?.proBasis.findIndex((x) => x.basis === b) ?? -1;
+    return i < 0 ? '#8a97a8' : BASIS_FARBEN[i % BASIS_FARBEN.length];
+  };
+  const stunden = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`);
+  const wert = (n: number, einheit: string) => (einheit ? stunden(n) : String(n));
+  const einsatzPunkte = $derived<GeoPunkt[]>(
+    (stat?.einsatz?.orte ?? []).map((o, i) => ({
+      id: `eo-${i}`,
+      lat: o.lat,
+      lon: o.lon,
+      titel: o.name,
+      text: `${o.kennzeichen ?? ''} ${datumZeit(o.start)}${o.basis ? `, Basis ${o.basis}` : ''}`,
+      symbol: 'ort',
+      farbe: basisFarbe(o.basis),
+      groesse: 16,
+    })),
+  );
   const dauer = (a: string, b: string | null) => (b ? `${Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)} min` : 'läuft');
 </script>
 
-<ModulRahmen modulId="rettung" tabs={['Lage', 'Einsätze', 'Rega Statistik', 'Toolbox', 'Kennzeichen', 'Webcams']} bind:tab>
+<ModulRahmen modulId="rettung" tabs={['Lage', 'Chronik', 'Einsätze', 'Rega Statistik', 'Toolbox', 'Kennzeichen', 'Webcams']} bind:tab>
   {#if tab === 'Lage'}
     <Karte hoehe="min(62vh, 560px)" gruppen={['Rettung', 'Gefahren', 'Wetter']} ohne={['rettung.helis']} bereit={animStarten} zentrum={[47.35, 9.15]} zoom={9} />
     <p class="sehr-klein gedaempft">Helikopter: Es sind nur Luftfahrzeuge sichtbar, die einen Transponder (ADS-B oder Mode S mit Position) senden. Rettungswagen sind nicht öffentlich und werden nicht angezeigt.</p>
@@ -191,6 +220,8 @@
         </section>
       </div>
     {/if}
+  {:else if tab === 'Chronik'}
+    <EinsatzChronik />
   {:else if tab === 'Einsätze'}
     <div class="hinweis warnung" style="margin-bottom:12px">Zeitverzögert: Diese Einsatzauswertungen stammen aus öffentlichen Medienmitteilungen. Sie erscheinen oft erst Stunden oder Tage nach dem Ereignis.</div>
     {#if meld}
@@ -250,6 +281,41 @@
           {/each}
         </section>
       </div>
+      {#if stat.einsatz}
+        {@const w = stat.einsatz.woche}
+        <h3 style="margin-top:14px">Einsätze, letzte 7 Tage im Vergleich zur Vorwoche</h3>
+        <div class="raster werte">
+          {#each [['Einsätze', w.diese.einsaetze, w.vorher.einsaetze, ''], ['Mit Einsatzort', w.diese.mitEinsatzort, w.vorher.mitEinsatzort, ''], ['Flugzeit', w.diese.flugMin, w.vorher.flugMin, ' min']] as [titel, jetzt, vorher, einheit] (titel)}
+            {@const d = Number(jetzt) - Number(vorher)}
+            <div class="panel">
+              <h3>{titel}</h3>
+              <div class="zahl gross">{wert(Number(jetzt), einheit)}</div>
+              <div class="klein" class:plus={d > 0} class:minus={d < 0}>{d > 0 ? '+' : d < 0 ? '−' : '±'}{wert(Math.abs(d), einheit)} zur Vorwoche ({wert(Number(vorher), einheit)})</div>
+            </div>
+          {/each}
+        </div>
+        <div class="raster-2">
+          <section class="panel">
+            <h3>Pro Basis ({stat.einsatz.anzahl} Einsätze im Zeitraum)</h3>
+            <div class="basis-tabelle klein">
+              <span class="gedaempft">Basis</span><span class="gedaempft zahl">Einsätze</span><span class="gedaempft zahl">Flugzeit</span><span class="gedaempft zahl">Typisch</span>
+              {#each stat.einsatz.proBasis as b (b.basis)}
+                <span><span class="farbpunkt" style="background:{basisFarbe(b.basis)}"></span>{b.basis}</span>
+                <span class="zahl">{b.anzahl}</span>
+                <span class="zahl">{stunden(b.flugMin)}</span>
+                <span class="zahl">{b.dauerMin !== null ? `${b.dauerMin} min` : 'offen'}</span>
+              {:else}<span class="gedaempft" style="grid-column:1/-1">Noch keine Einsätze erfasst.</span>{/each}
+            </div>
+          </section>
+          <section class="panel">
+            <h3>Spitäler nach Häufigkeit</h3>
+            {#each stat.einsatz.spitaeler as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch keine Landung bei einem Spital erfasst.</p>{/each}
+          </section>
+        </div>
+        <h3 style="margin-top:14px">Einsatzorte nach Basis</h3>
+        <Karte hoehe="420px" ebenenFest={[]} punkte={einsatzPunkte} einpassen={einsatzPunkte.length > 0} zentrum={[46.8, 8.23]} zoom={7} basisStart="nacht" />
+        <p class="sehr-klein gedaempft">Landungen ohne bekannten Platz, eingefärbt nach der Basis des Einsatzes. Abgeleitet aus Transponderdaten, ohne Gewähr.</p>
+      {/if}
       <div class="zeile-zwischen" style="margin-top:14px">
         <h3>Heatmap Schweiz</h3>
         <div class="zeile">
@@ -322,5 +388,23 @@
   }
   .gross {
     font-size: 2rem;
+  }
+  .plus {
+    color: var(--warnung);
+  }
+  .minus {
+    color: var(--ok);
+  }
+  .basis-tabelle {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 4px 14px;
+  }
+  .farbpunkt {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
   }
 </style>
