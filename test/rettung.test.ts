@@ -9,7 +9,10 @@ import {
   flugStatistik,
   type HeliPosition,
   heliFiltern,
+  inSchweiz,
   platzBei,
+  positionenVereinen,
+  schweizFiltern,
   musterPasst,
   organisationFinden,
 } from '../src/server/modules/rettung/heli.ts';
@@ -174,6 +177,7 @@ describe('OpenStreetMap', () => {
       /\["amenity"="hospital"\]\["emergency"="yes"\]\(around:40000,47.41,9.2\)/,
     );
     assert.throws(() => overpassAbfrage('x', REGION));
+    assert.match(overpassAbfrage('spital.ch', REGION), /area\["ISO3166-1"="CH"\].*\(area\.ch\)/);
     const o = overpassParsen({
       elements: [
         { type: 'node', id: 1, lat: 47.4, lon: 9.3, tags: { name: 'A' } },
@@ -242,5 +246,49 @@ describe('Landeplätze', () => {
   });
   it('liefert nichts abseits von Plätzen', () => {
     assert.equal(platzBei(47.3, 9.2, spitaeler, plaetze), null);
+  });
+});
+
+describe('Ganze Schweiz', () => {
+  const k = [{ organisation: 'Rega', muster: 'HB-ZR*' }];
+  const jetzt = Date.parse('2026-10-04T12:00:00Z');
+  const ac = (hex: string, r: string, lat: number, lon: number): AdsbFlugzeug => ({
+    hex,
+    r,
+    lat,
+    lon,
+    alt_baro: 3000,
+    category: 'A7',
+  });
+
+  it('erkennt Positionen in der Schweiz', () => {
+    assert.equal(inSchweiz(46.0, 8.95), true); // Lugano
+    assert.equal(inSchweiz(46.2, 6.15), true); // Genf
+    assert.equal(inSchweiz(48.14, 11.58), false); // München
+  });
+
+  it('nimmt nur Kennzeichen der Liste in der Schweiz', () => {
+    const p = schweizFiltern(
+      [ac('a', 'HB-ZRA', 46.0, 8.95), ac('b', 'HB-ZRB', 48.14, 11.58), ac('c', 'D-HXYZ', 46.5, 8.0)],
+      k,
+      jetzt,
+    );
+    assert.deepEqual(
+      p.map((x) => [x.hex, x.organisation]),
+      [['a', 'Rega']],
+    );
+  });
+
+  it('führt Region und Schweiz ohne Doppel zusammen', () => {
+    const a = schweizFiltern([ac('a', 'HB-ZRA', 46.0, 8.95)], k, jetzt);
+    const b = schweizFiltern([ac('a', 'HB-ZRA', 46.1, 8.9), ac('d', 'HB-ZRD', 47, 8)], k, jetzt);
+    const v = positionenVereinen(a, b);
+    assert.deepEqual(
+      v.map((x) => [x.hex, x.lat]),
+      [
+        ['a', 46.0],
+        ['d', 47],
+      ],
+    );
   });
 });

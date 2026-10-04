@@ -221,8 +221,13 @@ export const OSM_ABFRAGEN: Record<string, string> = {
 };
 
 export function overpassAbfrage(art: string, r: Region): string {
-  const filter = OSM_ABFRAGEN[art];
+  // «spital.ch»: ganze Schweiz statt Region (für die Erkennung von Landungen)
+  const schweiz = art.endsWith('.ch');
+  const filter = OSM_ABFRAGEN[schweiz ? art.slice(0, -3) : art];
   if (!filter) throw new HubFehler('Unbekannte Abfrage');
+  if (schweiz) {
+    return `[out:json][timeout:90];area["ISO3166-1"="CH"][admin_level=2]->.ch;${filter}(area.ch);out center tags 5000;`;
+  }
   const radiusM = Math.round(r.radiusKm * 1000);
   return `[out:json][timeout:25];${filter}(around:${radiusM},${r.lat},${r.lon});out center tags 500;`;
 }
@@ -256,7 +261,7 @@ export async function overpassHolen(art: string, r: Region): Promise<OsmObjekt[]
   const d = await httpJson<OverpassRoh>(
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(abfrage)}`,
     {
-      timeoutMs: 40000,
+      timeoutMs: art.endsWith('.ch') ? 100000 : 40000,
       abstandMs: 10000,
     },
   );

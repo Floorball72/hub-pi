@@ -180,7 +180,7 @@
         </section>
       </div>
       <h3 style="margin-top:14px">Flugspuren und Heatmap</h3>
-      <Karte hoehe="420px" gruppen={['Rettung']} zentrum={[47.38, 9.2]} zoom={9} />
+      <Karte hoehe="420px" gruppen={['Rettung']} zentrum={[46.8, 8.23]} zoom={7} />
       <p class="sehr-klein gedaempft">Ebenen «Heli Flugspuren (7 Tage)» und «Rega Einsätze (Heatmap)» im Ebenen Menü einschalten. Statistik nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
     {/if}
   {:else if tab === 'Toolbox'}

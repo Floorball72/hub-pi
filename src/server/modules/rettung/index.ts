@@ -27,12 +27,15 @@ import {
   type AdsbFlugzeug,
   ADSB_NAMENSNENNUNG,
   adsbHolen,
+  adsbTypHolen,
   type Flug,
   FlugErkennung,
   flugStatistik,
   type HeliPosition,
   heliFiltern,
   platzBei,
+  positionenVereinen,
+  schweizFiltern,
   type Kennung,
 } from './heli.ts';
 import {
@@ -82,9 +85,9 @@ export const rettung: ModulDef = {
   regeln: [
     {
       id: 'heli',
-      name: 'Helikopter Aktivität in der Region',
+      name: 'Helikopter Aktivität',
       beschreibung:
-        'Ein Helikopter aus der Kennzeichen Liste (mit Push) startet oder fliegt in die Region ein.',
+        'Ein Helikopter aus der Kennzeichen Liste (mit Push) startet irgendwo in der Schweiz oder landet bei einem Spital. Andere Helikopter nur in der Region.',
       prioritaet: 3,
       cooldownMin: 20,
     },
@@ -143,6 +146,23 @@ function rettungLaufzeit(ctx: Kontext) {
     demo: () => demoHelis(ctx.jetzt().getTime(), region),
     namensnennung: ADSB_NAMENSNENNUNG,
     beschreibung: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
+  });
+  // Organisationen wie die Rega in der ganzen Schweiz: Abfrage nach Typ ist viel kleiner als ein
+  // grosser Radius (EC45 weltweit rund 10 KB statt 170 KB für die ganze Schweiz)
+  const adsbSchweiz = ctx.quelle<void, AdsbFlugzeug[]>({
+    id: 'rettung.adsb.schweiz',
+    wichtig: true,
+    name: 'ADS-B Schweiz nach Typ (adsb.lol)',
+    modul: 'rettung',
+    ttlSek: 30,
+    abruf: async () => {
+      const alle: AdsbFlugzeug[] = [];
+      for (const typ of konfig.heliTypen) alle.push(...(await adsbTypHolen(typ)));
+      return alle;
+    },
+    demo: () => [],
+    namensnennung: ADSB_NAMENSNENNUNG,
+    beschreibung: `Typen ${konfig.heliTypen.join(', ')}, gefiltert auf die Kennzeichen Liste und die Schweiz.`,
   });
   const alertswiss = ctx.quelle<void, Alert[]>({
     id: 'rettung.alertswiss',
@@ -212,7 +232,7 @@ function rettungLaufzeit(ctx: Kontext) {
     modul: 'rettung',
     ttlSek: 7 * 86400,
     abruf: (art) => overpassHolen(art, region),
-    demo: (art) => demoOsm(art, region),
+    demo: (art) => demoOsm(art.replace(/\.ch$/, ''), region),
     namensnennung: '© OpenStreetMap Mitwirkende (ODbL)',
     ungetestet: true,
     beschreibung: 'Overpass war von der Entwicklungsumgebung nicht erreichbar.',
@@ -272,11 +292,13 @@ function rettungLaufzeit(ctx: Kontext) {
     return km < 2 ? naechster.name : `${km} km ${richtungText(grad)} von ${naechster.name}`;
   }
 
-  /** Spital oder Landeplatz an der Position, aus dem Cache der Kartenebenen (eine Woche) */
+  /** Spital oder Landeplatz an der Position, ganze Schweiz (Cache eine Woche), sonst aus der Region */
   async function platzName(lat: number | null, lon: number | null): Promise<string | null> {
     if (lat === null || lon === null) return null;
-    const [spitaeler, landeplaetze] = await Promise.all([osm.hole('spital'), osm.hole('landeplatz')]);
-    return platzBei(lat, lon, spitaeler.daten ?? [], landeplaetze.daten ?? []);
+    const [spitaeler, landeplaetze] = await Promise.all([osm.hole('spital.ch'), osm.hole('landeplatz.ch')]);
+    const s = spitaeler.daten ?? (await osm.hole('spital')).daten ?? [];
+    const l = landeplaetze.daten ?? (await osm.hole('landeplatz')).daten ?? [];
+    return platzBei(lat, lon, s, l);
   }
 
   async function kennungen(): Promise<(Kennung & { push: boolean })[]> {
@@ -334,7 +356,10 @@ function rettungLaufzeit(ctx: Kontext) {
     if (!r.daten) return 'keine Daten';
     const k = await kennungen();
     const jetzt = ctx.jetzt().getTime();
-    positionen = heliFiltern(r.daten, k, konfig.heliAlle, region, jetzt);
+    const regional = heliFiltern(r.daten, k, konfig.heliAlle, region, jetzt);
+    // Fällt die Abfrage nach Typ aus, läuft die Region allein weiter
+    const ch = konfig.heliTypen.length ? await adsbSchweiz.hole(undefined, true) : null;
+    positionen = positionenVereinen(regional, ch?.daten ? schweizFiltern(ch.daten, k, jetzt) : []);
     await helisMetrik(positionen.length);
     positionenStand = r.stand;
     const ereignisse = erkennung.aktualisieren(positionen, jetzt);
@@ -371,7 +396,7 @@ function rettungLaufzeit(ctx: Kontext) {
       if (mitPush) {
         await ctx.alarm.melden({
           regel: 'rettung.heli',
-          titel: `${name} ${e.art === 'start' ? 'gestartet' : 'in der Region'}`,
+          titel: `${name} ${e.art === 'start' ? 'gestartet' : 'in der Luft'}`,
           text: `${e.art === 'start' ? 'Start' : 'Erfasst'} bei ${wo}${f.typ ? `, Typ ${f.typ}` : ''}. Nur Daten des Transponders, zeitnah aber ohne Gewähr.`,
           schluessel: `heli:${f.hex}`,
           tags: ['helicopter'],

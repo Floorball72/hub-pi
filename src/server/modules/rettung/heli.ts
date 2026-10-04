@@ -53,6 +53,22 @@ export async function adsbHolen(lat: number, lon: number, radiusKm: number): Pro
   return d.ac ?? [];
 }
 
+/** Alle Flugzeuge eines Typs weltweit (ICAO Typ, z.B. EC45 für H145). Antworten sind klein. */
+export async function adsbTypHolen(typ: string): Promise<AdsbFlugzeug[]> {
+  const d = await httpJson<{ ac?: AdsbFlugzeug[] }>(
+    `https://api.adsb.lol/v2/type/${encodeURIComponent(typ)}`,
+    { timeoutMs: 12000, abstandMs: 2000 },
+  );
+  return d.ac ?? [];
+}
+
+/** Grober Rahmen um die Schweiz (mit etwas Grenzgebiet) */
+export const SCHWEIZ = { sued: 45.8, nord: 47.85, west: 5.9, ost: 10.55 };
+
+export function inSchweiz(lat: number, lon: number): boolean {
+  return lat >= SCHWEIZ.sued && lat <= SCHWEIZ.nord && lon >= SCHWEIZ.west && lon <= SCHWEIZ.ost;
+}
+
 /** Muster: genaues Kennzeichen oder Präfix mit * am Ende (z.B. HB-ZR*) */
 export function musterPasst(kennzeichen: string | null | undefined, muster: string): boolean {
   if (!kennzeichen) return false;
@@ -73,6 +89,28 @@ export function istHelikopter(a: AdsbFlugzeug): boolean {
   return a.category === 'A7';
 }
 
+function position(
+  a: AdsbFlugzeug & { lat: number; lon: number },
+  organisation: string | null,
+  jetzt: number,
+) {
+  const amBoden = a.alt_baro === 'ground';
+  return {
+    hex: a.hex,
+    kennzeichen: a.r ?? null,
+    typ: a.t ?? null,
+    rufzeichen: a.flight?.trim() || null,
+    organisation,
+    lat: a.lat,
+    lon: a.lon,
+    hoeheFt: typeof a.alt_baro === 'number' ? a.alt_baro : amBoden ? 0 : null,
+    amBoden,
+    speedKn: a.gs ?? null,
+    kurs: a.track ?? null,
+    zeit: jetzt - Math.round((a.seen_pos ?? a.seen ?? 0) * 1000),
+  };
+}
+
 export function heliFiltern(
   flugzeuge: AdsbFlugzeug[],
   kennungen: Kennung[],
@@ -86,23 +124,32 @@ export function heliFiltern(
     if (distanzKm(region.lat, region.lon, a.lat, a.lon) > region.radiusKm) continue;
     const organisation = organisationFinden(a.r, kennungen);
     if (!organisation && !(alleHelikopter && istHelikopter(a))) continue;
-    const amBoden = a.alt_baro === 'ground';
-    aus.push({
-      hex: a.hex,
-      kennzeichen: a.r ?? null,
-      typ: a.t ?? null,
-      rufzeichen: a.flight?.trim() || null,
-      organisation,
-      lat: a.lat,
-      lon: a.lon,
-      hoeheFt: typeof a.alt_baro === 'number' ? a.alt_baro : amBoden ? 0 : null,
-      amBoden,
-      speedKn: a.gs ?? null,
-      kurs: a.track ?? null,
-      zeit: jetzt - Math.round((a.seen_pos ?? a.seen ?? 0) * 1000),
-    });
+    aus.push(position(a as AdsbFlugzeug & { lat: number; lon: number }, organisation, jetzt));
   }
   return aus;
+}
+
+/** Helikopter aus der Kennzeichen Liste in der ganzen Schweiz (aus der Abfrage nach Typ) */
+export function schweizFiltern(
+  flugzeuge: AdsbFlugzeug[],
+  kennungen: Kennung[],
+  jetzt: number,
+): HeliPosition[] {
+  const aus: HeliPosition[] = [];
+  for (const a of flugzeuge) {
+    if (typeof a.lat !== 'number' || typeof a.lon !== 'number' || !inSchweiz(a.lat, a.lon)) continue;
+    const organisation = organisationFinden(a.r, kennungen);
+    if (organisation)
+      aus.push(position(a as AdsbFlugzeug & { lat: number; lon: number }, organisation, jetzt));
+  }
+  return aus;
+}
+
+/** Positionen zusammenführen, die erste Liste hat Vorrang */
+export function positionenVereinen(...listen: HeliPosition[][]): HeliPosition[] {
+  const nachHex = new Map<string, HeliPosition>();
+  for (const liste of listen) for (const p of liste) if (!nachHex.has(p.hex)) nachHex.set(p.hex, p);
+  return [...nachHex.values()];
 }
 
 export interface Flug {

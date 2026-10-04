@@ -34,6 +34,7 @@ export interface Konfig {
   einsatzFeeds: Feed[];
   warnGebiete: string[];
   heliAlle: boolean;
+  heliTypen: string[];
   pagespeedKey: string;
   hibpKey: string;
   githubToken: string;
@@ -134,6 +135,10 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     einsatzFeeds: feedsParsen(e.EINSATZ_FEEDS),
     warnGebiete: liste(e.WARN_GEBIETE ?? 'St. Gallen;Appenzell;Thurgau;Toggenburg', ';'),
     heliAlle: e.HELI_ALLE !== 'false',
+    heliTypen: (e.HELI_TYPEN ?? 'A109,EC45,A169')
+      .split(',')
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean),
     pagespeedKey: e.PAGESPEED_API_KEY ?? '',
     hibpKey: e.HIBP_API_KEY ?? '',
     githubToken: e.GITHUB_TOKEN ?? '',
