@@ -128,6 +128,8 @@ function rettungLaufzeit(ctx: Kontext) {
   const { daten, konfig } = ctx;
   const region = { lat: konfig.region.lat, lon: konfig.region.lon, radiusKm: konfig.region.radiusKm };
   const erkennung = new FlugErkennung();
+  /** Startplatz laufender Flüge (hex), für die Liste «In der Luft» */
+  const startPlaetze = new Map<string, string>();
   let positionen: HeliPosition[] = [];
   let positionenStand: string | null = null;
   let positionenFehler: string | undefined;
@@ -366,6 +368,7 @@ function rettungLaufzeit(ctx: Kontext) {
       // Nur ein echter Start hat einen Startplatz, beim Erfassen ist der Heli schon unterwegs
       const startPlatz = f.startArt === 'start' ? await platzName(f.startLat, f.startLon) : null;
       if (e.art === 'landung' || e.art === 'signalverlust') {
+        startPlaetze.delete(f.hex);
         const endePlatz = await platzName(f.endeLat, f.endeLon);
         await flugSpeichern(f, startPlatz, endePlatz);
         const wo = endePlatz ? ` bei ${endePlatz}` : '';
@@ -386,6 +389,7 @@ function rettungLaufzeit(ctx: Kontext) {
         }
         continue;
       }
+      if (startPlatz) startPlaetze.set(f.hex, startPlatz);
       const ort = await ortName(f.startLat, f.startLon);
       const wo = startPlatz ? `${startPlatz} (${ort ?? 'unbekannt'})` : (ort ?? 'unbekannt');
       await ctx.aktivitaet('rettung', `${name} ${e.art === 'start' ? 'gestartet' : 'erfasst'} bei ${wo}`);
@@ -552,6 +556,45 @@ function rettungLaufzeit(ctx: Kontext) {
         fehler: positionenFehler,
         hinweis: 'Nur Luftfahrzeuge mit eingeschaltetem Transponder sind sichtbar.',
       };
+    });
+
+    // Helikopter aus der Kennzeichen Liste, die jetzt erfasst sind (ganze Schweiz)
+    app.get('/live', async () => {
+      if (!positionenStand) await heliRunde().catch(() => undefined);
+      const fluege = new Map(erkennung.laufende().map((f) => [f.hex, f]));
+      // Gemeinde höchstens 2 s abwarten, die Abfrage läuft weiter und füllt den Cache
+      const ortKurz = (lat: number, lon: number) =>
+        Promise.race([
+          ortName(lat, lon).catch(() => null),
+          new Promise<null>((ok) => setTimeout(() => ok(null), 2000)),
+        ]);
+      const helis = await Promise.all(
+        positionen
+          .filter((p) => p.organisation)
+          .map(async (p) => {
+            const f = fluege.get(p.hex);
+            return {
+              hex: p.hex,
+              organisation: p.organisation,
+              kennzeichen: p.kennzeichen,
+              typ: p.typ,
+              amBoden: p.amBoden,
+              hoeheFt: p.hoeheFt,
+              kmh: p.speedKn !== null ? Math.round(p.speedKn * 1.852) : null,
+              ort: await ortKurz(p.lat, p.lon),
+              seit: f ? new Date(f.start).toISOString() : null,
+              gestartet: f?.startArt === 'start',
+              startPlatz: startPlaetze.get(p.hex) ?? null,
+            };
+          }),
+      );
+      helis.sort(
+        (a, b) =>
+          Number(a.amBoden) - Number(b.amBoden) ||
+          Number(b.organisation === 'Rega') - Number(a.organisation === 'Rega') ||
+          (a.kennzeichen ?? '').localeCompare(b.kennzeichen ?? ''),
+      );
+      return { helis, stand: positionenStand, fehler: positionenFehler };
     });
 
     app.get<{ Querystring: { organisation?: string; tage?: string } }>('/statistik', async (req) => {

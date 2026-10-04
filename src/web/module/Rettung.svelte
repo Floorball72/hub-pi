@@ -28,6 +28,11 @@
     laufend: number;
     organisationen: string[];
   }
+  interface Live {
+    helis: { hex: string; organisation: string; kennzeichen: string | null; typ: string | null; amBoden: boolean; hoeheFt: number | null; kmh: number | null; ort: string | null; seit: string | null; gestartet: boolean; startPlatz: string | null }[];
+    stand: string | null;
+    fehler?: string;
+  }
   interface Meldungen {
     meldungen: { id: string; titel: string; link: string; zeit: string; kategorie: string; quelle: string; text: string }[];
     hinweis: string;
@@ -38,12 +43,20 @@
   let lage = $state<Lage | null>(null);
   let stat = $state<Statistik | null>(null);
   let meld = $state<Meldungen | null>(null);
+  let live = $state<Live | null>(null);
   let organisation = $state('Rega');
   let zeitraum = $state(90);
 
   $effect(() => {
     if (tab === 'Lage') api.get<Lage>('/api/m/rettung/lage').then((l) => (lage = l));
     if (tab === 'Einsätze') api.get<Meldungen>('/api/m/rettung/meldungen').then((m) => (meld = m));
+  });
+  $effect(() => {
+    if (tab !== 'Lage') return;
+    const holen = () => api.get<Live>('/api/m/rettung/live').then((l) => (live = l)).catch(() => {});
+    holen();
+    const t = setInterval(holen, 30000);
+    return () => clearInterval(t);
   });
   $effect(() => {
     if (tab === 'Rega Statistik') api.get<Statistik>(`/api/m/rettung/statistik?organisation=${encodeURIComponent(organisation)}&tage=${zeitraum}`).then((s) => (stat = s));
@@ -58,6 +71,31 @@
   {#if tab === 'Lage'}
     <Karte hoehe="min(62vh, 560px)" gruppen={['Rettung', 'Gefahren', 'Wetter']} zentrum={[47.35, 9.15]} zoom={9} />
     <p class="sehr-klein gedaempft">Helikopter: Es sind nur Luftfahrzeuge sichtbar, die einen Transponder (ADS-B oder Mode S mit Position) senden. Rettungswagen sind nicht öffentlich und werden nicht angezeigt.</p>
+
+    {#if live}
+      <section class="panel" style="margin-top:12px">
+        <div class="zeile-zwischen">
+          <h2>Jetzt erfasst, ganze Schweiz</h2>
+          <span class="sehr-klein gedaempft">{live.stand ? `Stand ${relativ(live.stand)}` : ''}</span>
+        </div>
+        {#if live.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
+        {#each live.helis as h (h.hex)}
+          <div class="zeile-zwischen klein heli">
+            <span class="zeile">
+              <span class="punkt {h.amBoden ? 'neutral' : h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span>
+              <span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span>
+                {#if h.startPlatz}<br /><span class="sehr-klein gedaempft">gestartet bei {h.startPlatz}</span>{/if}</span>
+            </span>
+            <span class="gedaempft rechts">
+              {h.amBoden ? 'am Boden' : [h.hoeheFt !== null ? `${h.hoeheFt} ft` : null, h.kmh !== null ? `${h.kmh} km/h` : null].filter(Boolean).join(' · ')}
+              {#if h.seit}<br /><span class="sehr-klein">{h.gestartet ? 'Start' : 'erfasst'} {relativ(h.seit)}</span>{/if}
+            </span>
+          </div>
+        {:else}
+          <p class="leer">Gerade kein Heli aus der Kennzeichen Liste mit Transponder erfasst.</p>
+        {/each}
+      </section>
+    {/if}
 
     {#if lage}
       <div class="raster-2" style="margin-top:12px">
@@ -195,6 +233,13 @@
 </ModulRahmen>
 
 <style>
+  .heli {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--rand);
+  }
+  .heli .rechts {
+    text-align: right;
+  }
   .meldung {
     padding: 8px 0;
     border-bottom: 1px solid #1a2330;
