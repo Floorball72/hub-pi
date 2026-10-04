@@ -15,6 +15,7 @@
     punkte = [],
     onklick,
     kompakt = false,
+    ebenenFest = null,
   }: {
     hoehe?: string;
     /** Nur Ebenen dieser Gruppen anzeigen (null = alle) */
@@ -25,6 +26,8 @@
     punkte?: GeoPunkt[];
     onklick?: (lat: number, lon: number) => void;
     kompakt?: boolean;
+    /** Genau diese Ebenen zeigen und einschalten, Auswahl wird nicht gespeichert */
+    ebenenFest?: string[] | null;
   } = $props();
 
   const BASIS = [
@@ -132,7 +135,13 @@
     return h;
   }
 
-  const sichtbareEbenen = $derived(gruppen ? ebenen.filter((e) => gruppen!.includes(e.gruppe)) : ebenen);
+  const sichtbareEbenen = $derived(
+    ebenenFest
+      ? ebenen.filter((e) => ebenenFest!.includes(e.id))
+      : gruppen
+        ? ebenen.filter((e) => gruppen!.includes(e.gruppe))
+        : ebenen,
+  );
   const gruppiert = $derived(
     Object.entries(
       sichtbareEbenen.reduce<Record<string, Ebene[]>>((acc, e) => {
@@ -222,6 +231,7 @@
       ebeneAn(e);
     }
     aktiv = neu;
+    if (ebenenFest) return;
     const liste = [...neu];
     schreiben('karte.auswahl', liste);
     api.put('/api/karte/auswahl', { auswahl: liste }).catch(() => {});
@@ -258,7 +268,7 @@
       const r = await api.get<{ ebenen: Ebene[]; auswahl: string[] | null }>('/api/karte/ebenen');
       ebenen = r.ebenen;
       const gespeichert = r.auswahl ?? lesen<string[] | null>('karte.auswahl', null);
-      const start = new Set(gespeichert ?? r.ebenen.filter((e) => e.standardAn).map((e) => e.id));
+      const start = new Set(ebenenFest ?? gespeichert ?? r.ebenen.filter((e) => e.standardAn).map((e) => e.id));
       aktiv = start;
       for (const e of sichtbareEbenen) if (start.has(e.id)) ebeneAn(e);
       seitenPunkteZeichnen(punkte);

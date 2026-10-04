@@ -1,14 +1,31 @@
 <script lang="ts">
   import type { Ampel, BriefingTeil, Kachel, ModulInfo } from '../../server/geteilt/typen.ts';
   import Icon from '../komponenten/Icon.svelte';
+  import Karte from '../komponenten/Karte.svelte';
   import KachelAnsicht from '../komponenten/KachelAnsicht.svelte';
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
+  import { relativ } from '../lib/format.ts';
+
+  interface LiveHeli {
+    hex: string;
+    organisation: string;
+    kennzeichen: string | null;
+    amBoden: boolean;
+    hoeheFt: number | null;
+    ort: string | null;
+    seit: string | null;
+    gestartet: boolean;
+    startPlatz: string | null;
+  }
 
   let daten = $state<{ status: Ampel; kacheln: Record<string, Kachel>; module: ModulInfo[]; demo: boolean } | null>(null);
   let briefing = $state<{ teile: BriefingTeil[] } | null>(null);
   let jetzt = $state(new Date());
   let fehler = $state(false);
+  let live = $state<{ helis: LiveHeli[]; fehler?: string } | null>(null);
+  const rettungAktiv = $derived(!!daten?.module.some((m) => m.id === 'rettung' && m.aktiv));
+  const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
 
   async function laden() {
     try {
@@ -17,12 +34,16 @@
     } catch {
       fehler = true;
     }
+    api
+      .get<{ helis: LiveHeli[]; fehler?: string }>('/api/m/rettung/live')
+      .then((l) => (live = l))
+      .catch(() => (live = null));
     api.get<{ teile: BriefingTeil[] }>('/api/briefing').then((b) => (briefing = b)).catch(() => {});
   }
 
   $effect(() => {
     laden();
-    const t = setInterval(laden, 60000);
+    const t = setInterval(laden, 30000);
     const u = setInterval(() => (jetzt = new Date()), 1000);
     return () => {
       clearInterval(t);
@@ -84,6 +105,30 @@
     </div>
   </section>
 
+  {#if rettungAktiv && !ansicht.fokus}
+    <section class="rettung-jetzt">
+      <div class="panel rj-liste">
+        <div class="zeile-zwischen">
+          <h2><Icon name="rettung" groesse={18} /> Rettung jetzt</h2>
+          <a class="sehr-klein" href="/modul/rettung">Mehr</a>
+        </div>
+        <div class="rj-zahl zahl">{inDerLuft.length}<span class="gedaempft klein"> {inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft'}, ganze Schweiz</span></div>
+        {#if live?.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
+        {#each inDerLuft.slice(0, 6) as h (h.hex)}
+          <div class="zeile-zwischen klein rj-heli">
+            <span class="zeile"><span class="punkt {h.organisation === 'Rega' ? 'ausfall' : 'warnung'}"></span><span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span></span></span>
+            <span class="gedaempft">{h.seit ? `${h.gestartet ? 'Start' : 'seit'} ${relativ(h.seit)}` : h.hoeheFt !== null ? `${h.hoeheFt} ft` : ''}</span>
+          </div>
+        {:else}
+          <p class="leer">Gerade ist kein Heli aus deiner Liste mit Transponder in der Luft.</p>
+        {/each}
+      </div>
+      <div class="rj-karte">
+        <Karte hoehe="320px" kompakt ebenenFest={['rettung.helis']} zentrum={[46.8, 8.23]} zoom={7} />
+      </div>
+    </section>
+  {/if}
+
   {#if briefing?.teile.length}
     <section class="briefing">
       <h2><Icon name="sonne" groesse={18} /> Briefing</h2>
@@ -123,6 +168,29 @@
 </div>
 
 <style>
+  .rettung-jetzt {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .rj-karte {
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .rj-zahl {
+    font-size: 2rem;
+    margin: 4px 0 8px;
+  }
+  .rj-heli {
+    padding: 5px 0;
+    border-bottom: 1px solid var(--rand);
+  }
+  @media (max-width: 760px) {
+    .rettung-jetzt {
+      grid-template-columns: 1fr;
+    }
+  }
   .held {
     display: flex;
     justify-content: space-between;
