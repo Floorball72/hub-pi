@@ -57,7 +57,7 @@ export async function adsbHolen(lat: number, lon: number, radiusKm: number): Pro
 export async function adsbTypHolen(typ: string): Promise<AdsbFlugzeug[]> {
   const d = await httpJson<{ ac?: AdsbFlugzeug[] }>(
     `https://api.adsb.lol/v2/type/${encodeURIComponent(typ)}`,
-    { timeoutMs: 12000, abstandMs: 2000 },
+    { timeoutMs: 12000, abstandMs: 5000 },
   );
   return d.ac ?? [];
 }
