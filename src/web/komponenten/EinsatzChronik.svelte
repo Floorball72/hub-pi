@@ -48,6 +48,7 @@
   let antwort = $state<Antwort | null>(null);
   let fehler = $state('');
   let gewaehlt = $state<string | null>(null);
+  let filter = $state<Einsatz['art'] | 'alle'>('alle');
 
   $effect(() => {
     const q = new URLSearchParams({ tage: String(tage), organisation });
@@ -71,6 +72,33 @@
   const HALT_FARBE: Record<string, string> = { basis: '#3ecf8e', spital: '#ef5350', einsatzort: '#ffb020', landeplatz: '#ffb020' };
 
   const einsatz = $derived(antwort?.einsaetze.find((e) => e.id === gewaehlt) ?? null);
+  const gefiltert = $derived((antwort?.einsaetze ?? []).filter((e) => filter === 'alle' || e.art === filter));
+  const zaehler = $derived(
+    (antwort?.einsaetze ?? []).reduce<Record<string, number>>((z, e) => {
+      z[e.art] = (z[e.art] ?? 0) + 1;
+      return z;
+    }, {}),
+  );
+  const flugTotal = $derived(gefiltert.reduce((s, e) => s + e.flugMin, 0));
+  const ART_LISTE = Object.keys(ARTEN) as Einsatz['art'][];
+
+  /** Nach Tag gruppiert, neuste zuerst */
+  const tageListe = $derived.by(() => {
+    const g = new Map<string, Einsatz[]>();
+    for (const e of gefiltert) {
+      const tag = new Date(e.start).toDateString();
+      g.set(tag, [...(g.get(tag) ?? []), e]);
+    }
+    return [...g.entries()].map(([tag, liste]) => ({ tag, titel: tagTitel(liste[0].start), liste }));
+  });
+
+  function tagTitel(iso: string) {
+    const d = new Date(iso).toDateString();
+    const wt = new Date(iso).toLocaleDateString('de-CH', { weekday: 'long' });
+    if (d === new Date().toDateString()) return `Heute, ${wt}`;
+    if (d === new Date(Date.now() - 86400000).toDateString()) return `Gestern, ${wt}`;
+    return `${wt}, ${datum(iso)}`;
+  }
 
   function minuten(m: number | null) {
     if (m === null) return 'offen';
@@ -125,85 +153,226 @@
   );
 </script>
 
-<div class="zeile" style="margin-bottom:10px">
-  <select bind:value={organisation} style="width:auto" aria-label="Organisation">
-    <option value="Rega">Rega</option>
-    <option value="alle">Alle Helikopter</option>
-  </select>
-  <select bind:value={tage} style="width:auto" aria-label="Zeitraum">
-    <option value={3}>3 Tage</option>
-    <option value={7}>7 Tage</option>
-    <option value={30}>30 Tage</option>
-  </select>
-  {#if antwort}<span class="klein gedaempft">{antwort.anzahl} Einsätze{antwort.demo ? ' (Demo)' : ''}</span>{/if}
+<div class="kopf">
+  <div class="zeile">
+    <select bind:value={organisation} style="width:auto" aria-label="Organisation">
+      <option value="Rega">Rega</option>
+      <option value="alle">Alle Helikopter</option>
+    </select>
+    <select bind:value={tage} style="width:auto" aria-label="Zeitraum">
+      <option value={3}>3 Tage</option>
+      <option value={7}>7 Tage</option>
+      <option value={30}>30 Tage</option>
+    </select>
+  </div>
+  {#if antwort}
+    <div class="filter" role="group" aria-label="Art des Einsatzes">
+      <button type="button" class:an={filter === 'alle'} onclick={() => (filter = 'alle')}>Alle <span class="zahl">{antwort.anzahl}</span></button>
+      {#each ART_LISTE as a (a)}
+        {#if zaehler[a]}
+          <button type="button" class="art-{a}" class:an={filter === a} onclick={() => (filter = a)}>
+            <span class="punkt"></span>{ARTEN[a]} <span class="zahl">{zaehler[a]}</span>
+          </button>
+        {/if}
+      {/each}
+    </div>
+  {/if}
 </div>
 
 {#if fehler}<div class="hinweis ausfall klein">{fehler}</div>{/if}
 
 {#if antwort}
-  {#if einsatz}
-    {#key einsatz.id}
-      <Karte hoehe="min(48vh, 420px)" ebenenFest={[]} {punkte} {linien} einpassen basisStart="nacht" />
-    {/key}
-  {/if}
-  <div class="liste">
-    {#each antwort.einsaetze as e (e.id)}
-      <button type="button" class="einsatz panel" class:aktiv={e.id === gewaehlt} onclick={() => (gewaehlt = e.id)}>
-        <div class="zeile-zwischen">
-          <span>
-            <strong>{e.organisation ?? 'Heli'} {e.kennzeichen ?? e.hex}</strong>
-            <span class="marke {ART_KLASSE[e.art]}">{ARTEN[e.art]}</span>
-            {#if e.inDerLuft}<span class="marke ausfall">in der Luft</span>{/if}
-          </span>
-          <span class="klein gedaempft">{datum(e.start)} · {zeit(e.start)} bis {e.ende ? zeit(e.ende) : 'offen'}</span>
+  <p class="sehr-klein gedaempft" style="margin:0 0 8px">
+    {gefiltert.length} Einsätze, zusammen {minuten(flugTotal)} in der Luft{antwort.demo ? ' (Demo)' : ''}
+  </p>
+  <div class="aufteilung">
+    <div class="karte-spalte">
+      {#if einsatz}
+        {#key einsatz.id}
+          <Karte hoehe="min(48vh, 440px)" ebenenFest={[]} {punkte} {linien} einpassen basisStart="nacht" />
+        {/key}
+        <div class="auswahl klein">
+          <strong>{einsatz.organisation ?? 'Heli'} {einsatz.kennzeichen ?? einsatz.hex}</strong>
+          <span class="gedaempft">{datum(einsatz.start)}, {zeit(einsatz.start)} bis {einsatz.ende ? zeit(einsatz.ende) : 'offen'}</span>
+          <button type="button" class="klein" onclick={() => navigieren(`/heli?hex=${encodeURIComponent(einsatz.hex)}`)}>Heli Details</button>
         </div>
-        <div class="stationen">
-          {#each stationen(e) as s, i (i)}
-            {#if i > 0}<span class="pfeil" aria-hidden="true">›</span>{/if}
-            <span class="station {s.art}" class:verlust={s.verlust}>
-              <span class="punkt"></span>{s.name}{#if s.zeit}<span class="gedaempft"> {zeit(s.zeit)}</span>{/if}
-            </span>
-          {/each}
-        </div>
-        <div class="sehr-klein gedaempft">
-          Dauer {minuten(e.dauerMin)} · Flugzeit {minuten(e.flugMin)}{#if e.basis} · Basis {e.basis}{/if}{#if !e.zurueck && !e.inDerLuft} · Rückflug nicht erfasst{/if}
-        </div>
-      </button>
-    {:else}
-      <p class="klein gedaempft">Keine Einsätze in diesem Zeitraum erfasst.</p>
-    {/each}
-  </div>
-  {#if einsatz}
-    <div class="zeile" style="margin-top:6px">
-      <button type="button" class="klein" onclick={() => navigieren(`/heli?hex=${encodeURIComponent(einsatz.hex)}`)}>Heli Details</button>
+      {/if}
     </div>
-  {/if}
+    <div class="liste">
+      {#each tageListe as t (t.tag)}
+        <h3 class="tag">{t.titel} <span class="gedaempft">· {t.liste.length}</span></h3>
+        {#each t.liste as e (e.id)}
+          <button type="button" class="einsatz art-{e.art}" class:aktiv={e.id === gewaehlt} onclick={() => (gewaehlt = e.id)}>
+            <span class="uhr">
+              <strong>{zeit(e.start)}</strong>
+              <span class="sehr-klein gedaempft">{e.ende ? zeit(e.ende) : 'offen'}</span>
+            </span>
+            <span class="inhalt">
+              <span class="zeile-zwischen">
+                <span>
+                  <strong>{e.kennzeichen ?? e.hex}</strong>
+                  <span class="gedaempft klein">{e.basis ? e.basis.replace('Rega Basis ', '') : (e.organisation ?? '')}</span>
+                </span>
+                <span>
+                  {#if e.inDerLuft}<span class="marke ausfall">in der Luft</span>{/if}
+                  <span class="marke {ART_KLASSE[e.art]}">{ARTEN[e.art]}</span>
+                </span>
+              </span>
+              <span class="stationen">
+                {#each stationen(e) as s, i (i)}
+                  {#if i > 0}<span class="pfeil" aria-hidden="true">›</span>{/if}
+                  <span class="station {s.art}" class:verlust={s.verlust}><span class="punkt"></span>{s.name}</span>
+                {/each}
+              </span>
+              <span class="sehr-klein gedaempft">
+                Dauer {minuten(e.dauerMin)} · Flugzeit {minuten(e.flugMin)}{#if !e.zurueck && !e.inDerLuft} · Rückflug nicht erfasst{/if}
+              </span>
+            </span>
+          </button>
+        {/each}
+      {:else}
+        <p class="klein gedaempft">Keine Einsätze in diesem Zeitraum erfasst.</p>
+      {/each}
+    </div>
+  </div>
   <p class="sehr-klein gedaempft">
-    Abgeleitet aus selbst erfassten Transponderdaten (ADS-B), ohne Gewähr. Ein Einsatz beginnt mit dem Start und endet bei der Rückkehr an eine Basis. Orte ohne bekannten Platz gelten als Einsatzort.
+    Abgeleitet aus selbst erfassten Transponderdaten (ADS-B), ohne Gewähr. Ein Einsatz beginnt mit dem Start und endet bei der Rückkehr an eine Basis. Orte ohne bekannten Platz gelten als Einsatzort. Kurze Lücken im Empfang gelten nicht als Landung.
   </p>
 {:else if !fehler}
   <p class="klein gedaempft">Lade…</p>
 {/if}
 
 <style>
+  .kopf {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .filter button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: transparent;
+    border: 1px solid var(--rand);
+    color: var(--text-2);
+  }
+  .filter button.an {
+    color: var(--text);
+    border-color: var(--akzent, #4aa3ff);
+    background: #4aa3ff1a;
+  }
+  .aufteilung {
+    display: grid;
+    gap: 12px;
+  }
+  @media (min-width: 900px) {
+    .aufteilung {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+      align-items: start;
+    }
+    .karte-spalte {
+      position: sticky;
+      top: 12px;
+      order: 2;
+    }
+    .liste {
+      max-height: 78vh;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+  }
+  .auswahl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: center;
+    margin-top: 6px;
+  }
+  .auswahl button {
+    margin-left: auto;
+  }
   .liste {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
+    gap: 4px;
+  }
+  .tag {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+    margin: 10px 0 2px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 4px 0;
+    z-index: 1;
+  }
+  .tag:first-child {
+    margin-top: 0;
   }
   .einsatz {
     text-align: left;
     color: inherit;
     font: inherit;
     cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 3.4rem 1fr;
+    gap: 10px;
     width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    border-left: 3px solid #8a97a8;
+    background: #ffffff08;
+  }
+  .einsatz:hover {
+    background: #ffffff10;
+  }
+  .einsatz.art-einsatzort {
+    border-left-color: #ffb020;
+  }
+  .einsatz.art-verlegung,
+  .einsatz.art-spital {
+    border-left-color: #7cc4ff;
   }
   .einsatz.aktiv {
-    border-color: var(--akzent, #4aa3ff);
+    border-top-color: var(--akzent, #4aa3ff);
+    border-right-color: var(--akzent, #4aa3ff);
+    border-bottom-color: var(--akzent, #4aa3ff);
+    background: #4aa3ff14;
+  }
+  .uhr {
+    display: flex;
+    flex-direction: column;
+    font-variant-numeric: tabular-nums;
+  }
+  .inhalt {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .filter .punkt {
+    background: #8a97a8;
+  }
+  .filter .art-einsatzort .punkt {
+    background: #ffb020;
+  }
+  .filter .art-verlegung .punkt,
+  .filter .art-spital .punkt {
+    background: #7cc4ff;
   }
   .marke {
     font-size: 0.72rem;
@@ -230,15 +399,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 6px;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
   .station {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 2px 8px;
-    border-radius: 6px;
-    background: #ffffff0d;
   }
   .punkt {
     width: 8px;
