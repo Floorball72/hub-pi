@@ -1,0 +1,40 @@
+// Tests für Logik der Oberfläche ohne Browser (Befehlspalette).
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import { filtern, MODUL_TABS, modulBefehle, normalisieren, SEITEN } from '../src/web/lib/befehle.ts';
+
+describe('Befehlspalette', () => {
+  it('kennt die Tabs aller Module (Liste aktuell halten)', () => {
+    const ordner = 'src/web/module';
+    const gefunden: Record<string, string[]> = {};
+    const ids: Record<string, string> = {};
+    for (const datei of readdirSync(ordner).filter((d) => d.endsWith('.svelte'))) {
+      const text = readFileSync(`${ordner}/${datei}`, 'utf8');
+      const id = /<ModulRahmen modulId="([a-z]+)"/.exec(text)?.[1];
+      const tabs = /<ModulRahmen[^>]*tabs=\{\[([^\]]*)\]\}/.exec(text)?.[1];
+      if (!id || !tabs) continue;
+      ids[id] = datei;
+      gefunden[id] = [...tabs.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    }
+    assert.ok(Object.keys(gefunden).length >= 15);
+    assert.deepEqual(MODUL_TABS, gefunden);
+  });
+
+  it('findet ohne Umlaute und mit Teilwörtern', () => {
+    const alle = [
+      ...SEITEN,
+      ...modulBefehle([
+        { id: 'rettung', name: 'Rettung', symbol: 'rettung', aktiv: true },
+        { id: 'aenderungen', name: 'Änderungs Wächter', symbol: 'aenderungen', aktiv: true },
+        { id: 'scont', name: 'scont', symbol: 'scont', aktiv: true },
+      ]),
+    ];
+    assert.equal(normalisieren('Änderungen'), normalisieren('Aenderungen'));
+    assert.equal(filtern(alle, 'aenderung')[0].id, 'm:aenderungen');
+    assert.equal(filtern(alle, 'rega stat')[0].id, 't:rettung:Rega Statistik');
+    assert.equal(filtern(alle, 'chronik')[0].link, '/modul/rettung#tab=Chronik');
+    assert.equal(filtern(alle, 'karte')[0].id, 's:/karte');
+    assert.equal(filtern(alle, 'gibtsnicht').length, 0);
+  });
+});

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import type { ModulInfo } from '../server/geteilt/typen.ts';
+  import Befehlspalette from './komponenten/Befehlspalette.svelte';
   import Bestaetigung from './komponenten/Bestaetigung.svelte';
   import Icon from './komponenten/Icon.svelte';
   import Meldungen from './komponenten/Meldungen.svelte';
@@ -9,6 +10,7 @@
   import { lesen, schreiben } from './lib/speicher.ts';
   import { ansicht } from './lib/ansicht.svelte.ts';
   import { gruppieren, STANDARD_ZU } from './lib/navigation.ts';
+  import { palette, paletteOeffnen } from './lib/palette.svelte.ts';
   import Start from './seiten/Start.svelte';
   import Login from './seiten/Login.svelte';
 
@@ -53,7 +55,6 @@
   let sitzung = $state<{ angemeldet: boolean; benutzer: string | null; demo: boolean; einrichtungOffen: boolean } | null>(null);
   let module = $state<ModulInfo[]>([]);
   let menueOffen = $state(false);
-  let suchtext = $state('');
   // Zugeklappte Gruppen der Seitenleiste, im Browser gemerkt
   // Eigener Schlüssel seit der neuen Gruppierung, damit «Wenig genutzt» zugeklappt startet
   let zu = $state<string[]>(lesen('nav.zu.v2', STANDARD_ZU));
@@ -99,10 +100,12 @@
     await api.post('/api/logout');
     navigieren('/login');
   }
-  function suchen(e: SubmitEvent) {
-    e.preventDefault();
-    if (suchtext.trim().length >= 2) navigieren(`/suche?q=${encodeURIComponent(suchtext.trim())}`);
+  function aktion(name: string) {
+    if (name === 'kiosk') kioskUmschalten();
+    else if (name === 'fokus') fokusUmschalten();
+    else if (name === 'abmelden') abmelden();
   }
+  const mac = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
   ansicht.fokus = lesen('fokus', false);
 
@@ -111,9 +114,11 @@
 
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === '/' && !(e.target as HTMLElement).closest('input, textarea, select')) {
+    const imFeld = e.target instanceof Element && !!e.target.closest('input, textarea, select, [contenteditable]');
+    if (sitzung?.angemeldet && ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !imFeld))) {
       e.preventDefault();
-      document.getElementById('globale-suche')?.focus();
+      if (palette.offen) palette.offen = false;
+      else paletteOeffnen();
     }
     if (e.key === 'Escape' && ansicht.kiosk) ansicht.kiosk = false;
   }}
@@ -170,10 +175,11 @@
       {#if !ansicht.kiosk}
         <header class="leiste">
           <button class="leise menue-knopf" aria-label="Menü" onclick={() => (menueOffen = !menueOffen)}><Icon name="menu" /></button>
-          <form class="suche" onsubmit={suchen} role="search">
+          <button type="button" class="suche" onclick={() => paletteOeffnen()} aria-label="Suchen oder springen" title="Suchen oder springen ({mac ? '⌘' : 'Ctrl'} K)">
             <Icon name="suche" groesse={16} />
-            <input id="globale-suche" type="search" placeholder="Suchen" title="Taste / springt hierher" bind:value={suchtext} aria-label="Globale Suche" />
-          </form>
+            <span class="suche-text">Suchen oder springen…</span>
+            <kbd class="suche-taste">{mac ? '⌘' : 'Ctrl'} K</kbd>
+          </button>
           {#if sitzung.demo}<span class="marke demo" title="Alle Daten sind Beispieldaten">Demo</span>{/if}
           <button class="leise" class:an={ansicht.fokus} title="Fokusmodus: nur Wichtiges" aria-label="Fokusmodus" onclick={fokusUmschalten}><Icon name="fokus" /></button>
           <button class="leise" title="Kiosk Modus" aria-label="Kiosk Modus" onclick={kioskUmschalten}><Icon name="kiosk" /></button>
@@ -206,6 +212,7 @@
   </div>
 {/if}
 
+{#if sitzung?.angemeldet}<Befehlspalette {module} onaktion={aktion} />{/if}
 <Bestaetigung />
 <Meldungen />
 
@@ -342,14 +349,32 @@
     padding: 0 14px;
     color: var(--text-3);
   }
-  .suche input {
-    border: none;
-    background: transparent;
-    padding: 6px 0;
-    min-height: 36px;
+  button.suche {
+    min-height: 38px;
+    font-weight: 400;
+    font-size: 0.92rem;
+    cursor: text;
+    text-align: left;
   }
-  .suche input:focus {
-    outline: none;
+  button.suche:hover {
+    border-color: var(--akzent);
+    color: var(--text-2);
+  }
+  .suche-text {
+    flex: 1;
+  }
+  .suche-taste {
+    font-family: var(--schrift-zahl);
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--rand-hell);
+    color: var(--text-3);
+  }
+  @media (max-width: 760px) {
+    .suche-taste {
+      display: none;
+    }
   }
   .inhalt {
     padding: 20px;
