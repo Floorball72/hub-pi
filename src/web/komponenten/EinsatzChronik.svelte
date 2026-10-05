@@ -318,6 +318,7 @@
     background: var(--bg);
     padding: 4px 0;
     z-index: 1;
+    flex-shrink: 0;
   }
   .tag:first-child {
     margin-top: 0;
@@ -330,6 +331,7 @@
     display: grid;
     grid-template-columns: 3.4rem 1fr;
     gap: 10px;
+    flex-shrink: 0;
     width: 100%;
     padding: 8px 10px;
     border-radius: 8px;
