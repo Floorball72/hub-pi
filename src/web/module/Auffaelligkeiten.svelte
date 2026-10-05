@@ -184,7 +184,8 @@
     vector-effect: non-scaling-stroke;
   }
   .ereignis {
-    border-left: 2px solid var(--warnung);
-    padding-left: 8px;
+    background: color-mix(in srgb, var(--warnung) 10%, transparent);
+    border-radius: 6px;
+    padding: 6px 8px;
   }
 </style>

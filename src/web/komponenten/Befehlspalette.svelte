@@ -240,13 +240,6 @@
     border-radius: 16px;
     box-shadow: 0 24px 80px #000a;
     overflow: hidden;
-    animation: auf 0.14s ease-out;
-  }
-  @keyframes auf {
-    from {
-      opacity: 0;
-      transform: translateY(-6px) scale(0.99);
-    }
   }
   .eingabe {
     display: flex;

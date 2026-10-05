@@ -325,7 +325,8 @@
     justify-content: space-between;
     gap: 8px;
     padding: 12px 14px;
-    border-left: 3px solid var(--warnung);
+    border-color: color-mix(in srgb, var(--warnung) 45%, var(--rand));
+    background: color-mix(in srgb, var(--warnung) 6%, var(--flaeche-2));
   }
   .notiz p {
     margin: 0;

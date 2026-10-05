@@ -85,13 +85,13 @@
     color: inherit;
     padding: 10px 14px;
     margin-bottom: 8px;
-    border-left: 3px solid var(--farbe);
+    border-color: color-mix(in srgb, var(--farbe) 40%, var(--rand));
+    background: color-mix(in srgb, var(--farbe) 7%, var(--flaeche-2));
   }
   @media (hover: hover) and (pointer: fine) {
     .eintrag:hover {
       text-decoration: none;
-      border-color: var(--rand-hell);
-      border-left-color: var(--farbe);
+      border-color: color-mix(in srgb, var(--farbe) 70%, var(--rand));
     }
   }
   .zeit {

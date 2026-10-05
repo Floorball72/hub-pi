@@ -234,7 +234,8 @@ button,
   min-height: 38px;
   transition:
     background 0.15s,
-    border-color 0.15s;
+    border-color 0.15s,
+    transform 0.16s ease-out;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -246,6 +247,10 @@ button,
     border-color: #3a4d65;
     text-decoration: none;
   }
+}
+button:active:not(:disabled),
+.knopf:active {
+  transform: scale(0.97);
 }
 button:disabled {
   opacity: 0.5;
