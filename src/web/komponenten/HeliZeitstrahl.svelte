@@ -142,8 +142,10 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .zs-name:hover {
-    text-decoration: underline;
+  @media (hover: hover) and (pointer: fine) {
+    .zs-name:hover {
+      text-decoration: underline;
+    }
   }
   .zs-spur {
     position: relative;
@@ -168,9 +170,11 @@
     opacity: 0.85;
     transform: translateX(-1px);
   }
-  .zs-balken:hover {
-    opacity: 1;
-    outline: 2px solid var(--text);
+  @media (hover: hover) and (pointer: fine) {
+    .zs-balken:hover {
+      opacity: 1;
+      outline: 2px solid var(--text);
+    }
   }
   .zs-balken.laufend {
     background: repeating-linear-gradient(45deg, var(--farbe) 0 6px, transparent 6px 10px);

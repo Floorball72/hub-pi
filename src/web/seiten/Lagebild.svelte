@@ -707,8 +707,10 @@
     color: inherit;
     text-decoration: none;
   }
-  .lb-heli:hover {
-    border-color: var(--text-2);
+  @media (hover: hover) and (pointer: fine) {
+    .lb-heli:hover {
+      border-color: var(--text-2);
+    }
   }
   .lb-basen {
     display: grid;

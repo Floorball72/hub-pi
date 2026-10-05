@@ -174,9 +174,11 @@
     display: grid;
     gap: 4px;
   }
-  .einsatz:hover {
-    text-decoration: none;
-    border-color: var(--rand-hell);
+  @media (hover: hover) and (pointer: fine) {
+    .einsatz:hover {
+      text-decoration: none;
+      border-color: var(--rand-hell);
+    }
   }
   .gross {
     font-size: 1.8rem;

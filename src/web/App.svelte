@@ -251,8 +251,10 @@
     color: var(--text);
     padding: 4px 8px 10px;
   }
-  .logo:hover {
-    text-decoration: none;
+  @media (hover: hover) and (pointer: fine) {
+    .logo:hover {
+      text-decoration: none;
+    }
   }
   nav a {
     display: flex;
@@ -263,10 +265,12 @@
     color: var(--text-2);
     font-size: 0.92rem;
   }
-  nav a:hover {
-    background: var(--flaeche-3);
-    color: var(--text);
-    text-decoration: none;
+  @media (hover: hover) and (pointer: fine) {
+    nav a:hover {
+      background: var(--flaeche-3);
+      color: var(--text);
+      text-decoration: none;
+    }
   }
   nav a.aktiv {
     background: linear-gradient(90deg, #4cc9f01f, transparent);
@@ -294,8 +298,10 @@
     color: var(--text-3);
     cursor: pointer;
   }
-  .trenner:hover:not(:disabled) {
-    color: var(--text-2);
+  @media (hover: hover) and (pointer: fine) {
+    .trenner:hover:not(:disabled) {
+      color: var(--text-2);
+    }
   }
   .trenner:disabled {
     cursor: default;
@@ -358,9 +364,11 @@
     cursor: text;
     text-align: left;
   }
-  button.suche:hover {
-    border-color: var(--akzent);
-    color: var(--text-2);
+  @media (hover: hover) and (pointer: fine) {
+    button.suche:hover {
+      border-color: var(--akzent);
+      color: var(--text-2);
+    }
   }
   .suche-text {
     flex: 1;

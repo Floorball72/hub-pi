@@ -284,9 +284,11 @@
     display: grid;
     gap: 6px;
   }
-  .seite:hover {
-    text-decoration: none;
-    border-color: var(--rand-hell);
+  @media (hover: hover) and (pointer: fine) {
+    .seite:hover {
+      text-decoration: none;
+      border-color: var(--rand-hell);
+    }
   }
   .seite.unten {
     border-color: #f8717166;

@@ -87,10 +87,12 @@
     margin-bottom: 8px;
     border-left: 3px solid var(--farbe);
   }
-  .eintrag:hover {
-    text-decoration: none;
-    border-color: var(--rand-hell);
-    border-left-color: var(--farbe);
+  @media (hover: hover) and (pointer: fine) {
+    .eintrag:hover {
+      text-decoration: none;
+      border-color: var(--rand-hell);
+      border-left-color: var(--farbe);
+    }
   }
   .zeit {
     width: 70px;

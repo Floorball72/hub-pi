@@ -74,10 +74,12 @@
     background: var(--ausfall);
     opacity: 1;
   }
-  .kachel:hover {
-    border-color: var(--rand-hell);
-    text-decoration: none;
-    transform: translateY(-1px);
+  @media (hover: hover) and (pointer: fine) {
+    .kachel:hover {
+      border-color: var(--rand-hell);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
   }
   .kopf {
     display: flex;

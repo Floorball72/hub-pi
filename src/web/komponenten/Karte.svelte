@@ -465,8 +465,10 @@
     cursor: pointer;
     border-radius: 6px;
   }
-  .ebene:hover {
-    background: #ffffff08;
+  @media (hover: hover) and (pointer: fine) {
+    .ebene:hover {
+      background: #ffffff08;
+    }
   }
   .ebene.gesperrt {
     opacity: 0.55;
@@ -622,8 +624,10 @@
       0 0 14px color-mix(in srgb, var(--farbe) 60%, transparent);
     transition: transform 0.2s;
   }
-  :global(.hub-symbol:hover) {
-    transform: scale(1.15);
+  @media (hover: hover) and (pointer: fine) {
+    :global(.hub-symbol:hover) {
+      transform: scale(1.15);
+    }
   }
   :global(.hub-symbol.puls::after) {
     content: '';

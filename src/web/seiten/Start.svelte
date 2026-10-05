@@ -401,8 +401,10 @@
     color: inherit;
     text-decoration: none;
   }
-  .rj-heli:hover strong {
-    text-decoration: underline;
+  @media (hover: hover) and (pointer: fine) {
+    .rj-heli:hover strong {
+      text-decoration: underline;
+    }
   }
   @media (max-width: 760px) {
     .rettung-jetzt {

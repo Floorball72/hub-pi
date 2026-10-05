@@ -262,8 +262,10 @@
   .klickbar {
     cursor: pointer;
   }
-  .klickbar:hover td {
-    background: #ffffff05;
+  @media (hover: hover) and (pointer: fine) {
+    .klickbar:hover td {
+      background: #ffffff05;
+    }
   }
   .kompakt td {
     padding: 5px 6px;

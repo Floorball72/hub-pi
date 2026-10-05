@@ -335,9 +335,11 @@
     gap: 6px;
     color: var(--text);
   }
-  .ev:hover {
-    text-decoration: none;
-    border-color: #3a4d65;
+  @media (hover: hover) and (pointer: fine) {
+    .ev:hover {
+      text-decoration: none;
+      border-color: #3a4d65;
+    }
   }
   .ev.vorbei {
     opacity: 0.6;

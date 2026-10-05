@@ -16,8 +16,10 @@
   .knopf-flaeche {
     color: inherit;
   }
-  .knopf-flaeche:hover {
-    text-decoration: none;
-    border-color: var(--rand-hell);
+  @media (hover: hover) and (pointer: fine) {
+    .knopf-flaeche:hover {
+      text-decoration: none;
+      border-color: var(--rand-hell);
+    }
   }
 </style>

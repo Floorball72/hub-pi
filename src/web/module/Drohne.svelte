@@ -261,8 +261,10 @@
     align-items: center;
     color: inherit;
   }
-  .ort-zeile:hover {
-    text-decoration: none;
+  @media (hover: hover) and (pointer: fine) {
+    .ort-zeile:hover {
+      text-decoration: none;
+    }
   }
   .block {
     display: block;

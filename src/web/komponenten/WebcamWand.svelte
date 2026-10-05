@@ -333,8 +333,10 @@
     filter: saturate(0.9) contrast(1.05);
     transition: transform 0.4s ease;
   }
-  .kamera:hover img {
-    transform: scale(1.04);
+  @media (hover: hover) and (pointer: fine) {
+    .kamera:hover img {
+      transform: scale(1.04);
+    }
   }
   /* Feine Zeilen wie auf einem Überwachungsmonitor */
   .kamera::after {

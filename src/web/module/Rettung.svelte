@@ -361,8 +361,10 @@
     color: inherit;
     text-decoration: none;
   }
-  .heli:hover strong {
-    text-decoration: underline;
+  @media (hover: hover) and (pointer: fine) {
+    .heli:hover strong {
+      text-decoration: underline;
+    }
   }
   .heli .rechts {
     text-align: right;
