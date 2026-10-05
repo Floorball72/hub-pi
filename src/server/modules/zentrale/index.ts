@@ -1,7 +1,7 @@
 // Zentrale: Systemstatus, Schnellnotizen, Morgenbriefing und Timeline Rahmen.
 import { tabelle } from '../../daten/schema.ts';
 import type { ModulDef } from '../../kern/modul.ts';
-import { systemStatus } from '../../kern/system.ts';
+import { stromText, systemStatus } from '../../kern/system.ts';
 import { lokal, lokalZeit, tagesBeginn, vonLokal } from '../../kern/zeit.ts';
 import type { Ampel, BriefingTeil, Kachel } from '../../geteilt/typen.ts';
 
@@ -52,6 +52,13 @@ export const zentrale: ModulDef = {
       beschreibung: 'Meldet, wenn auf der SD Karte weniger Platz frei ist als die Schwelle',
       schwelle: 2,
       schwelleLabel: 'GB frei',
+      prioritaet: 3,
+      cooldownMin: 720,
+    },
+    {
+      id: 'unterspannung',
+      name: 'Unterspannung am Pi',
+      beschreibung: 'Meldet, wenn das Netzteil zu wenig Spannung liefert und der Pi sich drosselt',
       prioritaet: 3,
       cooldownMin: 720,
     },
@@ -153,6 +160,15 @@ export const zentrale: ModulDef = {
                 schluessel: 'speicher',
               });
             }
+            if (s.strom?.unterspannung) {
+              await ctx.alarm.melden({
+                regel: 'zentrale.unterspannung',
+                titel: 'Pi Hub: Unterspannung',
+                text: `Das Netzteil liefert zu wenig Spannung${s.strom.gedrosselt ? ', der Pi drosselt sich' : ''}. Netzteil oder Kabel prüfen.`,
+                schluessel: 'unterspannung',
+                tags: ['zap'],
+              });
+            }
             return `${s.temperaturC ?? '?'} °C, ${s.ramVerfuegbarMb} MB RAM frei`;
           },
         },
@@ -162,6 +178,7 @@ export const zentrale: ModulDef = {
         let status: Ampel = 'ok';
         if ((s.temperaturC ?? 0) > 70 || s.prozessRssMb > 280 || (s.speicherFreiGb ?? 99) < 3)
           status = 'warnung';
+        if (s.strom?.unterspannung) status = 'warnung';
         if ((s.temperaturC ?? 0) > 80 || s.ramVerfuegbarMb < 80) status = 'ausfall';
         return {
           status,
@@ -182,6 +199,19 @@ export const zentrale: ModulDef = {
                   : 'getrennt',
               status: s.tailscale.verbunden ? 'ok' : 'warnung',
             },
+            ...(s.strom
+              ? [
+                  {
+                    text: 'Strom',
+                    wert: stromText(s.strom),
+                    status: (s.strom.unterspannung
+                      ? 'warnung'
+                      : s.strom.unterspannungSeitStart
+                        ? 'neutral'
+                        : 'ok') as Ampel,
+                  },
+                ]
+              : []),
             {
               text: 'Backup',
               wert: s.backup.alterStunden === null ? 'keins' : `vor ${Math.round(s.backup.alterStunden)} h`,

@@ -20,6 +20,7 @@
     tailscale: { installiert: boolean; verbunden: boolean | null; name?: string; ip?: string };
     backup: { letztes: string | null; alterStunden: number | null; anzahl: number };
     drosselung: string | null;
+    strom: { unterspannung: boolean; gedrosselt: boolean; frequenzBegrenzt: boolean; temperaturGrenze: boolean; unterspannungSeitStart: boolean; gedrosseltSeitStart: boolean } | null;
     node: string;
   }
   interface Backup {
@@ -91,6 +92,11 @@
       <h3>CPU Temperatur</h3>
       <div class="zahl gross" style="color:{(s.temperaturC ?? 0) > 75 ? 'var(--ausfall)' : (s.temperaturC ?? 0) > 65 ? 'var(--warnung)' : 'var(--text)'}">{s.temperaturC ?? '–'}<span class="einheit">°C</span></div>
       <div class="klein gedaempft">{s.drosselung === null ? 'Drosselung unbekannt (kein Pi)' : s.drosselung === '0x0' ? 'keine Drosselung' : `Drosselung ${s.drosselung}`}</div>
+      {#if s.strom?.unterspannung}
+        <div class="klein strom-warnung">Unterspannung jetzt{s.strom.gedrosselt ? ', CPU gedrosselt' : ''}. Netzteil oder Kabel prüfen.</div>
+      {:else if s.strom?.unterspannungSeitStart}
+        <div class="klein gedaempft">Seit dem Start gab es Unterspannung</div>
+      {/if}
     </div>
     <div class="panel wert-panel">
       <h3>RAM des Hubs</h3>
@@ -163,6 +169,10 @@
 </div>
 
 <style>
+  .strom-warnung {
+    color: var(--warnung);
+    margin-top: 4px;
+  }
   .gross {
     font-size: 2.6rem;
     line-height: 1.1;

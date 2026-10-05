@@ -19,7 +19,44 @@ export interface SystemStatus {
   tailscale: { installiert: boolean; verbunden: boolean | null; name?: string; ip?: string };
   backup: { letztes: string | null; alterStunden: number | null; anzahl: number };
   drosselung: string | null;
+  /** Gedeutete Drosselung, null ausserhalb des Pi */
+  strom: Stromzustand | null;
   node: string;
+}
+
+export interface Stromzustand {
+  unterspannung: boolean;
+  gedrosselt: boolean;
+  frequenzBegrenzt: boolean;
+  temperaturGrenze: boolean;
+  /** Seit dem letzten Neustart mindestens einmal aufgetreten */
+  unterspannungSeitStart: boolean;
+  gedrosseltSeitStart: boolean;
+}
+
+/** Deutet den Wert von vcgencmd get_throttled (Bits 0 bis 3 jetzt, 16 bis 19 seit Start) */
+export function drosselungDeuten(hex: string | null): Stromzustand | null {
+  if (!hex || !/^0x[0-9a-f]+$/i.test(hex)) return null;
+  const n = Number.parseInt(hex, 16);
+  const bit = (i: number) => (n & (1 << i)) !== 0;
+  return {
+    unterspannung: bit(0),
+    frequenzBegrenzt: bit(1),
+    gedrosselt: bit(2),
+    temperaturGrenze: bit(3),
+    unterspannungSeitStart: bit(16),
+    gedrosseltSeitStart: bit(18),
+  };
+}
+
+/** Kurzer Text für Kachel und Systemseite */
+export function stromText(z: Stromzustand | null): string {
+  if (!z) return 'unbekannt';
+  if (z.unterspannung) return 'Unterspannung';
+  if (z.gedrosselt || z.frequenzBegrenzt) return 'gedrosselt';
+  if (z.unterspannungSeitStart) return 'Unterspannung seit Start';
+  if (z.gedrosseltSeitStart) return 'gedrosselt seit Start';
+  return 'gut';
 }
 
 function lesen(pfad: string): string | null {
@@ -111,6 +148,7 @@ export async function systemStatus(datenVerzeichnis: string): Promise<SystemStat
     // Verzeichnis fehlt
   }
   const mem = process.memoryUsage();
+  const drossel = await drosselung();
   return {
     temperaturC: temperatur(),
     ramGesamtMb: Math.round(totalmem() / 1048576),
@@ -125,7 +163,8 @@ export async function systemStatus(datenVerzeichnis: string): Promise<SystemStat
     prozessLaufzeitSek: Math.round(process.uptime()),
     tailscale: await tailscaleStatus(),
     backup: backupInfo(datenVerzeichnis),
-    drosselung: await drosselung(),
+    drosselung: drossel,
+    strom: drosselungDeuten(drossel),
     node: process.version,
   };
 }
