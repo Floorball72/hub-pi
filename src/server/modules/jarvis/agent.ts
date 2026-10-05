@@ -34,6 +34,7 @@ export interface Einstellung {
   persoenlichkeit: string;
   modell: 'standard' | 'schnell';
   web: boolean;
+  morgenpush: boolean;
 }
 
 export function einstellungLesen(ctx: Kontext): Einstellung {
@@ -45,6 +46,7 @@ export function einstellungLesen(ctx: Kontext): Einstellung {
     persoenlichkeit: ctx.einstellungen.hole<string>('jarvis.persoenlichkeit', 'butler'),
     modell: m === 'schnell' ? 'schnell' : 'standard',
     web: ctx.einstellungen.hole<boolean>('jarvis.web', true) !== false,
+    morgenpush: ctx.einstellungen.hole<boolean>('jarvis.morgenpush', false) === true,
   };
 }
 

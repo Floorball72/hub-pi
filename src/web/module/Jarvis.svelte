@@ -23,6 +23,7 @@
     persoenlichkeit: string;
     modell: 'standard' | 'schnell';
     web: boolean;
+    morgenpush: boolean;
     vollmachten?: string[];
     persoenlichkeiten?: string[];
   }
@@ -561,6 +562,10 @@
           <label class="schalter">
             <input type="checkbox" checked={einst.web} onchange={(e) => speichern({ web: e.currentTarget.checked })} />
             Jarvis darf Webseiten lesen
+          </label>
+          <label class="schalter">
+            <input type="checkbox" checked={einst.morgenpush} onchange={(e) => speichern({ morgenpush: e.currentTarget.checked })} />
+            Morgenbericht als Push um 07:10 Uhr
           </label>
         </div>
         <div class="panel form">
