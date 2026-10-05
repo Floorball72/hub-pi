@@ -128,6 +128,7 @@ function suhLaufzeit(ctx: Kontext) {
     abruf: (p) => suhV2.spielEreignisse(p.id),
     demo: (p) => demoSpielEreignisse(p.id, p.heim, p.gast, p.resultat),
     namensnennung: SUH_NAMENSNENNUNG,
+    testParameter: () => ({ id: '1104358', heim: '', gast: '', resultat: null }),
   });
 
   async function vorlageLaden(ersetzen: boolean): Promise<number> {
