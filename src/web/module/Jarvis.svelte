@@ -88,6 +88,13 @@
 
   const WECK = /\b(?:hey|hallo|hi|ok|okay)[\s,.!]*(?:jarvis|dscharvis|jarvis's)\b[\s,.!:]*/i;
 
+  const ANBIETER_NAMEN: Record<string, string> = { claude: 'Claude', gemini: 'Gemini', groq: 'Groq' };
+  const anbieterName = $derived(ANBIETER_NAMEN[status?.anbieter ?? ''] ?? 'Jarvis');
+  const gruss = (() => {
+    const h = Number(new Intl.DateTimeFormat('de-CH', { hour: 'numeric', hour12: false, timeZone: 'Europe/Zurich' }).format(new Date()));
+    return h < 5 ? 'Noch wach, Jerome?' : h < 11 ? 'Guten Morgen, Jerome' : h < 17 ? 'Guten Tag, Jerome' : 'Guten Abend, Jerome';
+  })();
+
   const prozent = $derived(status ? Math.min(100, Math.round((status.tokensHeute / status.tageslimit) * 100)) : 0);
 
   async function ladenStatus() {
@@ -384,42 +391,55 @@
 <ModulRahmen modulId="jarvis" tabs={['Jarvis', 'Gedächtnis', 'Einstellungen']} bind:tab>
   {#if tab === 'Jarvis'}
     <div class="jarvis">
-      <section class="hud panel" aria-label="Jarvis Anzeige">
-        <div class="kern {zustand}" aria-hidden="true">
+      <aside class="hud" aria-label="Jarvis Anzeige">
+        <div class="orb {zustand}" aria-hidden="true">
+          <span class="halo"></span>
           <span class="ring r1"></span>
           <span class="ring r2"></span>
           <span class="ring r3"></span>
-          <span class="mitte"></span>
+          <span class="kugel"></span>
         </div>
-        <div class="hudtext">
-          <strong>Jarvis</strong>
-          <span class="zustand">
-            {#if zustand === 'hoert'}Ich höre zu{:else if zustand === 'denkt'}Ich überlege{:else if zustand === 'spricht'}Ich spreche{:else if status && !status.schluessel && !status.demo}Kein API Schlüssel{:else if weckwort}Wartet auf «Hey Jarvis»{:else}Bereit{/if}
-          </span>
-          {#if zwischen}<em class="zwischen">{zwischen}</em>{/if}
+        <div class="titel">Jarvis</div>
+        <div class="zustand" aria-live="polite">
+          <span class="led {zustand}"></span>
+          {#if zustand === 'hoert'}Ich höre zu{:else if zustand === 'denkt'}Ich überlege{:else if zustand === 'spricht'}Ich spreche{:else if status && !status.schluessel && !status.demo}Kein API Schlüssel{:else if weckwort}Wartet auf «Hey Jarvis»{:else}Bereit{/if}
         </div>
+        <div class="wellen" class:aktiv={zustand === 'hoert' || zustand === 'spricht'} aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        {#if zwischen}<em class="zwischen">{zwischen}</em>{/if}
         {#if status}
-          <div class="masse">
-            <span title="Tokens heute im Verhältnis zum Tageslimit">
+          <div class="zahlen">
+            <div class="zahl breit" title="Tokens heute im Verhältnis zum Tageslimit">
+              <span class="bez">Tageslimit</span>
+              <span class="wert">{prozent}%</span>
               <i class="balken"><b style="width:{prozent}%"></b></i>
-              {prozent}% Tageslimit
-            </span>
-            <span>{status.erinnerungen} Erinnerungen</span>
-            <span>{VOLLMACHT_NAMEN[status.vollmacht] ?? status.vollmacht}</span>
-            {#if status.demo}<span class="demo">Demo</span>{/if}
+            </div>
+            <div class="zahl">
+              <span class="bez">Gedächtnis</span>
+              <span class="wert">{status.erinnerungen}</span>
+            </div>
+            <div class="zahl">
+              <span class="bez">Vollmacht</span>
+              <span class="wert klein">{VOLLMACHT_NAMEN[status.vollmacht] ?? status.vollmacht}</span>
+            </div>
+          </div>
+          <div class="modell" title="Aktives Sprachmodell">
+            {#if status.demo}<span class="demo">Demo</span>{:else}{anbieterName}{/if}
+            <span class="trenner">·</span>{status.modell}
           </div>
         {/if}
         {#if kachelListe.length}
           <div class="kacheln">
             {#each kachelListe as [id, k]}
-              <span class="kachel" title={id}>{k.titel ?? id}: <b>{k.wert ?? ''}</b></span>
+              <span class="kachel" title={id}>{k.titel ?? id} <b>{k.wert ?? ''}</b></span>
             {/each}
           </div>
         {/if}
-      </section>
+      </aside>
 
-      <section class="chat panel">
-        <div class="kopf">
+      <section class="chat" aria-label="Gespräch">
+        <header class="kopf">
           <select
             aria-label="Gespräch wählen"
             value={gespraechId ?? ''}
@@ -430,44 +450,55 @@
           </select>
           {#if gespraechId}
             {@const g = gespraeche.find((x) => x.id === gespraechId)}
-            {#if g}<button onclick={() => loeschen(g)} aria-label="Gespräch löschen">Löschen</button>{/if}
+            <button class="leise" onclick={neu}>Neu</button>
+            {#if g}<button class="leise" onclick={() => loeschen(g)} aria-label="Gespräch löschen">Löschen</button>{/if}
           {/if}
-        </div>
+        </header>
 
         <div class="verlauf" bind:this={verlaufEl} aria-live="polite">
           {#if !eintraege.length}
             <div class="leer">
-              <p>Frag mich etwas oder gib mir eine Aufgabe. Ich habe Zugriff auf alle Daten im Hub und merke mir, was wichtig ist.</p>
+              <h2>{gruss}</h2>
+              <p>Was kann ich für dich tun? Ich sehe alle Daten im Hub und merke mir, was wichtig ist.</p>
               <div class="vorschlaege">
                 {#each VORSCHLAEGE as v}
-                  <button class="chip" onclick={() => (v.endsWith(': ') ? (eingabe = v) : senden(v))}>{v}</button>
+                  <button class="karte" onclick={() => (v.endsWith(': ') ? (eingabe = v) : senden(v))}>
+                    <span class="pfeil" aria-hidden="true">↗</span>{v}
+                  </button>
                 {/each}
               </div>
             </div>
           {/if}
           {#each eintraege as e}
-            <div class="blase {e.rolle}">
-              {#each e.schritte as s}
-                <div class="schritt" class:fehler={s.ok === false}>
-                  <span class="punkt" class:wartet={s.ok === undefined || !!s.bestaetigung}></span>
-                  <span class="sname">{s.beschreibung}</span>
-                  {#if s.entschieden}<span class="ende">{s.entschieden}</span>{/if}
-                  {#if s.bestaetigung}
-                    <span class="aktionen">
-                      <button class="primaer" onclick={() => entscheiden(s, true)}>Ausführen</button>
-                      <button onclick={() => entscheiden(s, false)}>Verwerfen</button>
-                    </span>
-                  {/if}
-                </div>
-              {/each}
-              {#if e.text}<p>{e.text}</p>{:else if e.laeuft && !e.schritte.length}<p class="tippt"><i></i><i></i><i></i></p>{/if}
+            <div class="zeile {e.rolle}">
+              {#if e.rolle === 'assistant'}<span class="avatar" class:denkt={e.laeuft} aria-hidden="true"></span>{/if}
+              <div class="blase {e.rolle}">
+                {#if e.schritte.length}
+                  <div class="schritte">
+                    {#each e.schritte as s}
+                      <div class="schritt" class:fehler={s.ok === false} class:wartet={s.ok === undefined || !!s.bestaetigung}>
+                        <span class="punkt"></span>
+                        <span class="sname">{s.beschreibung}</span>
+                        {#if s.entschieden}<span class="ende">{s.entschieden}</span>{/if}
+                        {#if s.bestaetigung}
+                          <span class="aktionen">
+                            <button class="primaer" onclick={() => entscheiden(s, true)}>Ausführen</button>
+                            <button onclick={() => entscheiden(s, false)}>Verwerfen</button>
+                          </span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+                {#if e.text}<p>{e.text}</p>{:else if e.laeuft && !e.schritte.length}<p class="tippt"><i></i><i></i><i></i></p>{/if}
+              </div>
             </div>
           {/each}
         </div>
 
         <form class="eingabe" onsubmit={(ev) => { ev.preventDefault(); senden(); }}>
-          <button type="button" class="knopf mikro" class:an={diktat} onclick={mikro} aria-label="Sprechen" title="Sprechen">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          <button type="button" class="mikro" class:an={diktat} onclick={mikro} aria-label="Sprechen" title="Sprechen">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
           </button>
           <input
             class="wachsen"
@@ -475,24 +506,29 @@
             placeholder="Nachricht an Jarvis"
             maxlength="4000"
             aria-label="Nachricht an Jarvis"
+            autocomplete="off"
             disabled={laeuft}
           />
           {#if laeuft}
-            <button type="button" class="gefahr" onclick={stoppen}>Stopp</button>
+            <button type="button" class="los stopp" onclick={stoppen} aria-label="Stopp" title="Stopp">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            </button>
           {:else}
-            <button class="primaer" disabled={!eingabe.trim()}>Senden</button>
+            <button class="los" disabled={!eingabe.trim()} aria-label="Senden" title="Senden">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            </button>
           {/if}
         </form>
         <div class="leiste">
-          <label class="schalter">
+          <label class="tog" class:an={vorlesen}>
             <input type="checkbox" checked={vorlesen} onchange={vorlesenSchalten} disabled={!spracheOk} />
-            Antworten vorlesen
+            <span class="knauf"></span>Antworten vorlesen
           </label>
-          <label class="schalter">
+          <label class="tog" class:an={weckwort}>
             <input type="checkbox" checked={weckwort} onchange={weckwortSchalten} disabled={!spracheOk} />
-            Weckwort «Hey Jarvis»
+            <span class="knauf"></span>Weckwort «Hey Jarvis»
           </label>
-          {#if sprichtGerade}<button class="chip" onclick={stumm}>Stumm</button>{/if}
+          {#if sprichtGerade}<button class="leise" onclick={stumm}>Stumm</button>{/if}
         </div>
         {#if weckwort}
           <p class="hinweis">Das Weckwort funktioniert, solange diese Seite offen ist. Dafür braucht der Browser das Mikrofon und eine HTTPS Adresse.</p>
@@ -566,13 +602,58 @@
 <style>
   .jarvis {
     display: grid;
-    gap: 14px;
+    gap: 16px;
     grid-template-columns: minmax(0, 1fr);
   }
   @media (min-width: 900px) {
     .jarvis {
-      grid-template-columns: 300px minmax(0, 1fr);
+      grid-template-columns: 320px minmax(0, 1fr);
       align-items: start;
+    }
+    .hud {
+      position: sticky;
+      top: 12px;
+    }
+  }
+  @media (max-width: 899px) {
+    .hud {
+      grid-template-columns: auto minmax(0, 1fr);
+      justify-items: start;
+      text-align: left;
+      align-items: center;
+      column-gap: 16px;
+      padding: 16px;
+    }
+    .hud .orb {
+      grid-row: 1 / span 3;
+      width: 112px;
+      height: 112px;
+      margin: 0;
+    }
+    .hud .kugel {
+      width: 50px;
+      height: 50px;
+    }
+    .hud .titel {
+      font-size: 1.15rem;
+    }
+    .hud .zwischen,
+    .hud .zahlen,
+    .hud .modell,
+    .hud .kacheln {
+      grid-column: 1 / -1;
+    }
+    .hud .zahlen {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .hud .zahl.breit {
+      grid-column: auto;
+    }
+    .hud .kacheln {
+      justify-content: flex-start;
+    }
+    .chat {
+      min-height: 56vh;
     }
   }
   .panel {
@@ -581,68 +662,106 @@
     border-radius: var(--radius);
     padding: 14px;
   }
+
+  /* Anzeige */
   .hud {
+    position: relative;
+    overflow: hidden;
     display: grid;
-    gap: 12px;
+    gap: 10px;
     justify-items: center;
     text-align: center;
-    background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--akzent) 12%, var(--flaeche)), var(--flaeche));
+    padding: 26px 18px 20px;
+    border: 1px solid color-mix(in srgb, var(--akzent) 22%, var(--rand));
+    border-radius: 22px;
+    background:
+      radial-gradient(90% 70% at 50% 0%, color-mix(in srgb, var(--akzent) 16%, transparent), transparent 70%),
+      linear-gradient(180deg, color-mix(in srgb, var(--flaeche-2) 90%, var(--akzent)), var(--flaeche));
+    box-shadow: var(--schatten), 0 0 60px -30px var(--akzent);
   }
-  .kern {
+  .hud::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(70% 60% at 50% 25%, #000, transparent);
+    -webkit-mask-image: radial-gradient(70% 60% at 50% 25%, #000, transparent);
+    pointer-events: none;
+  }
+  .hud > * {
     position: relative;
-    width: 128px;
-    height: 128px;
+  }
+  .orb {
+    --f: var(--akzent);
+    --g: var(--akzent-2);
+    position: relative;
+    width: 168px;
+    height: 168px;
     display: grid;
     place-items: center;
+    margin-bottom: 4px;
+  }
+  .orb.hoert {
+    --f: var(--ok);
+    --g: #6ee7b7;
+  }
+  .orb.denkt {
+    --f: var(--akzent-2);
+    --g: var(--akzent);
+  }
+  .halo {
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--f) 38%, transparent), transparent 66%);
+    filter: blur(8px);
+    animation: atmen 4s ease-in-out infinite;
   }
   .ring {
     position: absolute;
     border-radius: 50%;
-    border: 2px solid var(--akzent);
-    opacity: 0.8;
   }
   .r1 {
     inset: 0;
-    border-style: dashed;
-    animation: dreh 24s linear infinite;
+    border: 1px dashed color-mix(in srgb, var(--f) 55%, transparent);
+    animation: dreh 40s linear infinite;
   }
   .r2 {
-    inset: 14px;
-    border-color: var(--akzent-2);
-    border-top-color: transparent;
-    border-bottom-color: transparent;
-    animation: dreh 9s linear infinite reverse;
+    inset: 12px;
+    background: conic-gradient(from 0deg, transparent 0 55%, var(--f) 100%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+    animation: dreh 7s linear infinite;
   }
   .r3 {
-    inset: 30px;
-    border-width: 3px;
-    animation: puls 3.2s ease-in-out infinite;
+    inset: 26px;
+    background: conic-gradient(from 180deg, transparent 0 60%, var(--g) 100%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    animation: dreh 11s linear infinite reverse;
+    opacity: 0.8;
   }
-  .mitte {
-    width: 26px;
-    height: 26px;
+  .kugel {
+    width: 74px;
+    height: 74px;
     border-radius: 50%;
-    background: var(--akzent);
-    box-shadow: 0 0 22px 6px color-mix(in srgb, var(--akzent) 60%, transparent);
-    animation: puls 3.2s ease-in-out infinite;
+    background: radial-gradient(circle at 34% 30%, #fff 0, color-mix(in srgb, var(--f) 70%, #fff) 14%, var(--f) 42%, color-mix(in srgb, var(--g) 70%, #000) 100%);
+    box-shadow: 0 0 34px 6px color-mix(in srgb, var(--f) 55%, transparent), inset 0 -8px 16px #0005;
+    animation: atmen 4s ease-in-out infinite;
   }
-  .kern.hoert .mitte {
-    background: var(--ok);
-    box-shadow: 0 0 26px 8px color-mix(in srgb, var(--ok) 60%, transparent);
-    animation-duration: 1.1s;
-  }
-  .kern.hoert .r3 {
-    border-color: var(--ok);
-    animation-duration: 1.1s;
-  }
-  .kern.denkt .r1 {
-    animation-duration: 3s;
-  }
-  .kern.denkt .r2 {
+  .orb.denkt .r2 {
     animation-duration: 1.6s;
   }
-  .kern.spricht .mitte,
-  .kern.spricht .r3 {
+  .orb.denkt .r3 {
+    animation-duration: 2.4s;
+  }
+  .orb.hoert .kugel,
+  .orb.hoert .halo {
+    animation-duration: 1.2s;
+  }
+  .orb.spricht .kugel,
+  .orb.spricht .halo {
     animation-duration: 0.7s;
   }
   @keyframes dreh {
@@ -650,40 +769,178 @@
       transform: rotate(360deg);
     }
   }
+  @keyframes atmen {
+    50% {
+      transform: scale(1.1);
+      opacity: 0.85;
+    }
+  }
   @keyframes puls {
     50% {
-      transform: scale(1.15);
-      opacity: 0.7;
+      transform: scale(1.3);
+      opacity: 0.55;
     }
   }
   @media (prefers-reduced-motion: reduce) {
     .ring,
-    .mitte {
+    .kugel,
+    .halo,
+    .wellen i,
+    .avatar,
+    .tippt i {
       animation: none !important;
     }
   }
-  .hudtext {
-    display: grid;
-    gap: 2px;
+  .titel {
+    font-family: var(--schrift-zahl);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    padding-left: 0.34em;
+    background: linear-gradient(90deg, var(--akzent), var(--akzent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .zustand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     color: var(--text-2);
-    font-size: 0.9rem;
+    font-size: 0.88rem;
+  }
+  .led {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--akzent);
+    box-shadow: 0 0 8px var(--akzent);
+  }
+  .led.hoert {
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
+  }
+  .led.denkt,
+  .led.spricht {
+    background: var(--akzent-2);
+    box-shadow: 0 0 8px var(--akzent-2);
+    animation: puls 0.9s ease-in-out infinite;
+  }
+  .wellen {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    opacity: 0.25;
+    transition: opacity 0.3s;
+  }
+  .wellen.aktiv {
+    opacity: 1;
+  }
+  .wellen i {
+    width: 3px;
+    height: 5px;
+    border-radius: 2px;
+    background: var(--akzent);
+  }
+  .wellen.aktiv i {
+    animation: welle 0.9s ease-in-out infinite;
+  }
+  .wellen i:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+  .wellen i:nth-child(3) {
+    animation-delay: 0.2s;
+  }
+  .wellen i:nth-child(4) {
+    animation-delay: 0.3s;
+  }
+  .wellen i:nth-child(5) {
+    animation-delay: 0.2s;
+  }
+  .wellen i:nth-child(6) {
+    animation-delay: 0.1s;
+  }
+  @keyframes welle {
+    50% {
+      height: 22px;
+    }
   }
   .zwischen {
     color: var(--akzent);
     font-size: 0.85rem;
   }
-  .masse,
+  .zahlen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .zahl {
+    display: grid;
+    gap: 3px;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--flaeche-2) 70%, transparent);
+    border: 1px solid var(--rand);
+  }
+  .zahl.breit {
+    grid-column: 1 / -1;
+  }
+  .bez {
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .wert {
+    font-family: var(--schrift-zahl);
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .wert.klein {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .balken {
+    display: block;
+    height: 4px;
+    background: var(--flaeche-3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .balken b {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--akzent), var(--akzent-2));
+    border-radius: 3px;
+    transition: width 0.6s;
+  }
+  .modell {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    color: var(--text-3);
+    word-break: break-all;
+  }
+  .trenner {
+    margin: 0 4px;
+    color: var(--rand-hell);
+  }
+  .demo {
+    color: var(--warnung);
+  }
   .kacheln {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     justify-content: center;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--text-2);
   }
-  .masse span,
   .kachel {
     background: var(--flaeche-2);
     border: 1px solid var(--rand);
@@ -693,75 +950,129 @@
   .kachel b {
     color: var(--text);
     font-weight: 600;
+    margin-left: 4px;
   }
-  .demo {
-    color: var(--warnung);
-  }
-  .balken {
-    display: inline-block;
-    width: 36px;
-    height: 5px;
-    background: var(--flaeche-3);
-    border-radius: 3px;
-    margin-right: 6px;
-    vertical-align: middle;
-    overflow: hidden;
-  }
-  .balken b {
-    display: block;
-    height: 100%;
-    background: var(--akzent);
-  }
+
+  /* Gespräch */
   .chat {
     display: grid;
-    gap: 10px;
-    min-height: 60vh;
+    gap: 12px;
+    min-height: 68vh;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
+    padding: 14px;
+    border: 1px solid var(--rand);
+    border-radius: 22px;
+    background: linear-gradient(180deg, var(--flaeche), color-mix(in srgb, var(--bg) 40%, var(--flaeche)));
+    box-shadow: var(--schatten);
   }
   .kopf {
     display: flex;
     gap: 8px;
+    align-items: center;
   }
   .kopf select {
     flex: 1;
     min-width: 0;
+    border-radius: 999px;
+    background: var(--flaeche-2);
+  }
+  .leise {
+    background: transparent;
+    border: 1px solid var(--rand);
+    border-radius: 999px;
+    padding: 5px 13px;
+    font-size: 0.82rem;
+    color: var(--text-2);
+  }
+  .leise:hover {
+    border-color: var(--rand-hell);
+    color: var(--text);
   }
   .verlauf {
     overflow-y: auto;
-    max-height: 62vh;
+    max-height: 64vh;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 2px;
+    gap: 14px;
+    padding: 4px 2px;
+    scroll-behavior: smooth;
   }
   .leer {
     margin: auto;
+    width: 100%;
+    max-width: 560px;
     text-align: center;
-    color: var(--text-2);
     display: grid;
-    gap: 12px;
+    gap: 10px;
+    padding: 18px 0;
+  }
+  .leer h2 {
+    margin: 0;
+    font-family: var(--schrift-zahl);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 600;
+    background: linear-gradient(90deg, var(--text), var(--akzent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .leer p {
+    margin: 0 0 8px;
+    color: var(--text-2);
   }
   .vorschlaege {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+  }
+  .karte {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: center;
-  }
-  .chip {
-    background: var(--flaeche-2);
-    border: 1px solid var(--rand);
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: 0.85rem;
-  }
-  .blase {
-    max-width: 88%;
-    padding: 9px 13px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+    padding: 12px 14px;
     border-radius: 14px;
     background: var(--flaeche-2);
     border: 1px solid var(--rand);
+    font-size: 0.9rem;
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .karte:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--akzent) 55%, var(--rand));
+    background: color-mix(in srgb, var(--akzent) 8%, var(--flaeche-2));
+  }
+  .pfeil {
+    order: 2;
+    color: var(--akzent);
+  }
+  .zeile {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .zeile.user {
+    justify-content: flex-end;
+  }
+  .avatar {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    margin-top: 2px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, #fff 0, var(--akzent) 30%, var(--akzent-2) 100%);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--akzent) 55%, transparent);
+  }
+  .avatar.denkt {
+    animation: atmen 0.9s ease-in-out infinite;
+  }
+  .blase {
+    max-width: min(86%, 640px);
+    padding: 10px 15px;
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    line-height: 1.5;
   }
   .blase p {
     margin: 0;
@@ -769,56 +1080,71 @@
     overflow-wrap: anywhere;
   }
   .blase.user {
-    align-self: flex-end;
-    background: color-mix(in srgb, var(--akzent) 16%, var(--flaeche-2));
-    border-color: color-mix(in srgb, var(--akzent) 40%, var(--rand));
+    border-radius: 18px 18px 4px 18px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--akzent) 30%, var(--flaeche-2)), color-mix(in srgb, var(--akzent-2) 26%, var(--flaeche-2)));
+    border: 1px solid color-mix(in srgb, var(--akzent) 35%, var(--rand));
   }
   .blase.assistant {
-    align-self: flex-start;
+    padding-left: 2px;
+    padding-top: 4px;
+    max-width: min(92%, 680px);
+  }
+  .schritte {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .schritt {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--text-2);
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--rand);
   }
-  .schritt.fehler .sname {
+  .schritt.fehler {
     color: var(--ausfall);
+    border-color: color-mix(in srgb, var(--ausfall) 40%, var(--rand));
   }
   .punkt {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--ok);
   }
   .schritt.fehler .punkt {
     background: var(--ausfall);
   }
-  .punkt.wartet {
+  .schritt.wartet .punkt {
     background: var(--warnung);
+    animation: puls 1s ease-in-out infinite;
   }
   .aktionen {
     display: flex;
     gap: 6px;
   }
   .aktionen button {
-    padding: 3px 10px;
-    font-size: 0.8rem;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    border-radius: 999px;
   }
   .ende {
     color: var(--akzent);
   }
   .tippt {
     display: flex;
-    gap: 4px;
+    gap: 5px;
+    padding: 8px 0;
   }
   .tippt i {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: var(--text-2);
+    background: var(--akzent);
     animation: puls 1s ease-in-out infinite;
   }
   .tippt i:nth-child(2) {
@@ -827,25 +1153,129 @@
   .tippt i:nth-child(3) {
     animation-delay: 0.3s;
   }
+
+  /* Eingabe */
   .eingabe {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 999px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--rand-hell);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .eingabe:focus-within {
+    border-color: var(--akzent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--akzent) 18%, transparent), 0 0 30px -10px var(--akzent);
   }
   .eingabe .wachsen {
     flex: 1;
     min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+    padding: 8px 6px;
+    font-size: 1rem;
+  }
+  .mikro,
+  .los {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    border: 0;
+  }
+  .mikro {
+    background: transparent;
+    color: var(--text-2);
+  }
+  .mikro:hover {
+    color: var(--text);
+    background: var(--flaeche-3);
   }
   .mikro.an {
     background: var(--ok);
     color: #000;
+    animation: puls 1.2s ease-in-out infinite;
+  }
+  .los {
+    background: linear-gradient(135deg, var(--akzent), var(--akzent-2));
+    color: #04121a;
+  }
+  .los:disabled {
+    background: var(--flaeche-3);
+    color: var(--text-3);
+    opacity: 1;
+  }
+  .los.stopp {
+    background: var(--ausfall);
+    color: #1a0505;
   }
   .leiste {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 8px 16px;
     align-items: center;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     color: var(--text-2);
+    padding: 0 6px;
+  }
+  .tog {
+    position: relative;
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+    margin: 0;
+    font-size: 0.82rem;
+  }
+  .tog input {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .knauf {
+    position: relative;
+    width: 30px;
+    height: 17px;
+    border-radius: 999px;
+    background: var(--flaeche-3);
+    border: 1px solid var(--rand-hell);
+    transition: background 0.2s;
+  }
+  .knauf::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--text-2);
+    transition: transform 0.2s, background 0.2s;
+  }
+  .tog.an .knauf {
+    background: color-mix(in srgb, var(--akzent) 35%, var(--flaeche-3));
+    border-color: var(--akzent);
+  }
+  .tog.an .knauf::after {
+    transform: translateX(13px);
+    background: var(--akzent);
+  }
+  .tog:focus-within .knauf {
+    outline: 2px solid var(--akzent);
+    outline-offset: 2px;
+  }
+  .tog:has(input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .schalter {
     display: inline-flex;
