@@ -294,11 +294,19 @@
         if (weckwort || diktat) setTimeout(zuhoerenStarten, 400);
       };
       z.onerror = (ev: any) => {
-        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        const grund: Record<string, string> = {
+          'not-allowed': globalThis.isSecureContext
+            ? 'Der Browser blockiert das Mikrofon. Tippe in der Adressleiste auf das Schloss und erlaube das Mikrofon für diese Seite.'
+            : 'Das Mikrofon geht nur über HTTPS. Öffne den Hub über die Tailscale Adresse (https://…ts.net), nicht über http oder die IP.',
+          'service-not-allowed': 'Dieser Browser bietet keine Spracherkennung an. Nutze Chrome oder Edge, in Brave und in der App geht es nicht.',
+          'audio-capture': 'Es wurde kein Mikrofon gefunden. Prüfe, ob eines angeschlossen und freigegeben ist.',
+          network: 'Die Spracherkennung des Browsers ist nicht erreichbar. Sie braucht eine Internetverbindung.',
+        };
+        if (ev.error in grund) {
           weckwort = false;
           diktat = false;
           schreiben('jarvis.weckwort', false);
-          melden('Kein Zugriff aufs Mikrofon. Erlaube es im Browser und HTTPS ist nötig.', 'ausfall');
+          melden(grund[ev.error], 'ausfall');
         }
       };
       return z;
