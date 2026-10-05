@@ -65,6 +65,18 @@
     punkte: [number, number, number][];
     geschaetzt: boolean;
   }
+  interface LageEreignis {
+    id: string;
+    art: 'start' | 'landung' | 'alert' | 'warnung' | 'erdbeben';
+    zeit: number;
+    bis: number | null;
+    titel: string;
+    text: string;
+    lat: number | null;
+    lon: number | null;
+    farbe: string;
+    link: string | null;
+  }
   interface RueckblickFlug {
     id: string;
     hex: string;
@@ -79,6 +91,7 @@
   let lage = $state<Lage | null>(null);
   let basen = $state<{ basen: Basis[]; punkte: GeoPunkt[] } | null>(null);
   let starts = $state<RueckblickFlug[]>([]);
+  let ereignisse = $state<LageEreignis[]>([]);
   let fluegeHeute = $state<number | null>(null);
   let jetzt = $state(new Date());
   let seiteOffen = $state(lesen('lagebild.seite', true));
@@ -245,6 +258,16 @@
       .get<{ fluege: RueckblickFlug[] }>('/api/m/rettung/rueckblick')
       .then((r) => (starts = [...r.fluege].sort((a, b) => b.start.localeCompare(a.start)).slice(0, 4)))
       .catch(() => {});
+    ereignisseHolen();
+  }
+  function ereignisseHolen() {
+    api
+      .get<{ ereignisse: LageEreignis[] }>('/api/m/rettung/lagebild/ereignisse?stunden=24')
+      .then((e) => {
+        ereignisse = e.ereignisse;
+        sichtbarSetzen();
+      })
+      .catch(() => {});
   }
 
   $effect(() => {
@@ -307,6 +330,7 @@
     cancelAnimationFrame(wRahmen);
     wLaeuft = false;
     wiedergabe = null;
+    sichtbarSetzen();
     if (anim) {
       anim.setzen([]);
       anim.direkt = false;
@@ -383,8 +407,65 @@
   const wAktiv = $derived(wiedergabe ? wiedergabe.fluege.filter((f) => wZeit >= f.punkte[0][2] && wZeit <= f.punkte[f.punkte.length - 1][2]) : []);
 
   function bildZeigen() {
+    sichtbarSetzen();
     if (!wiedergabe || !anim) return;
     anim.setzen(wiedergabe.fluege.map((f) => flugBei(f, wZeit)).filter((x): x is AnimHeli => !!x));
+  }
+
+  // Ereignisse auf der Karte: in der Wiedergabe was um wZeit gerade passiert ist, live Alertswiss und Erdbeben der letzten 24 h
+  const NACHLAUF = { start: 20, landung: 20, alert: 360, warnung: 0, erdbeben: 180 };
+  let sichtbar = $state('');
+  function sichtbarSetzen() {
+    const t = wiedergabe ? wZeit : Date.now();
+    const ids = ereignisse
+      .filter((e) => e.lat !== null && e.lon !== null)
+      .filter((e) =>
+        wiedergabe
+          ? e.zeit <= t && e.zeit >= t - NACHLAUF[e.art] * 60000
+          : (e.art === 'alert' || e.art === 'erdbeben') && e.zeit >= t - 24 * 3600000,
+      )
+      .map((e) => e.id)
+      .join(',');
+    if (ids !== sichtbar) sichtbar = ids;
+  }
+  const SYMBOL: Record<LageEreignis['art'], GeoPunkt['symbol']> = { start: 'landeplatz', landung: 'landeplatz', alert: 'warnung', warnung: 'warnung', erdbeben: 'erdbeben' };
+  const ereignisPunkte = $derived.by((): GeoPunkt[] => {
+    const ids = new Set(sichtbar.split(','));
+    return ereignisse
+      .filter((e) => ids.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        lat: e.lat!,
+        lon: e.lon!,
+        titel: e.titel,
+        text: `${uhr.format(e.zeit)}${e.text ? ` · ${e.text}` : ''}`,
+        symbol: SYMBOL[e.art],
+        farbe: e.farbe,
+        groesse: e.art === 'start' || e.art === 'landung' ? 22 : 28,
+        link: e.link ?? undefined,
+      }));
+  });
+  const kartenPunkte = $derived([...(basen?.punkte ?? []), ...ereignisPunkte]);
+
+  // Zeitleiste über den Balken: Position in Prozent, sonst nichts
+  const wMarken = $derived(
+    wiedergabe
+      ? ereignisse
+          .filter((e) => e.art !== 'landung')
+          .map((e) => ({ ...e, links: ((e.zeit - wiedergabe!.von) / (wiedergabe!.bis - wiedergabe!.von)) * 100 }))
+          .filter((e) => e.links >= 0 && e.links <= 100)
+      : [],
+  );
+  const ART_TEXT = { start: 'Start', landung: 'Landung', alert: 'Alertswiss', warnung: 'Warnung', erdbeben: 'Erdbeben' };
+  const letzte = $derived([...ereignisse].reverse().slice(0, 8));
+
+  /** Wiedergabe kurz vor dem Ereignis anhalten, damit man es kommen sieht */
+  async function springen(e: LageEreignis) {
+    if (!wiedergabe) await wiedergabeStarten();
+    if (!wiedergabe) return;
+    wPause();
+    wZeit = Math.max(wiedergabe.von, Math.min(wiedergabe.bis, e.zeit - 5 * 60000));
+    bildZeigen();
   }
 
   // Balken unter dem Regler: Helis in der Luft pro 15 Minuten
@@ -427,7 +508,7 @@
       basisStart="nacht"
       ebenenFest={['rettung.spital']}
       ebenenZusatz={['wetter.radar', 'rettung.heatmap']}
-      punkte={basen?.punkte ?? []}
+      punkte={kartenPunkte}
       zentrum={[46.82, 8.23]}
       zoom={8}
       bereit={animStarten}
@@ -526,6 +607,17 @@
         </div>
       {/if}
 
+      {#if letzte.length}
+        <h2>Letzte 24 h</h2>
+        {#each letzte as e (e.id)}
+          <button class="lb-ereignis klein" onclick={() => springen(e)} title="In der Wiedergabe zeigen">
+            <span class="punkt" style="background:{e.farbe}"></span>
+            <span class="zahl gedaempft">{uhr.format(e.zeit)}</span>
+            <span class="wachsen">{e.titel}<span class="sehr-klein gedaempft">{e.text ? ` · ${e.text}` : ''}</span></span>
+          </button>
+        {/each}
+      {/if}
+
       {#if alertsRegion.length || warnungenHoch.length}
         <h2>Warnungen</h2>
         {#each alertsRegion as a (a.id)}
@@ -565,6 +657,11 @@
     {#if wiedergabe}
       <button class="knopf klein" onclick={() => (wLaeuft ? wPause() : wSpielen())} aria-label={wLaeuft ? 'Pause' : 'Abspielen'}>{wLaeuft ? 'Pause' : 'Abspielen'}</button>
       <div class="w-regler">
+        <div class="w-marken">
+          {#each wMarken as m (m.id)}
+            <button class="w-marke {m.art}" style="left:{m.links}%;--farbe:{m.farbe}" onclick={() => springen(m)} title="{uhr.format(m.zeit)} {ART_TEXT[m.art]}: {m.titel}{m.text ? `, ${m.text}` : ''}" aria-label="{ART_TEXT[m.art]} {uhr.format(m.zeit)}: {m.titel}"></button>
+          {/each}
+        </div>
         <div class="w-balken" aria-hidden="true">
           {#each wBalken as b, i (i)}<span style="height:{Math.max(4, b * 100)}%"></span>{/each}
         </div>
@@ -895,6 +992,68 @@
     flex: 1;
     min-width: 0;
     position: relative;
+  }
+  .w-marken {
+    position: relative;
+    height: 14px;
+  }
+  .w-marke {
+    position: absolute;
+    top: 2px;
+    width: 9px;
+    height: 9px;
+    margin-left: -4.5px;
+    padding: 0;
+    /* Die Liste rechts ist das grosse Ziel zum Tippen, die Marken bleiben klein */
+    min-height: 0;
+    border: 1px solid #0008;
+    border-radius: 50%;
+    background: var(--farbe);
+    cursor: pointer;
+  }
+  .w-marke.alert,
+  .w-marke.warnung {
+    border-radius: 2px;
+    transform: rotate(45deg);
+  }
+  .w-marke.erdbeben {
+    width: 11px;
+    height: 11px;
+    margin-left: -5.5px;
+    top: 1px;
+    box-shadow: 0 0 6px var(--farbe);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .w-marke:hover {
+      transform: scale(1.5);
+      z-index: 1;
+    }
+    .w-marke.alert:hover,
+    .w-marke.warnung:hover {
+      transform: rotate(45deg) scale(1.5);
+    }
+  }
+  .lb-ereignis {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    width: 100%;
+    padding: 3px 2px;
+    background: none;
+    border: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .lb-ereignis .punkt {
+    flex: none;
+    align-self: center;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .lb-ereignis:hover {
+      background: #ffffff0d;
+      border-radius: 6px;
+    }
   }
   .w-balken {
     display: flex;

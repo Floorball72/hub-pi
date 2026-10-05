@@ -75,6 +75,7 @@ import {
   warnungFuerGebiete,
   type Webcam,
 } from './quellen.ts';
+import { lageEreignisse } from './lagebild.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
 import { basisName, endeBasis, heliFarbe, REGA_BASEN, startBasis } from '../../geteilt/heli.ts';
 
@@ -224,7 +225,7 @@ function rettungLaufzeit(ctx: Kontext) {
     modul: 'rettung',
     ttlSek: 120,
     abruf: () => alertswissHolen(),
-    demo: () => demoAlerts(region),
+    demo: () => demoAlerts(region, ctx.jetzt()),
     namensnennung: 'Alertswiss, Bundesamt für Bevölkerungsschutz',
   });
   const meteoalarm = ctx.quelle<void, Warnung[]>({
@@ -766,6 +767,63 @@ function rettungLaufzeit(ctx: Kontext) {
       minute: '2-digit',
     });
 
+  /** Flüge der letzten Stunden mit Zeit pro Punkt, für Wiedergabe und Lagebild */
+  async function wiedergabeFluege(stunden: number) {
+    await demoVorbereiten();
+    const jetzt = ctx.jetzt().getTime();
+    const von = jetzt - stunden * 3600000;
+    const gespeichert = await daten.liste<{
+      id: string;
+      hex: string;
+      organisation: string | null;
+      kennzeichen: string | null;
+      start: string;
+      ende: string | null;
+      start_platz: string | null;
+      start_ort: string | null;
+      ende_platz: string | null;
+      ende_ort: string | null;
+      spur: unknown;
+    }>('heli_fluege', {
+      filter: { start: { gte: new Date(von - 6 * 3600000).toISOString() } },
+      sortierung: 'start',
+      limit: 400,
+    });
+    const fluege = gespeichert
+      .filter((f) => f.organisation && (f.ende ? new Date(f.ende).getTime() : jetzt) >= von)
+      .map((f) => {
+        const s = new Date(f.start).getTime();
+        const e = f.ende ? new Date(f.ende).getTime() : s;
+        return {
+          id: f.id,
+          hex: f.hex,
+          organisation: f.organisation!,
+          kennzeichen: f.kennzeichen,
+          von: f.start_platz ?? f.start_ort,
+          nach: f.ende_platz ?? f.ende_ort,
+          start: s,
+          ende: e,
+          ...wiedergabePunkte(f.spur, s, e),
+        };
+      });
+    for (const l of erkennung.laufende()) {
+      if (!l.organisation) continue;
+      fluege.push({
+        id: `live-${l.hex}`,
+        hex: l.hex,
+        organisation: l.organisation,
+        kennzeichen: l.kennzeichen,
+        von: startPlaetze.get(l.hex) ?? null,
+        nach: null,
+        start: l.start,
+        ende: jetzt,
+        punkte: l.spur.map(([la, lo, t]) => [la, lo, t] as [number, number, number]),
+        geschaetzt: false,
+      });
+    }
+    return { von, bis: jetzt, fluege: fluege.filter((f) => f.punkte.length) };
+  }
+
   async function routen(app: FastifyInstance) {
     app.get('/helis', async (): Promise<PunkteAntwort> => {
       if (!positionenStand) await heliRunde().catch(() => undefined);
@@ -903,60 +961,43 @@ function rettungLaufzeit(ctx: Kontext) {
 
     // Wiedergabe: alle Flüge der Helis aus der Liste der letzten Stunden mit Zeit pro Punkt
     app.get<{ Querystring: { stunden?: string } }>('/wiedergabe', async (req) => {
-      await demoVorbereiten();
       const stunden = Math.min(72, Math.max(1, Number(req.query.stunden) || 24));
-      const jetzt = ctx.jetzt().getTime();
-      const von = jetzt - stunden * 3600000;
-      const gespeichert = await daten.liste<{
-        id: string;
-        hex: string;
-        organisation: string | null;
-        kennzeichen: string | null;
-        start: string;
-        ende: string | null;
-        start_platz: string | null;
-        start_ort: string | null;
-        ende_platz: string | null;
-        ende_ort: string | null;
-        spur: unknown;
-      }>('heli_fluege', {
-        filter: { start: { gte: new Date(von - 6 * 3600000).toISOString() } },
-        sortierung: 'start',
-        limit: 400,
+      return { ...(await wiedergabeFluege(stunden)), demo: konfig.demo };
+    });
+
+    // Lagebild: Starts, Landungen, Alertswiss, Warnungen und Erdbeben auf einer Zeitleiste
+    app.get<{ Querystring: { stunden?: string } }>('/lagebild/ereignisse', async (req) => {
+      const stunden = Math.min(72, Math.max(1, Number(req.query.stunden) || 24));
+      const [w, a, m, e] = await Promise.all([
+        wiedergabeFluege(stunden),
+        alertswiss.hole(),
+        meteoalarm.hole(),
+        sed.hole(),
+      ]);
+      const ereignisse = lageEreignisse({
+        von: w.von,
+        bis: w.bis,
+        // Laufende Flüge sind noch nicht gelandet
+        fluege: w.fluege.map((f) => (f.id.startsWith('live-') ? { ...f, ende: null } : f)),
+        alerts: (a.daten ?? [])
+          .filter((x) => alertInRegion(x, region))
+          .map((x) => ({ ...x, mitte: x.polygone.length ? polygonMitte(x.polygone[0]) : null })),
+        warnungen: (m.daten ?? []).filter((x) => warnungFuerGebiete(x, konfig.warnGebiete)),
+        // Kleine Beben nur in der Region, spürbare in der ganzen Schweiz
+        erdbeben: (e.daten ?? [])
+          .filter(istErdbeben)
+          .filter(
+            (x) => x.magnitude >= 2.5 || distanzKm(region.lat, region.lon, x.lat, x.lon) <= region.radiusKm,
+          ),
       });
-      const fluege = gespeichert
-        .filter((f) => f.organisation && (f.ende ? new Date(f.ende).getTime() : jetzt) >= von)
-        .map((f) => {
-          const s = new Date(f.start).getTime();
-          const e = f.ende ? new Date(f.ende).getTime() : s;
-          return {
-            id: f.id,
-            hex: f.hex,
-            organisation: f.organisation!,
-            kennzeichen: f.kennzeichen,
-            von: f.start_platz ?? f.start_ort,
-            nach: f.ende_platz ?? f.ende_ort,
-            start: s,
-            ende: e,
-            ...wiedergabePunkte(f.spur, s, e),
-          };
-        });
-      for (const l of erkennung.laufende()) {
-        if (!l.organisation) continue;
-        fluege.push({
-          id: `live-${l.hex}`,
-          hex: l.hex,
-          organisation: l.organisation,
-          kennzeichen: l.kennzeichen,
-          von: startPlaetze.get(l.hex) ?? null,
-          nach: null,
-          start: l.start,
-          ende: jetzt,
-          punkte: l.spur.map(([la, lo, t]) => [la, lo, t] as [number, number, number]),
-          geschaetzt: false,
-        });
-      }
-      return { von, bis: jetzt, fluege: fluege.filter((f) => f.punkte.length), demo: konfig.demo };
+      return {
+        von: w.von,
+        bis: w.bis,
+        ereignisse,
+        fehler: { alerts: a.fehler, warnungen: m.fehler, erdbeben: e.fehler },
+        hinweis: 'Verkehrslage fehlt noch: dafür braucht es einen Schlüssel von opentransportdata.swiss.',
+        demo: konfig.demo,
+      };
     });
 
     // Ein Heli im Detail: Position, laufender Flug, Flüge der letzten 30 Tage

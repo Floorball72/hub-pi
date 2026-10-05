@@ -55,7 +55,7 @@ export function demoHelis(jetzt: number, r: Region): AdsbFlugzeug[] {
   ];
 }
 
-export function demoAlerts(r: Region): Alert[] {
+export function demoAlerts(r: Region, jetzt = new Date()): Alert[] {
   const poly: [number, number][] = [
     [r.lat + 0.25, r.lon - 0.3],
     [r.lat + 0.25, r.lon + 0.3],
@@ -70,7 +70,7 @@ export function demoAlerts(r: Region): Alert[] {
       ereignis: 'Waldbrand',
       schwere: 'moderate',
       herausgeber: 'Kanton Demo',
-      gesendet: 'Demo',
+      gesendet: new Date(jetzt.getTime() - 7 * 3600000).toISOString(),
       landesweit: false,
       entwarnung: false,
       test: false,
