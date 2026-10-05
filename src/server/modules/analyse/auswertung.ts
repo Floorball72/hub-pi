@@ -1,4 +1,13 @@
 // Auswertung der selbst erfassten Abschlüsse. Reine Funktionen ohne Datenzugriff, damit testbar.
+import {
+  laufendeStrafen,
+  SEITEN,
+  type Seite,
+  type Strafe,
+  situationAus,
+  strafeEndetDurchTor,
+  zaehlt,
+} from '../../geteilt/unihockey.ts';
 //
 // Koordinaten: halbes Spielfeld, 20 m breit und 20 m tief. x von 0 (links) bis 1 (rechts),
 // y von 0 (Bande hinter dem Tor) bis 1 (Mittellinie). Das Tor steht 3.5 m vor der Bande.
@@ -9,8 +18,7 @@ export const TOR_ABSTAND_M = 3.5;
 
 export const TYPEN = ['tor', 'gehalten', 'daneben', 'geblockt'] as const;
 export type Typ = (typeof TYPEN)[number];
-export const SEITEN = ['eigen', 'gegner'] as const;
-export type Seite = (typeof SEITEN)[number];
+export { SEITEN, type Seite, type Strafe, laufendeStrafen, situationAus, strafeEndetDurchTor, zaehlt };
 export const ZONEN = ['Torraum', 'Slot', 'Seite', 'Distanz'] as const;
 export type Zone = (typeof ZONEN)[number];
 
@@ -26,6 +34,49 @@ export interface Ereignis {
   drittel: number | null;
   minute: number | null;
   situation: string | null;
+  /** Spieler ids auf dem Feld, mit Komma getrennt (für Plus Minus) */
+  auf_feld?: string | null;
+}
+
+/** Überzahl und Unterzahl: Chancen sind die Strafen des anderen Teams, die das Kräfteverhältnis ändern */
+export function spezialteams(liste: Ereignis[], strafen: Strafe[]) {
+  const chancen = strafen.filter((s) => s.team === 'gegner' && zaehlt(s)).length;
+  const unterzahl = strafen.filter((s) => s.team === 'eigen' && zaehlt(s)).length;
+  const tore = liste.filter(
+    (e) => e.team === 'eigen' && e.typ === 'tor' && e.situation === 'ueberzahl',
+  ).length;
+  const gegentore = liste.filter(
+    (e) => e.team === 'gegner' && e.typ === 'tor' && e.situation === 'unterzahl',
+  ).length;
+  return {
+    ueberzahl: { chancen, tore, quote: prozent(tore, chancen) },
+    unterzahl: {
+      chancen: unterzahl,
+      gegentore,
+      quote: unterzahl ? Math.round((1 - gegentore / unterzahl) * 1000) / 10 : null,
+    },
+    strafminuten: {
+      eigen: strafen.filter((s) => s.team === 'eigen').reduce((a, s) => a + s.minuten, 0),
+      gegner: strafen.filter((s) => s.team === 'gegner').reduce((a, s) => a + s.minuten, 0),
+    },
+  };
+}
+
+/**
+ * Plus Minus pro Spieler: Tor bei gleich vielen Spielern oder in Unterzahl gibt allen auf dem Feld +1,
+ * Gegentor bei gleich vielen oder in Überzahl -1. Tore in eigener Überzahl und Penaltys zählen nicht.
+ */
+export function plusMinus(liste: Ereignis[]): Map<string, number> {
+  const pm = new Map<string, number>();
+  for (const e of liste) {
+    if (e.typ !== 'tor' || !e.auf_feld || e.situation === 'penalty') continue;
+    let d = 0;
+    if (e.team === 'eigen' && e.situation !== 'ueberzahl') d = 1;
+    if (e.team === 'gegner' && e.situation !== 'unterzahl') d = -1;
+    if (!d) continue;
+    for (const id of e.auf_feld.split(',').filter(Boolean)) pm.set(id, (pm.get(id) ?? 0) + d);
+  }
+  return pm;
 }
 
 export interface Spieler {
@@ -54,6 +105,9 @@ export interface SpielerWerte extends Werte {
   spiele: number;
   /** Mittlere Distanz der Abschlüsse in Metern */
   distanz: number | null;
+  /** null, wenn für den Spieler nie erfasst wurde, wer auf dem Feld war */
+  plusMinus: number | null;
+  strafminuten: number;
 }
 
 /** Abstand zur Tormitte in Metern */
@@ -107,22 +161,38 @@ export function nachDrittel(liste: Ereignis[]) {
   });
 }
 
-export function nachSpieler(liste: Ereignis[], spieler: Spieler[]): SpielerWerte[] {
+export function nachSpieler(liste: Ereignis[], spieler: Spieler[], strafen: Strafe[] = []): SpielerWerte[] {
   const eigene = liste.filter((e) => e.team === 'eigen');
+  const pm = plusMinus(liste);
   return spieler
     .map((s) => {
       const schuesse = eigene.filter((e) => e.spieler_id === s.id);
       const assists = eigene.filter((e) => e.typ === 'tor' && e.assist_id === s.id).length;
       const w = werte(schuesse);
+      const feld = liste.filter((e) => e.auf_feld?.split(',').includes(s.id));
       const spiele = new Set(
-        eigene.filter((e) => e.spieler_id === s.id || e.assist_id === s.id).map((e) => e.spiel_id),
+        [...eigene.filter((e) => e.spieler_id === s.id || e.assist_id === s.id), ...feld].map(
+          (e) => e.spiel_id,
+        ),
       ).size;
+      const strafminuten = strafen
+        .filter((x) => x.team === 'eigen' && x.spieler_id === s.id)
+        .reduce((a, x) => a + x.minuten, 0);
       const d = schuesse.length
         ? Math.round((schuesse.reduce((a, e) => a + distanz(e.x, e.y), 0) / schuesse.length) * 10) / 10
         : null;
-      return { spieler: s, ...w, assists, punkte: w.tore + assists, spiele, distanz: d };
+      return {
+        spieler: s,
+        ...w,
+        assists,
+        punkte: w.tore + assists,
+        spiele,
+        distanz: d,
+        plusMinus: pm.get(s.id) ?? (feld.length ? 0 : null),
+        strafminuten,
+      };
     })
-    .filter((s) => s.schuesse || s.assists)
+    .filter((s) => s.schuesse || s.assists || s.plusMinus !== null || s.strafminuten)
     .sort((a, b) => b.punkte - a.punkte || b.tore - a.tore || b.schuesse - a.schuesse);
 }
 
@@ -135,7 +205,7 @@ export function resultat(liste: Ereignis[]) {
 }
 
 /** Gesamte Auswertung für eine Auswahl von Ereignissen */
-export function auswerten(liste: Ereignis[], spieler: Spieler[]) {
+export function auswerten(liste: Ereignis[], spieler: Spieler[], strafen: Strafe[] = []) {
   const eigen = liste.filter((e) => e.team === 'eigen');
   const gegner = liste.filter((e) => e.team === 'gegner');
   return {
@@ -144,6 +214,7 @@ export function auswerten(liste: Ereignis[], spieler: Spieler[]) {
     zonenEigen: nachZone(eigen),
     zonenGegner: nachZone(gegner),
     drittel: nachDrittel(liste),
-    spieler: nachSpieler(liste, spieler),
+    spieler: nachSpieler(liste, spieler, strafen),
+    spezial: spezialteams(liste, strafen),
   };
 }

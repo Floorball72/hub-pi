@@ -4,7 +4,12 @@ import {
   auswerten,
   distanz,
   type Ereignis,
+  plusMinus,
   resultat,
+  situationAus,
+  type Strafe,
+  spezialteams,
+  strafeEndetDurchTor,
   zone,
 } from '../src/server/modules/analyse/auswertung.ts';
 import { demoEreignisse } from '../src/server/modules/analyse/demo.ts';
@@ -82,4 +87,71 @@ test('Analyse: Demo Abschlüsse sind gültig und gleichbleibend', () => {
     assert.ok((z.y as number) >= 0 && (z.y as number) <= 1);
     if (z.team === 'gegner') assert.equal(z.spieler_id, null);
   }
+});
+
+const st = (teil: Partial<Strafe>): Strafe => ({
+  id: Math.random().toString(36),
+  spiel_id: 'a',
+  team: 'eigen',
+  spieler_id: null,
+  minuten: 2,
+  zeit_sek: 0,
+  ende_sek: null,
+  ...teil,
+});
+
+test('Analyse: Situation aus laufenden Strafen', () => {
+  const strafen = [st({ team: 'gegner', zeit_sek: 100 }), st({ team: 'eigen', zeit_sek: 160 })];
+  assert.equal(situationAus(strafen, 50), 'gleich');
+  assert.equal(situationAus(strafen, 120), 'ueberzahl');
+  assert.equal(situationAus(strafen, 200), 'gleich');
+  assert.equal(situationAus(strafen, 230), 'unterzahl');
+  assert.equal(situationAus(strafen, 300), 'gleich');
+  // 10 Minuten Strafen ändern nichts am Kräfteverhältnis
+  assert.equal(situationAus([st({ minuten: 10 })], 30), 'gleich');
+  // Höchstens zwei Spieler weniger
+  const drei = [st({ zeit_sek: 0 }), st({ zeit_sek: 10 }), st({ zeit_sek: 20 })];
+  assert.equal(situationAus([...drei, st({ team: 'gegner', zeit_sek: 30 })], 40), 'unterzahl');
+  assert.equal(
+    situationAus([...drei, st({ team: 'gegner', zeit_sek: 30 }), st({ team: 'gegner', zeit_sek: 31 })], 40),
+    'gleich',
+  );
+  // Vorzeitig beendet
+  assert.equal(situationAus([st({ ende_sek: 50 })], 60), 'gleich');
+});
+
+test('Analyse: Tor in Überzahl beendet die älteste 2 Minuten Strafe', () => {
+  const a = st({ team: 'gegner', zeit_sek: 100 });
+  const b = st({ team: 'gegner', zeit_sek: 130 });
+  assert.equal(strafeEndetDurchTor([b, a], 'eigen', 150)?.id, a.id);
+  // Gegentor in Unterzahl beendet nichts
+  assert.equal(strafeEndetDurchTor([a], 'gegner', 150), null);
+  // Gleich viele Spieler: nichts
+  assert.equal(strafeEndetDurchTor([a, st({ team: 'eigen', zeit_sek: 110 })], 'eigen', 150), null);
+  // 5 Minuten laufen weiter
+  assert.equal(strafeEndetDurchTor([st({ team: 'gegner', minuten: 5 })], 'eigen', 60), null);
+});
+
+test('Analyse: Plus Minus und Spezialteams', () => {
+  const liste = [
+    e({ typ: 'tor', auf_feld: 'a,b' }),
+    e({ typ: 'tor', auf_feld: 'a,c', situation: 'ueberzahl' }),
+    e({ typ: 'tor', team: 'gegner', auf_feld: 'b,c' }),
+    e({ typ: 'tor', team: 'gegner', auf_feld: 'a', situation: 'unterzahl' }),
+    e({ typ: 'tor', auf_feld: 'c', situation: 'penalty' }),
+    e({ typ: 'gehalten', auf_feld: 'a' }),
+  ];
+  const pm = plusMinus(liste);
+  assert.equal(pm.get('a'), 1);
+  assert.equal(pm.get('b'), 0);
+  assert.equal(pm.get('c'), -1);
+  const sp = spezialteams(liste, [
+    st({ team: 'gegner' }),
+    st({ team: 'gegner', minuten: 10 }),
+    st({ team: 'eigen' }),
+    st({ team: 'eigen', minuten: 5 }),
+  ]);
+  assert.deepEqual(sp.ueberzahl, { chancen: 1, tore: 1, quote: 100 });
+  assert.deepEqual(sp.unterzahl, { chancen: 2, gegentore: 1, quote: 50 });
+  assert.deepEqual(sp.strafminuten, { eigen: 7, gegner: 12 });
 });

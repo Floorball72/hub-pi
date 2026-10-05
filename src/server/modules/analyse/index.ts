@@ -1,12 +1,21 @@
 // Modul Unihockey Analyse: Abschlüsse vergangener Spiele selbst erfassen (Ort, Spieler, Ausgang)
 // und auswerten: Trefferbilder, Zonen, Drittel, Werte pro Spieler und Saison.
 import type { FastifyInstance } from 'fastify';
-import { tabelle } from '../../daten/schema.ts';
+import { tabelle, validieren } from '../../daten/schema.ts';
 import type { Kachel } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
 import { lokalDatum, tageZurueck } from '../../kern/zeit.ts';
-import { auswerten, type Ereignis, resultat, type Spieler, SEITEN, TYPEN } from './auswertung.ts';
-import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse } from './demo.ts';
+import {
+  auswerten,
+  type Ereignis,
+  resultat,
+  type Spieler,
+  SEITEN,
+  type Strafe,
+  strafeEndetDurchTor,
+  TYPEN,
+} from './auswertung.ts';
+import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse, demoStrafen } from './demo.ts';
 
 export const ANALYSE_SPIELE = tabelle({
   name: 'analyse_spiele',
@@ -28,6 +37,15 @@ export const ANALYSE_SPIELE = tabelle({
     },
     { name: 'saison', typ: 'text', label: 'Saison (z.B. 2026/27)' },
     { name: 'notiz', typ: 'text', label: 'Notiz', lang: true },
+    {
+      name: 'drittel_min',
+      typ: 'int',
+      label: 'Drittel Länge',
+      einheit: 'Minuten',
+      standard: 20,
+      min: 5,
+      max: 20,
+    },
   ],
   indizes: [['datum']],
 });
@@ -48,6 +66,7 @@ export const ANALYSE_SPIELER = tabelle({
       optionen: ['Sturm', 'Center', 'Verteidigung', 'Torhüter'],
     },
     { name: 'aktiv', typ: 'bool', label: 'Im Kader', standard: true },
+    { name: 'block', typ: 'int', label: 'Block', min: 1, max: 4 },
   ],
 });
 
@@ -73,6 +92,26 @@ export const ANALYSE_EREIGNISSE = tabelle({
       optionen: ['gleich', 'ueberzahl', 'unterzahl', 'penalty'],
       standard: 'gleich',
     },
+    { name: 'auf_feld', typ: 'text', label: 'Auf dem Feld' },
+    { name: 'zeit_sek', typ: 'int', label: 'Spielzeit in Sekunden', min: 0 },
+  ],
+  indizes: [['spiel_id']],
+});
+
+export const ANALYSE_STRAFEN = tabelle({
+  name: 'analyse_strafen',
+  modul: 'analyse',
+  label: 'Analyse Strafen',
+  bearbeitbar: true,
+  spalten: [
+    { name: 'spiel_id', typ: 'text', label: 'Spiel', pflicht: true, verweis: 'analyse_spiele' },
+    { name: 'team', typ: 'text', label: 'Team', pflicht: true, optionen: [...SEITEN], standard: 'eigen' },
+    { name: 'spieler_id', typ: 'text', label: 'Spieler', verweis: 'analyse_spieler' },
+    { name: 'minuten', typ: 'int', label: 'Minuten', pflicht: true, standard: 2, min: 2, max: 10 },
+    { name: 'drittel', typ: 'int', label: 'Drittel', min: 1, max: 4 },
+    { name: 'minute', typ: 'int', label: 'Minute', min: 0, max: 80 },
+    { name: 'zeit_sek', typ: 'int', label: 'Spielzeit in Sekunden', min: 0 },
+    { name: 'ende_sek', typ: 'int', label: 'Vorzeitig beendet bei Sekunde', min: 0 },
   ],
   indizes: [['spiel_id']],
 });
@@ -93,7 +132,7 @@ export const analyse: ModulDef = {
   beschreibung: 'Abschlüsse vergangener Spiele erfassen und auswerten: Trefferbild, Zonen, Spieler',
   symbol: 'analyse',
   reihenfolge: 52,
-  tabellen: [ANALYSE_SPIELE, ANALYSE_SPIELER, ANALYSE_EREIGNISSE],
+  tabellen: [ANALYSE_SPIELE, ANALYSE_SPIELER, ANALYSE_EREIGNISSE, ANALYSE_STRAFEN],
   erstellen: (ctx) => analyseLaufzeit(ctx),
 };
 
@@ -119,7 +158,8 @@ function analyseLaufzeit(ctx: Kontext) {
             saison: '2026/27',
           },
         ]);
-        await daten.einfuegen('analyse_ereignisse', demoEreignisse(spiel.id, ids, start++));
+        await daten.einfuegen('analyse_ereignisse', demoEreignisse(spiel.id, ids, start));
+        await daten.einfuegen('analyse_strafen', demoStrafen(spiel.id, ids, start++));
       }
       await ctx.einstellungen.setze('analyse.demo_angelegt', true);
     })();
@@ -131,6 +171,8 @@ function analyseLaufzeit(ctx: Kontext) {
     daten.liste<Spieler & { aktiv: boolean }>('analyse_spieler', { sortierung: 'nummer', limit: 200 });
   const ereignisseLaden = (filter: Record<string, unknown> = {}) =>
     daten.liste<Ereignis>('analyse_ereignisse', { filter, sortierung: 'erstellt', limit: 20000 });
+  const strafenLaden = (filter: Record<string, unknown> = {}) =>
+    daten.liste<Strafe>('analyse_strafen', { filter, sortierung: 'erstellt', limit: 5000 });
 
   async function uebersicht() {
     await vorbereiten();
@@ -171,8 +213,9 @@ function analyseLaufzeit(ctx: Kontext) {
         let ids: string[] | null = null;
         if (spiel) ids = [spiel];
         else if (saison) ids = spiele.filter((s) => s.saison === saison).map((s) => s.id);
-        let liste = await ereignisseLaden(ids ? { spiel_id: { in: ids.length ? ids : ['-'] } } : {});
-        const auswertung = auswerten(liste, spieler);
+        const filter = ids ? { spiel_id: { in: ids.length ? ids : ['-'] } } : {};
+        let liste = await ereignisseLaden(filter);
+        const auswertung = auswerten(liste, spieler, await strafenLaden(filter));
         if (nurSpieler) liste = liste.filter((e) => e.team === 'eigen' && e.spieler_id === nurSpieler);
         return {
           ...auswertung,
@@ -193,9 +236,39 @@ function analyseLaufzeit(ctx: Kontext) {
     app.get<{ Params: { id: string } }>('/spiel/:id', async (req, reply) => {
       const spiel = await daten.hole<Spiel>('analyse_spiele', req.params.id);
       if (!spiel) return reply.code(404).send({ fehler: 'Spiel nicht gefunden' });
-      const ereignisse = await ereignisseLaden({ spiel_id: spiel.id });
-      return { spiel, ereignisse, resultat: resultat(ereignisse) };
+      const [ereignisse, strafen] = await Promise.all([
+        ereignisseLaden({ spiel_id: spiel.id }),
+        strafenLaden({ spiel_id: spiel.id }),
+      ]);
+      return { spiel, ereignisse, strafen, resultat: resultat(ereignisse) };
     });
+
+    // Abschluss aus der Live Erfassung. Ein Tor in Überzahl beendet die älteste 2 Minuten Strafe des Gegners.
+    app.post<{ Params: { id: string }; Body: Record<string, unknown> }>(
+      '/spiel/:id/abschluss',
+      async (req, reply) => {
+        const spiel = await daten.hole<Spiel>('analyse_spiele', req.params.id);
+        if (!spiel) return reply.code(404).send({ fehler: 'Spiel nicht gefunden' });
+        let zeile: Record<string, unknown>;
+        try {
+          zeile = validieren(ANALYSE_EREIGNISSE, { ...req.body, spiel_id: spiel.id }, false);
+        } catch (e) {
+          return reply.code(400).send({ fehler: (e as Error).message });
+        }
+        const [neu] = await daten.einfuegen<Ereignis & { zeit_sek: number | null }>('analyse_ereignisse', [
+          zeile,
+        ]);
+        let beendet: string | null = null;
+        if (neu.typ === 'tor' && neu.zeit_sek != null) {
+          const s = strafeEndetDurchTor(await strafenLaden({ spiel_id: spiel.id }), neu.team, neu.zeit_sek);
+          if (s) {
+            await daten.aendern('analyse_strafen', s.id, { ende_sek: neu.zeit_sek });
+            beendet = s.id;
+          }
+        }
+        return { ereignis: neu, strafeBeendet: beendet };
+      },
+    );
   }
 
   async function kachel(): Promise<Kachel> {

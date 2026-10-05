@@ -11,13 +11,23 @@ function zufall(start: number) {
 }
 
 export const DEMO_SPIELER = [
-  { nummer: 7, name: 'Nico', position: 'Sturm' },
-  { nummer: 10, name: 'Lars', position: 'Center' },
-  { nummer: 14, name: 'Timo', position: 'Sturm' },
-  { nummer: 19, name: 'Fabio', position: 'Sturm' },
-  { nummer: 22, name: 'Remo', position: 'Verteidigung' },
-  { nummer: 4, name: 'Sven', position: 'Verteidigung' },
+  { nummer: 7, name: 'Nico', position: 'Sturm', block: 1 },
+  { nummer: 10, name: 'Lars', position: 'Center', block: 1 },
+  { nummer: 14, name: 'Timo', position: 'Sturm', block: 1 },
+  { nummer: 19, name: 'Fabio', position: 'Sturm', block: 2 },
+  { nummer: 22, name: 'Remo', position: 'Verteidigung', block: 1 },
+  { nummer: 4, name: 'Sven', position: 'Verteidigung', block: 1 },
   { nummer: 33, name: 'Jan', position: 'Torhüter' },
+  { nummer: 8, name: 'Mike', position: 'Sturm', block: 2 },
+  { nummer: 11, name: 'Luca', position: 'Center', block: 2 },
+  { nummer: 25, name: 'Pascal', position: 'Verteidigung', block: 2 },
+  { nummer: 3, name: 'Silvan', position: 'Verteidigung', block: 2 },
+];
+
+/** Blöcke als Index in DEMO_SPIELER */
+const BLOCK = [
+  [0, 1, 2, 4, 5],
+  [3, 7, 8, 9, 10],
 ];
 
 export const DEMO_SPIELE = [
@@ -32,9 +42,10 @@ const TORCHANCE: Record<string, number> = { Torraum: 0.22, Slot: 0.15, Seite: 0.
 /** Abschlüsse für ein Spiel. Spieler ids in der Reihenfolge von DEMO_SPIELER. */
 export function demoEreignisse(spielId: string, spielerIds: string[], start: number) {
   const r = zufall(start);
-  const feldspieler = spielerIds.slice(0, 6);
+  const feldspieler = [...spielerIds.slice(0, 6), ...spielerIds.slice(7, 11)];
+  const bloecke = BLOCK.map((b) => b.map((i) => spielerIds[i]));
   // Stürmer schiessen öfter als Verteidiger
-  const gewicht = [5, 4, 4, 3, 2, 2];
+  const gewicht = [5, 4, 4, 3, 2, 2, 3, 3, 1, 1];
   const summe = gewicht.reduce((a, b) => a + b, 0);
   const schuetze = () => {
     let z = r() * summe;
@@ -60,11 +71,15 @@ export function demoEreignisse(spielId: string, spielerIds: string[], start: num
       }
       const drittel = 1 + Math.floor(r() * 3);
       const spieler = team === 'eigen' ? schuetze() : null;
+      const block = spieler
+        ? (bloecke.find((b) => b.includes(spieler)) ?? bloecke[0])
+        : bloecke[r() < 0.55 ? 0 : 1];
       let assist: string | null = null;
       if (team === 'eigen' && typ === 'tor' && r() < 0.7) {
-        const andere = feldspieler.filter((id) => id !== spieler);
+        const andere = block.filter((id) => id !== spieler);
         assist = andere[Math.floor(r() * andere.length)];
       }
+      const minute = (drittel - 1) * 20 + Math.floor(r() * 20);
       liste.push({
         spiel_id: spielId,
         typ,
@@ -74,8 +89,33 @@ export function demoEreignisse(spielId: string, spielerIds: string[], start: num
         spieler_id: spieler,
         assist_id: assist,
         drittel,
-        minute: (drittel - 1) * 20 + Math.floor(r() * 20),
+        minute,
+        zeit_sek: minute * 60 + Math.floor(r() * 60),
         situation: r() < 0.12 ? (team === 'eigen' ? 'ueberzahl' : 'unterzahl') : 'gleich',
+        auf_feld: block.join(','),
+      });
+    }
+  }
+  return liste;
+}
+
+/** Strafen für ein Spiel: je Team zwei bis vier, meist 2 Minuten */
+export function demoStrafen(spielId: string, spielerIds: string[], start: number) {
+  const r = zufall(start * 31);
+  const feldspieler = [...spielerIds.slice(0, 6), ...spielerIds.slice(7, 11)];
+  const liste: Record<string, unknown>[] = [];
+  for (const team of ['eigen', 'gegner'] as const) {
+    const anzahl = 2 + Math.floor(r() * 3);
+    for (let i = 0; i < anzahl; i++) {
+      const sek = Math.floor(r() * 3600);
+      liste.push({
+        spiel_id: spielId,
+        team,
+        spieler_id: team === 'eigen' ? feldspieler[Math.floor(r() * feldspieler.length)] : null,
+        minuten: r() < 0.9 ? 2 : r() < 0.5 ? 5 : 10,
+        drittel: 1 + Math.floor(sek / 1200),
+        minute: Math.floor(sek / 60),
+        zeit_sek: sek,
       });
     }
   }

@@ -2,14 +2,15 @@
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import Spielfeld from '../komponenten/Spielfeld.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
-  import { api, fehlerText } from '../lib/api.ts';
+  import { laufendeStrafen, type Strafe, situationAus, strafeEndetDurchTor } from '../../server/geteilt/unihockey.ts';
+  import { ApiFehler, api, fehlerText } from '../lib/api.ts';
   import { datum } from '../lib/format.ts';
   import { melden } from '../lib/meldung.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
 
-  interface Spieler { id: string; nummer: number | null; name: string; position: string | null; aktiv?: boolean }
-  interface Spiel { id: string; datum: string; gegner: string; team: string | null; ort: string | null; saison: string | null; resultat: { eigen: number; gegner: number }; schuesse: { eigen: number; gegner: number } }
-  interface Ereignis { id: string; typ: string; team: string; x: number; y: number; spieler_id: string | null; assist_id?: string | null; drittel?: number | null; minute?: number | null }
+  interface Spieler { id: string; nummer: number | null; name: string; position: string | null; aktiv?: boolean; block?: number | null }
+  interface Spiel { id: string; datum: string; gegner: string; team: string | null; ort: string | null; saison: string | null; drittel_min?: number | null; resultat: { eigen: number; gegner: number }; schuesse: { eigen: number; gegner: number } }
+  interface Ereignis { id: string; typ: string; team: string; x: number; y: number; spieler_id: string | null; assist_id?: string | null; drittel?: number | null; minute?: number | null; situation?: string | null; auf_feld?: string | null; zeit_sek?: number | null }
   interface Werte { schuesse: number; tore: number; aufsTor: number; geblockt: number; daneben: number; effizienz: number | null; praezision: number | null }
   interface Auswertung {
     eigen: Werte;
@@ -17,7 +18,12 @@
     zonenEigen: ({ zone: string } & Werte)[];
     zonenGegner: ({ zone: string } & Werte)[];
     drittel: { drittel: number; eigen: Werte; gegner: Werte }[];
-    spieler: ({ spieler: Spieler; assists: number; punkte: number; spiele: number; distanz: number | null } & Werte)[];
+    spieler: ({ spieler: Spieler; assists: number; punkte: number; spiele: number; distanz: number | null; plusMinus: number | null; strafminuten: number } & Werte)[];
+    spezial: {
+      ueberzahl: { chancen: number; tore: number; quote: number | null };
+      unterzahl: { chancen: number; gegentore: number; quote: number | null };
+      strafminuten: { eigen: number; gegner: number };
+    };
     spiele: number;
     ereignisse: Ereignis[];
   }
@@ -58,8 +64,8 @@
   let spielId = $state<string>(lesen('analyse.spiel', ''));
   let ereignisse = $state<Ereignis[]>([]);
   let team = $state<'eigen' | 'gegner'>('eigen');
-  let drittel = $state(1);
   let situation = $state('gleich');
+  let situationManuell = $state(false);
   let minute = $state<number | null>(null);
   let schuetze = $state<string | null>(null);
   let assist = $state<string>('');
@@ -71,13 +77,168 @@
   });
   $effect(() => {
     schreiben('analyse.spiel', spielId);
-    if (tab === 'Erfassen' && spielId) spielLaden(spielId);
+    if (tab === 'Erfassen' && u?.spiele.some((s) => s.id === spielId)) spielLaden(spielId).catch((e) => melden(fehlerText(e), 'ausfall'));
   });
 
   async function spielLaden(id: string) {
-    const d = await api.get<{ ereignisse: Ereignis[] }>(`/api/m/analyse/spiel/${id}`);
-    if (id === spielId) ereignisse = d.ereignisse;
+    const d = await api.get<{ ereignisse: Ereignis[]; strafen: Strafe[] }>(`/api/m/analyse/spiel/${id}`);
+    if (id !== spielId) return;
+    // Noch nicht gesendete Abschlüsse dieses Spiels dazu
+    ereignisse = [...d.ereignisse, ...warteschlange.filter((w) => w.spielId === id).map((w) => w.zeile)];
+    strafen = d.strafen;
   }
+
+  // ---------- Spieluhr ----------
+  // Läuft im Browser und bleibt pro Spiel gespeichert, auch wenn das Handy die Seite neu lädt.
+  interface Uhr { drittel: number; sek: number; seit: number | null }
+  const NEUE_UHR: Uhr = { drittel: 1, sek: 0, seit: null };
+  let uhr = $state<Uhr>({ ...NEUE_UHR });
+  let uhrFuer = '';
+  let jetzt = $state(Date.now());
+  $effect(() => {
+    if (spielId !== uhrFuer && u?.spiele.some((s) => s.id === spielId)) {
+      uhr = lesen(`analyse.uhr.${spielId}`, { ...NEUE_UHR });
+      uhrFuer = spielId;
+    }
+  });
+  $effect(() => {
+    const u = $state.snapshot(uhr);
+    if (spielId && uhrFuer === spielId) schreiben(`analyse.uhr.${spielId}`, u);
+  });
+  $effect(() => {
+    if (!uhr.seit) return;
+    const t = setInterval(() => (jetzt = Date.now()), 500);
+    return () => clearInterval(t);
+  });
+  const drittelSek = $derived((u?.spiele.find((s) => s.id === spielId)?.drittel_min ?? 20) * 60);
+  // Verlängerung halb so lang wie ein Drittel (10 Minuten bei 20 Minuten Dritteln)
+  const laengeSek = $derived(uhr.drittel === 4 ? drittelSek / 2 : drittelSek);
+  const periodeSek = $derived(
+    Math.min(laengeSek, Math.floor(uhr.sek + (uhr.seit ? Math.max(0, jetzt - uhr.seit) / 1000 : 0))),
+  );
+  const spielSek = $derived((uhr.drittel - 1) * drittelSek + periodeSek);
+  const uhrBenutzt = $derived(uhr.seit !== null || uhr.sek > 0);
+  const minuteWert = $derived(uhrBenutzt ? Math.floor(spielSek / 60) : minute);
+  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  $effect(() => {
+    if (uhr.seit && periodeSek >= laengeSek) {
+      uhr = { ...uhr, sek: laengeSek, seit: null };
+      melden(uhr.drittel === 4 ? 'Verlängerung zu Ende' : `${uhr.drittel}. Drittel zu Ende`, 'ok');
+    }
+  });
+
+  function uhrStartStop() {
+    if (uhr.seit) uhr = { ...uhr, sek: periodeSek, seit: null };
+    else if (periodeSek < laengeSek) {
+      jetzt = Date.now();
+      uhr = { ...uhr, seit: jetzt };
+    }
+  }
+  function uhrKorrigieren(d: number) {
+    jetzt = Date.now();
+    uhr = { ...uhr, sek: Math.max(0, Math.min(laengeSek, periodeSek + d)), seit: uhr.seit ? jetzt : null };
+  }
+  function drittelWaehlen(d: number) {
+    if (d !== uhr.drittel) uhr = { drittel: d, sek: 0, seit: null };
+  }
+
+  // ---------- Blöcke und Plus Minus ----------
+  let aufFeld = $state<string[]>([]);
+  let aktiverBlock = $state<number | null>(null);
+  const bloecke = $derived(
+    [...new Set(kader.map((s) => s.block).filter((b): b is number => b != null))].sort((a, b) => a - b),
+  );
+  function blockWaehlen(b: number) {
+    aktiverBlock = b;
+    aufFeld = kader.filter((s) => s.block === b).map((s) => s.id);
+  }
+  function feldUmschalten(id: string) {
+    aktiverBlock = null;
+    aufFeld = aufFeld.includes(id) ? aufFeld.filter((x) => x !== id) : [...aufFeld, id];
+  }
+  let wechselOffen = $state(false);
+  // Spieler auf dem Feld zuerst, dann der Rest
+  const schuetzen = $derived(
+    [...kader].sort((a, b) => Number(aufFeld.includes(b.id)) - Number(aufFeld.includes(a.id))),
+  );
+
+  // ---------- Strafen ----------
+  let strafen = $state<Strafe[]>([]);
+  let strafSpieler = $state('');
+  const laufend = $derived(laufendeStrafen(strafen, spielSek));
+  const situationAuto = $derived(uhrBenutzt ? situationAus(strafen, spielSek) : null);
+  $effect(() => {
+    if (situationAuto && !situationManuell && situation !== situationAuto) situation = situationAuto;
+  });
+  function restZeit(s: Strafe) {
+    return (s.ende_sek ?? (s.zeit_sek ?? 0) + s.minuten * 60) - spielSek;
+  }
+
+  async function strafeErfassen(t: 'eigen' | 'gegner', minuten: number) {
+    if (!spielId) return;
+    try {
+      const neu = await api.post<Strafe>('/api/daten/analyse_strafen', {
+        spiel_id: spielId,
+        team: t,
+        spieler_id: t === 'eigen' && strafSpieler ? strafSpieler : null,
+        minuten,
+        drittel: uhr.drittel,
+        minute: minuteWert,
+        zeit_sek: uhrBenutzt ? spielSek : null,
+      });
+      strafen = [...strafen, neu];
+      strafSpieler = '';
+      melden(`${minuten} Minuten ${t === 'eigen' ? 'gegen uns' : 'gegen den Gegner'}`, 'ok');
+    } catch (e) {
+      melden(fehlerText(e), 'ausfall');
+    }
+  }
+  async function strafeEntfernen(s: Strafe) {
+    try {
+      await api.del(`/api/daten/analyse_strafen/${s.id}?bestaetigt=ja`);
+      strafen = strafen.filter((x) => x.id !== s.id);
+    } catch (e) {
+      melden(fehlerText(e), 'ausfall');
+    }
+  }
+
+  // ---------- Offline Puffer ----------
+  // In der Halle ist das Netz oft schlecht. Abschlüsse bleiben im Browser, bis sie gesendet sind.
+  interface Wartend { spielId: string; body: Record<string, unknown>; zeile: Ereignis }
+  let warteschlange = $state<Wartend[]>(lesen('analyse.warteschlange', []));
+  let sendet = false;
+  $effect(() => schreiben('analyse.warteschlange', $state.snapshot(warteschlange)));
+
+  async function nachsenden() {
+    if (sendet || !warteschlange.length) return;
+    sendet = true;
+    try {
+      while (warteschlange.length) {
+        const w = warteschlange[0];
+        try {
+          const r = await api.post<{ ereignis: Ereignis }>(`/api/m/analyse/spiel/${w.spielId}/abschluss`, w.body);
+          ereignisse = ereignisse.map((e) => (e.id === w.zeile.id ? r.ereignis : e));
+        } catch (e) {
+          if (!(e instanceof ApiFehler)) break;
+          // Vom Server abgelehnt (z.B. Spiel gelöscht): verwerfen, damit die Schlange nicht hängt
+          melden(`Abschluss verworfen: ${fehlerText(e)}`, 'ausfall');
+        }
+        warteschlange = warteschlange.slice(1);
+      }
+      if (!warteschlange.length) melden('Alle Abschlüsse gesendet', 'ok');
+    } finally {
+      sendet = false;
+    }
+  }
+  $effect(() => {
+    if (!warteschlange.length) return;
+    const t = setInterval(nachsenden, 15000);
+    window.addEventListener('online', nachsenden);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('online', nachsenden);
+    };
+  });
 
   const stand = $derived({
     eigen: ereignisse.filter((e) => e.team === 'eigen' && e.typ === 'tor').length,
@@ -88,24 +249,47 @@
   async function erfassen(typ: string) {
     if (!markierung || !spielId || speichert) return;
     speichert = true;
-    try {
-      const neu = await api.post<Ereignis>('/api/daten/analyse_ereignisse', {
-        spiel_id: spielId,
-        typ,
-        team,
-        x: markierung.x,
-        y: markierung.y,
-        spieler_id: team === 'eigen' ? schuetze : null,
-        assist_id: team === 'eigen' && typ === 'tor' && assist ? assist : null,
-        drittel,
-        minute,
-        situation,
-      });
-      ereignisse = [...ereignisse, neu];
+    const body = {
+      typ,
+      team,
+      x: markierung.x,
+      y: markierung.y,
+      spieler_id: team === 'eigen' ? schuetze : null,
+      assist_id: team === 'eigen' && typ === 'tor' && assist ? assist : null,
+      drittel: uhr.drittel,
+      minute: minuteWert,
+      situation,
+      auf_feld: aufFeld.length ? aufFeld.join(',') : null,
+      zeit_sek: uhrBenutzt ? spielSek : null,
+    };
+    const fertig = () => {
       markierung = null;
       assist = '';
+      situationManuell = false;
+    };
+    try {
+      const r = await api.post<{ ereignis: Ereignis; strafeBeendet: string | null }>(
+        `/api/m/analyse/spiel/${spielId}/abschluss`,
+        body,
+      );
+      ereignisse = [...ereignisse, r.ereignis];
+      if (r.strafeBeendet)
+        strafen = strafen.map((s) => (s.id === r.strafeBeendet ? { ...s, ende_sek: body.zeit_sek } : s));
+      fertig();
     } catch (e) {
-      melden(fehlerText(e), 'ausfall');
+      if (e instanceof ApiFehler) melden(fehlerText(e), 'ausfall');
+      else {
+        // Kein Netz: lokal behalten und später senden
+        const zeile = { ...body, id: `lokal-${Date.now()}`, spiel_id: spielId } as Ereignis;
+        warteschlange = [...warteschlange, { spielId, body, zeile }];
+        ereignisse = [...ereignisse, zeile];
+        if (typ === 'tor' && body.zeit_sek != null) {
+          const s = strafeEndetDurchTor(strafen, team, body.zeit_sek);
+          if (s) strafen = strafen.map((x) => (x.id === s.id ? { ...x, ende_sek: body.zeit_sek } : x));
+        }
+        fertig();
+        melden('Kein Netz. Der Abschluss wird nachgesendet.', 'ausfall');
+      }
     } finally {
       speichert = false;
     }
@@ -114,6 +298,11 @@
   async function rueckgaengig() {
     const letztes = ereignisse.at(-1);
     if (!letztes) return;
+    if (letztes.id.startsWith('lokal-')) {
+      warteschlange = warteschlange.filter((w) => w.zeile.id !== letztes.id);
+      ereignisse = ereignisse.slice(0, -1);
+      return;
+    }
     try {
       await api.del(`/api/daten/analyse_ereignisse/${letztes.id}?bestaetigt=ja`);
       ereignisse = ereignisse.slice(0, -1);
@@ -184,26 +373,59 @@
               <button class:an={team === 'eigen'} onclick={() => (team = 'eigen')}>Wir schiessen</button>
               <button class:an={team === 'gegner'} onclick={() => (team = 'gegner')}>Gegner schiesst</button>
             </div>
+            {#if warteschlange.length}<div class="marke warnung sehr-klein">{warteschlange.length === 1 ? "1 Abschluss wartet" : `${warteschlange.length} Abschlüsse warten`} auf Netz</div>{/if}
+            <div class="uhr">
+              <div class="uhr-zeit zahl" class:laeuft={uhr.seit}>{mmss(periodeSek)}</div>
+              <div class="uhr-knoepfe">
+                <button class="primaer" onclick={uhrStartStop} disabled={!uhr.seit && periodeSek >= laengeSek}>{uhr.seit ? 'Pause' : uhrBenutzt ? 'Weiter' : 'Start'}</button>
+                <button class="leise klein" onclick={() => uhrKorrigieren(-10)} aria-label="10 Sekunden zurück">−10 s</button>
+                <button class="leise klein" onclick={() => uhrKorrigieren(10)} aria-label="10 Sekunden vor">+10 s</button>
+              </div>
+            </div>
             <div class="zeile">
               <span class="klein gedaempft">Drittel</span>
               <div class="wahl">
-                {#each DRITTEL as d (d)}<button class:an={drittel === d} onclick={() => (drittel = d)}>{drittelName(d)}</button>{/each}
+                {#each DRITTEL as d (d)}<button class:an={uhr.drittel === d} onclick={() => drittelWaehlen(d)}>{drittelName(d)}</button>{/each}
               </div>
-              <input type="number" min="0" max="80" placeholder="Min" bind:value={minute} class="minute" aria-label="Minute" />
-              <select bind:value={situation} aria-label="Situation">
+              {#if uhrBenutzt}
+                <span class="sehr-klein gedaempft">{minuteWert}. Min</span>
+              {:else}
+                <input type="number" min="0" max="80" placeholder="Min" bind:value={minute} class="minute" aria-label="Minute" />
+              {/if}
+              <select bind:value={situation} onchange={() => (situationManuell = true)} aria-label="Situation">
                 <option value="gleich">5 gegen 5</option>
                 <option value="ueberzahl">Überzahl</option>
                 <option value="unterzahl">Unterzahl</option>
                 <option value="penalty">Penalty</option>
               </select>
             </div>
+            {#if laufend.length}
+              <div class="sehr-klein">
+                {#each laufend as s (s.id)}<span class="marke {s.team === 'eigen' ? 'warnung' : 'ok'}">{s.team === 'eigen' ? 'Wir' : 'Gegner'} {s.minuten}′ noch {mmss(restZeit(s))}</span>{' '}{/each}
+              </div>
+            {/if}
+            <div>
+              <div class="zeile-zwischen">
+                <span class="klein gedaempft">Auf dem Feld{aufFeld.length ? ` (${aufFeld.length})` : ''}</span>
+                <button class="leise klein" onclick={() => (wechselOffen = !wechselOffen)}>{wechselOffen ? 'Fertig' : 'Anpassen'}</button>
+              </div>
+              <div class="wahl">
+                {#each bloecke as b (b)}<button class:an={aktiverBlock === b} onclick={() => blockWaehlen(b)}>Block {b}</button>{/each}
+                {#if !bloecke.length}<span class="sehr-klein gedaempft">Blöcke beim Kader unter «Spieler» eintragen, dann zählt Plus Minus.</span>{/if}
+              </div>
+              {#if wechselOffen}
+                <div class="chips">
+                  {#each kader as s (s.id)}<button class:an={aufFeld.includes(s.id)} onclick={() => feldUmschalten(s.id)}>{s.nummer ?? ''} {s.name}</button>{/each}
+                </div>
+              {/if}
+            </div>
             {#if team === 'eigen'}
               <div>
                 <div class="klein gedaempft">Schütze</div>
                 <div class="chips">
                   <button class:an={schuetze === null} onclick={() => (schuetze = null)}>?</button>
-                  {#each kader as s (s.id)}
-                    <button class:an={schuetze === s.id} onclick={() => (schuetze = s.id)}>{s.nummer ?? ''} {s.name}</button>
+                  {#each schuetzen as s (s.id)}
+                    <button class:an={schuetze === s.id} class:feld={aufFeld.includes(s.id)} onclick={() => (schuetze = s.id)}>{s.nummer ?? ''} {s.name}</button>
                   {/each}
                 </div>
                 {#if !kader.length}<p class="sehr-klein gedaempft">Kader unter «Spieler» erfassen.</p>{/if}
@@ -216,6 +438,33 @@
                 </select>
               </label>
             {/if}
+          </div>
+          <div class="panel stapel">
+            <h3>Strafen</h3>
+            <div class="zeile strafe">
+              <span class="klein">Wir</span>
+              <select bind:value={strafSpieler} aria-label="Bestrafter Spieler">
+                <option value="">Spieler?</option>
+                {#each kader as s (s.id)}<option value={s.id}>{s.nummer ?? ''} {s.name}</option>{/each}
+              </select>
+              {#each [2, 5, 10] as m (m)}<button onclick={() => strafeErfassen('eigen', m)}>{m}′</button>{/each}
+            </div>
+            <div class="zeile strafe">
+              <span class="klein">Gegner</span>
+              {#each [2, 5, 10] as m (m)}<button onclick={() => strafeErfassen('gegner', m)}>{m}′</button>{/each}
+            </div>
+            {#if strafen.length}
+              <ul class="liste">
+                {#each strafen as s (s.id)}
+                  <li class="zeile klein">
+                    <span class="wachsen">{s.team === 'eigen' ? spielerName(s.spieler_id) || 'Wir' : 'Gegner'} {s.minuten}′</span>
+                    <span class="sehr-klein gedaempft">{s.zeit_sek != null ? mmss(s.zeit_sek) : ''}{s.ende_sek != null ? ' (Tor, vorzeitig zu Ende)' : ''}</span>
+                    <button class="leise klein" onclick={() => strafeEntfernen(s)} aria-label="Strafe entfernen">✕</button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            <p class="sehr-klein gedaempft">Mit laufender Uhr stellt der Hub Überzahl und Unterzahl selbst ein. Ein Tor in Überzahl beendet eine 2 Minuten Strafe.</p>
           </div>
         </div>
         <div class="stapel">
@@ -289,6 +538,11 @@
             </table>
             <p class="sehr-klein gedaempft">Torraum bis 5 m vom Tor, Slot zentral bis 10 m, Seite seitlich bis 10 m, Distanz weiter weg.</p>
           </div>
+          <div class="kennzahlen">
+            <div class="panel"><div class="sehr-klein gedaempft">Überzahl</div><div class="zahl gross">{pct(a.spezial.ueberzahl.quote)}</div><div class="sehr-klein gedaempft">{a.spezial.ueberzahl.tore} Tore aus {a.spezial.ueberzahl.chancen} Chancen</div></div>
+            <div class="panel"><div class="sehr-klein gedaempft">Unterzahl überstanden</div><div class="zahl gross">{pct(a.spezial.unterzahl.quote)}</div><div class="sehr-klein gedaempft">{a.spezial.unterzahl.gegentore} Gegentore in {a.spezial.unterzahl.chancen} Unterzahlen</div></div>
+            <div class="panel"><div class="sehr-klein gedaempft">Strafminuten</div><div class="zahl gross">{a.spezial.strafminuten.eigen}</div><div class="sehr-klein gedaempft">Gegner {a.spezial.strafminuten.gegner}</div></div>
+          </div>
           <div class="panel">
             <h3>Nach Drittel</h3>
             <table>
@@ -306,12 +560,14 @@
     <div class="panel tabelle-scroll">
       {#if a?.spieler.length}
         <table>
-          <thead><tr><th>Nr</th><th>Spieler</th><th>Sp</th><th>Tore</th><th>Ass</th><th>Pkt</th><th>Schüsse</th><th>Effizienz</th><th>Aufs Tor</th><th>Distanz</th></tr></thead>
+          <thead><tr><th>Nr</th><th>Spieler</th><th>Sp</th><th>Tore</th><th>Ass</th><th>Pkt</th><th>+/−</th><th>Strafmin</th><th>Schüsse</th><th>Effizienz</th><th>Aufs Tor</th><th>Distanz</th></tr></thead>
           <tbody>
             {#each a.spieler as s (s.spieler.id)}
               <tr>
                 <td>{s.spieler.nummer ?? ''}</td><td>{s.spieler.name}</td><td class="zahl">{s.spiele}</td><td class="zahl">{s.tore}</td><td class="zahl">{s.assists}</td>
-                <td class="zahl"><strong>{s.punkte}</strong></td><td class="zahl">{s.schuesse}</td><td class="zahl">{pct(s.effizienz)}</td><td class="zahl">{pct(s.praezision)}</td>
+                <td class="zahl"><strong>{s.punkte}</strong></td>
+                <td class="zahl" class:plus={(s.plusMinus ?? 0) > 0} class:minus={(s.plusMinus ?? 0) < 0}>{s.plusMinus == null ? '' : s.plusMinus > 0 ? `+${s.plusMinus}` : s.plusMinus}</td>
+                <td class="zahl">{s.strafminuten || ''}</td><td class="zahl">{s.schuesse}</td><td class="zahl">{pct(s.effizienz)}</td><td class="zahl">{pct(s.praezision)}</td>
                 <td class="zahl">{s.distanz != null ? `${s.distanz} m` : '–'}</td>
               </tr>
             {/each}
@@ -321,7 +577,7 @@
     </div>
     <h3 style="margin-top:18px">Kader</h3>
     <p class="sehr-klein gedaempft">Nur Nummer und Vorname oder Kürzel erfassen, keine weiteren Angaben.</p>
-    <div class="panel"><TabellenEditor tabelle="analyse_spieler" spalten={['nummer', 'name', 'position', 'aktiv']} sort="nummer" neuText="Spieler" bind:zeilen={spielerZeilen} /></div>
+    <div class="panel"><TabellenEditor tabelle="analyse_spieler" spalten={['nummer', 'name', 'position', 'block', 'aktiv']} sort="nummer" neuText="Spieler" bind:zeilen={spielerZeilen} /></div>
   {:else}
     <div class="panel">
       <ul class="liste">
@@ -337,7 +593,7 @@
       </ul>
     </div>
     <h3 style="margin-top:18px">Spiele verwalten</h3>
-    <div class="panel"><TabellenEditor tabelle="analyse_spiele" spalten={['datum', 'gegner', 'team', 'ort', 'saison']} sort="-datum" neuText="Spiel" bind:zeilen={spielZeilen} /></div>
+    <div class="panel"><TabellenEditor tabelle="analyse_spiele" spalten={['datum', 'gegner', 'team', 'ort', 'saison', 'drittel_min']} sort="-datum" neuText="Spiel" bind:zeilen={spielZeilen} /></div>
   {/if}
 </ModulRahmen>
 
@@ -380,6 +636,45 @@
   }
   .minute {
     width: 72px;
+  }
+  .uhr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .uhr-zeit {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-2);
+  }
+  .uhr-zeit.laeuft {
+    color: var(--text);
+  }
+  .uhr-knoepfe {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .chips button.feld:not(.an) {
+    border-color: var(--rand-stark, var(--akzent));
+  }
+  .strafe {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .strafe select {
+    width: auto;
+    flex: 1 1 120px;
+  }
+  .strafe button {
+    min-width: 44px;
+  }
+  td.plus {
+    color: var(--ok);
+  }
+  td.minus {
+    color: var(--ausfall);
   }
   .ausgang {
     display: grid;
