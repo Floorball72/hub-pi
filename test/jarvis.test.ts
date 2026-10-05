@@ -15,10 +15,19 @@ import { Gedaechtnis, woerter } from '../src/server/modules/jarvis/gedaechtnis.t
 import {
   type Block,
   type ModellAnfrage,
+  type ModellEreignis,
   type ModellFn,
+  openaiModell,
   sseLesen,
+  zuOpenAi,
 } from '../src/server/modules/jarvis/modell.ts';
-import { HUB_ZIEL, adresseSicher, entscheid, htmlZuText } from '../src/server/modules/jarvis/werkzeuge.ts';
+import {
+  HUB_ZIEL,
+  adresseSicher,
+  entscheid,
+  htmlZuText,
+  suchTreffer,
+} from '../src/server/modules/jarvis/werkzeuge.ts';
 
 describe('Jarvis Vollmacht', () => {
   it('lesen geht immer, Schreiben und Kritisches je nach Stufe', () => {
@@ -28,6 +37,103 @@ describe('Jarvis Vollmacht', () => {
     assert.equal(entscheid('schreiben', 'autonom'), 'ja');
     assert.equal(entscheid('kritisch', 'autonom'), 'fragen');
     assert.equal(entscheid('kritisch', 'voll'), 'ja');
+  });
+});
+
+function strom(zeilen: string[], status = 200, kopf: Record<string, string> = {}): Response {
+  return new Response(zeilen.map((z) => `data: ${z}\n\n`).join(''), { status, headers: kopf });
+}
+
+describe('Jarvis Gratis Anbieter (OpenAI Format)', () => {
+  const anfrage: ModellAnfrage = {
+    modell: 'm',
+    system: [{ type: 'text', text: 'System' }],
+    nachrichten: [
+      { role: 'user', content: 'Wie ist das Wetter?' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Ich schaue nach.' },
+          { type: 'tool_use', id: 'a1', name: 'briefing', input: { x: 1 } },
+        ],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a1', content: 'sonnig' }] },
+    ],
+    werkzeuge: [
+      { name: 'briefing', description: 'd', input_schema: { type: 'object', additionalProperties: false } },
+    ],
+    maxTokens: 100,
+  };
+
+  it('wandelt Nachrichten und Werkzeugergebnisse um', () => {
+    const m = zuOpenAi(anfrage);
+    assert.deepEqual(m[0], { role: 'system', content: 'System' });
+    assert.equal(m[2].tool_calls[0].function.arguments, '{"x":1}');
+    assert.deepEqual(m[3], { role: 'tool', tool_call_id: 'a1', content: 'sonnig' });
+  });
+
+  it('liest Text und Werkzeugaufrufe aus dem Strom, sendet Schlüssel und bereinigt das Schema', async () => {
+    let gesendet: { headers: Record<string, string>; body: string } | undefined;
+    const holen = (async (_u: string, init: { headers: Record<string, string>; body: string }) => {
+      gesendet = init;
+      return strom([
+        '{"choices":[{"delta":{"content":"Ein "}}]}',
+        '{"choices":[{"delta":{"content":"Moment."}}]}',
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"briefing","arguments":"{\\"a\\""}}]}}]}',
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":2}"}}]}}]}',
+        '{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c2","function":{"name":"merken","arguments":"{}"}}]}}]}',
+        '{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":12,"completion_tokens":7}}',
+        '[DONE]',
+      ]);
+    }) as unknown as typeof fetch;
+    const aus: ModellEreignis[] = [];
+    for await (const e of openaiModell('gemini', () => 'geheim', holen)(anfrage)) aus.push(e);
+    const ende = aus[aus.length - 1] as Extract<ModellEreignis, { art: 'ende' }>;
+    assert.equal(gesendet?.headers.authorization, 'Bearer geheim');
+    assert.ok(!gesendet?.body.includes('additionalProperties'));
+    assert.equal(ende.grund, 'tool_use');
+    assert.equal(ende.tokensEin, 12);
+    assert.deepEqual(ende.bloecke, [
+      { type: 'text', text: 'Ein Moment.' },
+      { type: 'tool_use', id: 'c1', name: 'briefing', input: { a: 2 } },
+      { type: 'tool_use', id: 'c2', name: 'merken', input: {} },
+    ]);
+  });
+
+  it('versucht es bei Limit (429) einmal nochmals und meldet danach den Fehler', async () => {
+    let n = 0;
+    const holen = (async () => {
+      n++;
+      return n === 1
+        ? strom([], 429, { 'retry-after': '0.01' })
+        : strom(['{"choices":[{"delta":{"content":"Hallo"},"finish_reason":"stop"}]}']);
+    }) as unknown as typeof fetch;
+    const aus: unknown[] = [];
+    for await (const e of openaiModell('groq', () => 'k', holen)(anfrage)) aus.push(e);
+    assert.equal(n, 2);
+    const immer = (async () => strom([], 429, { 'retry-after': '0.01' })) as unknown as typeof fetch;
+    await assert.rejects(async () => {
+      for await (const _ of openaiModell('groq', () => 'k', immer)(anfrage));
+    }, /Groq/);
+  });
+
+  it('wählt den Anbieter nach dem vorhandenen Schlüssel', () => {
+    assert.equal(konfigLaden({ GEMINI_API_KEY: 'x' }).jarvis.anbieter, 'gemini');
+    assert.equal(konfigLaden({ GROQ_API_KEY: 'x' }).jarvis.modell, 'openai/gpt-oss-120b');
+    assert.equal(konfigLaden({ ANTHROPIC_API_KEY: 'a', GEMINI_API_KEY: 'x' }).jarvis.anbieter, 'claude');
+    assert.equal(
+      konfigLaden({ ANTHROPIC_API_KEY: 'a', GEMINI_API_KEY: 'x', JARVIS_ANBIETER: 'gemini' }).jarvis.apiKey,
+      'x',
+    );
+  });
+
+  it('liest Suchtreffer aus der DuckDuckGo Seite', () => {
+    const html = `<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fbeispiel.ch%2Fa&amp;rut=1">Titel <b>A</b></a>
+      <a class="result__snippet" href="x">Auszug A</a>
+      <a class="result__a" href="http://unsicher.ch">B</a>`;
+    assert.deepEqual(suchTreffer(html), [
+      { titel: 'Titel A', adresse: 'https://beispiel.ch/a', auszug: 'Auszug A' },
+    ]);
   });
 });
 

@@ -6,13 +6,13 @@ import type { Kachel } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
 import { Agent, einstellungLesen } from './agent.ts';
 import { Gedaechtnis, GEDAECHTNIS, GESPRAECHE, KATEGORIEN, NACHRICHTEN, NUTZUNG } from './gedaechtnis.ts';
-import { type Block, claudeModell, demoModell, type ModellFn } from './modell.ts';
+import { type Block, demoModell, type ModellFn, modellFuer } from './modell.ts';
 import { PERSOENLICHKEITEN } from './persona.ts';
 import { VOLLMACHTEN } from './werkzeuge.ts';
 
 function modellWaehlen(ctx: Kontext): ModellFn {
   if (!ctx.konfig.jarvis.apiKey && ctx.konfig.demo) return demoModell();
-  return claudeModell(() => ctx.konfig.jarvis.apiKey);
+  return modellFuer(() => ctx.konfig.jarvis);
 }
 
 /** Aus Block Inhalt den lesbaren Text und die Werkzeugnamen für die Anzeige holen. */
@@ -83,7 +83,7 @@ export function jarvisModul(modellVorgabe?: (ctx: Kontext) => ModellFn): ModulDe
           .slice(0, 12000);
         if (gespraech.length < 40) return 'nichts zu verarbeiten';
         let antwort = '';
-        for await (const ev of claudeModell(() => ctx.konfig.jarvis.apiKey)({
+        for await (const ev of modellFuer(() => ctx.konfig.jarvis)({
           modell: ctx.konfig.jarvis.modellSchnell,
           system: [{ type: 'text', text: RUECKSCHAU_PROMPT }],
           nachrichten: [{ role: 'user', content: gespraech }],
@@ -130,7 +130,7 @@ export function jarvisModul(modellVorgabe?: (ctx: Kontext) => ModellFn): ModulDe
           .slice(0, 6000);
         if (!stoff) return 'nichts zu berichten';
         let text = '';
-        for await (const ev of claudeModell(() => ctx.konfig.jarvis.apiKey)({
+        for await (const ev of modellFuer(() => ctx.konfig.jarvis)({
           modell: ctx.konfig.jarvis.modellSchnell,
           system: [
             {
@@ -167,6 +167,7 @@ export function jarvisModul(modellVorgabe?: (ctx: Kontext) => ModellFn): ModulDe
           const s = einstellungLesen(ctx);
           return {
             schluessel: !!ctx.konfig.jarvis.apiKey,
+            anbieter: ctx.konfig.jarvis.anbieter,
             demo: !ctx.konfig.jarvis.apiKey && ctx.konfig.demo,
             modell: s.modell === 'schnell' ? ctx.konfig.jarvis.modellSchnell : ctx.konfig.jarvis.modell,
             vollmacht: s.vollmacht,

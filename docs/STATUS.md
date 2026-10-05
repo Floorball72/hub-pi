@@ -136,4 +136,4 @@ Vorgaben deines Rettungsdienstes prüfen (Code: `src/server/geteilt/toolbox.ts`,
 
 ## Jarvis
 
-Backend (Agent, Gedächtnis, 20 Werkzeuge, Vollmacht, Streaming) und Oberfläche (HUD, Chat, Gedächtnis, Einstellungen, Sprache) sind gebaut. Zum Starten `ANTHROPIC_API_KEY` in die `.env` eintragen, ohne Schlüssel läuft nur der Demo Modus. Websuche und Morgenbericht Push sind drin. Jarvis kann mit `hub_oeffnen` Seiten im Hub öffnen. Die schwebende Jarvis Leiste läuft auf jeder Seite. Offen: weitere proaktive Pushes.
+Backend (Agent, Gedächtnis, 20 Werkzeuge, Vollmacht, Streaming) und Oberfläche (HUD, Chat, Gedächtnis, Einstellungen, Sprache) sind gebaut. Zum Starten einen Schlüssel in die `.env` eintragen (gratis: `GEMINI_API_KEY` oder `GROQ_API_KEY`, bezahlt: `ANTHROPIC_API_KEY`), ohne Schlüssel läuft nur der Demo Modus. Websuche und Morgenbericht Push sind drin. Jarvis kann mit `hub_oeffnen` Seiten im Hub öffnen. Die schwebende Jarvis Leiste läuft auf jeder Seite. Offen: weitere proaktive Pushes.

@@ -192,7 +192,7 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 
 ## Jarvis
 
-- Modell: Claude API per `fetch` mit SSE, ohne SDK (RAM). Ein lokales Modell läuft auf dem Pi 3 nicht. Schlüssel `ANTHROPIC_API_KEY` nur in der `.env`.
+- Modell: Anbieter wählbar, alles per `fetch` mit SSE ohne SDK (RAM). Gratis: Gemini (`GEMINI_API_KEY`, Standard `gemini-2.5-flash`) und Groq (`GROQ_API_KEY`, `openai/gpt-oss-120b`), beide über das OpenAI Format mit Wiederholung bei Limit (429). Bezahlt: Claude (`ANTHROPIC_API_KEY`). Ohne `JARVIS_ANBIETER` gilt der erste vorhandene Schlüssel. Gratis Stufen können Eingaben zur Modellverbesserung nutzen: keine Kundendaten dorthin. Websuche: Claude serverseitig, sonst das Werkzeug `web_suchen` (DuckDuckGo). Ein lokales Modell läuft auf dem Pi 3 nicht. Schlüssel nur in der `.env`.
 - Vollmacht gestuft: `nur_lesen`, `fragen`, `autonom` (Standard), `voll`. Bei `autonom` laufen Lesen und Schreiben direkt, kritische Aktionen (Löschen, Module schalten, Neustart, Update) brauchen Bestätigung. Grund: CLAUDE.md verlangt Bestätigung für Veränderndes, und Inhalte aus Webseiten oder Notizen könnten Anweisungen einschleusen (Prompt Injection). `voll` ist ein bewusster Schalter.
 - Gedächtnis ohne Embeddings: Wortsuche mit Ranking, die wichtigsten Erinnerungen stehen im Profil des Prompts, nächtliche Rückschau um 03:20 mit dem schnellen Modell. Spart RAM und externe Dienste.
 - Webzugriff nur https, DNS Auflösung, private Netze gesperrt (SSRF Schutz), Tabellen `einstellungen` und `puffer` sind für Jarvis gesperrt.

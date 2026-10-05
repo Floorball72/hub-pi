@@ -215,7 +215,7 @@ export class Agent {
           nachrichten: verlauf,
           werkzeuge: defs,
           maxTokens: 2048,
-          websuche: s.web,
+          websuche: s.web && this.ctx.konfig.jarvis.anbieter === 'claude',
           signal: opt.signal,
         })) {
           if (ev.art === 'text') yield { art: 'text', text: schwaerzen(ev.text, geheim) };

@@ -11,6 +11,7 @@
 
   interface Status {
     schluessel: boolean;
+    anbieter?: string;
     demo: boolean;
     modell: string;
     vollmacht: string;
@@ -510,7 +511,7 @@
       {:else}
         {#if !status.schluessel && !status.demo}
           <div class="panel warnung">
-            Es ist noch kein Schlüssel hinterlegt. Trage <code>ANTHROPIC_API_KEY</code> in die <code>.env</code> auf dem Pi ein und starte den Hub neu.
+            Es ist noch kein Schlüssel hinterlegt. Trage <code>GEMINI_API_KEY</code> (gratis), <code>GROQ_API_KEY</code> (gratis) oder <code>ANTHROPIC_API_KEY</code> in die <code>.env</code> auf dem Pi ein und starte den Hub neu.
           </div>
         {/if}
         <div class="panel form">

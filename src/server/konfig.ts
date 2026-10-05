@@ -1,6 +1,7 @@
 // Zentrale Konfiguration aus .env und Umgebung. Geheimnisse werden nie geloggt.
 import { resolve } from 'node:path';
 import { envLesen } from './kern/env-datei.ts';
+import { ANBIETER, ANBIETER_INFO, type Anbieter } from './modules/jarvis/modell.ts';
 
 export interface Ort {
   name: string;
@@ -41,7 +42,7 @@ export interface Konfig {
   sportsdbKey: string;
   update: { repo: string; zweig: string };
   suhLogin: { benutzer: string; passwort: string };
-  jarvis: { apiKey: string; modell: string; modellSchnell: string };
+  jarvis: { anbieter: Anbieter; apiKey: string; modell: string; modellSchnell: string };
 }
 
 /** Schlüssel, deren Werte nie ausgegeben werden dürfen. */
@@ -60,6 +61,8 @@ export const GEHEIME_SCHLUESSEL = [
   'SUH_LOGIN_BENUTZER',
   'SUH_LOGIN_PASSWORT',
   'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+  'GROQ_API_KEY',
 ];
 
 function liste(wert: string | undefined, trenner = ','): string[] {
@@ -147,11 +150,21 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     sportsdbKey: e.THESPORTSDB_KEY || '123',
     update: { repo: e.UPDATE_REPO || 'Floorball72/hub-pi', zweig: e.UPDATE_BRANCH || 'main' },
     suhLogin: { benutzer: e.SUH_LOGIN_BENUTZER ?? '', passwort: e.SUH_LOGIN_PASSWORT ?? '' },
-    jarvis: {
-      apiKey: e.ANTHROPIC_API_KEY ?? '',
-      modell: e.JARVIS_MODELL || 'claude-sonnet-5-5',
-      modellSchnell: e.JARVIS_MODELL_SCHNELL || 'claude-haiku-4-5-20251001',
-    },
+    jarvis: jarvisKonfig(e),
+  };
+}
+
+/** Jarvis Anbieter: JARVIS_ANBIETER oder automatisch der erste mit Schlüssel (Claude, Gemini, Groq). */
+function jarvisKonfig(e: Record<string, string | undefined>): Konfig['jarvis'] {
+  const wunsch = (e.JARVIS_ANBIETER ?? '').trim().toLowerCase();
+  const anbieter =
+    ANBIETER.find((a) => a === wunsch) ?? ANBIETER.find((a) => e[ANBIETER_INFO[a].schluessel]) ?? 'claude';
+  const info = ANBIETER_INFO[anbieter];
+  return {
+    anbieter,
+    apiKey: e[info.schluessel] ?? '',
+    modell: e.JARVIS_MODELL || info.modell,
+    modellSchnell: e.JARVIS_MODELL_SCHNELL || info.modellSchnell,
   };
 }
 
