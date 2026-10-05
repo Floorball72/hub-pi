@@ -320,6 +320,15 @@ button:focus-visible {
   textarea {
     font-size: 16px;
   }
+
+  button,
+  .knopf {
+    min-height: 44px;
+  }
+
+  button.klein {
+    min-height: 40px;
+  }
 }
 input[type='checkbox'] {
   width: 18px;
