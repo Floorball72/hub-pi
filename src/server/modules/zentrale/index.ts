@@ -2,7 +2,8 @@
 import { tabelle } from '../../daten/schema.ts';
 import type { ModulDef } from '../../kern/modul.ts';
 import { systemStatus } from '../../kern/system.ts';
-import type { Ampel, Kachel } from '../../geteilt/typen.ts';
+import { lokal, lokalZeit, tagesBeginn, vonLokal } from '../../kern/zeit.ts';
+import type { Ampel, BriefingTeil, Kachel } from '../../geteilt/typen.ts';
 
 export const NOTIZEN = tabelle({
   name: 'notizen',
@@ -54,10 +55,62 @@ export const zentrale: ModulDef = {
       prioritaet: 3,
       cooldownMin: 720,
     },
+    {
+      id: 'tagesrueckblick',
+      name: 'Tagesrückblick am Abend',
+      beschreibung: 'Um 20 Uhr eine Meldung mit Heli Einsätzen, Ausfällen und Terminen von morgen',
+      prioritaet: 2,
+      cooldownMin: 600,
+    },
   ],
   erstellen(ctx) {
+    // Teil der Zentrale im Tagesrückblick: was morgen ansteht
+    async function abendbericht(): Promise<BriefingTeil> {
+      const heute = lokal(ctx.jetzt());
+      const morgen = tagesBeginn(vonLokal(heute.jahr, heute.monat, heute.tag + 1, 12));
+      const danach = tagesBeginn(vonLokal(heute.jahr, heute.monat, heute.tag + 2, 12));
+      const termine = (await ctx.kern.timeline(morgen, danach)).filter(
+        (t) => new Date(t.start) >= morgen && new Date(t.start) < danach,
+      );
+      return {
+        modul: 'zentrale',
+        titel: 'Morgen',
+        zeilen: termine.length
+          ? termine
+              .slice(0, 6)
+              .map((t) => ({ text: t.titel, wert: t.ganztags ? 'ganztags' : lokalZeit(new Date(t.start)) }))
+          : [{ text: 'Keine Termine', wert: '' }],
+        status: 'neutral',
+        reihenfolge: 90,
+      };
+    }
+
     return {
+      abendbericht,
       jobs: [
+        {
+          id: 'tagesrueckblick',
+          name: 'Tagesrückblick senden',
+          taeglich: '20:00',
+          lauf: async () => {
+            const teile = await ctx.kern.abendbericht();
+            const text = teile
+              .map(
+                (t) =>
+                  `${t.titel}: ${t.zeilen.map((z) => (z.wert ? `${z.text} (${z.wert})` : z.text)).join(', ')}`,
+              )
+              .join('\n')
+              .slice(0, 900);
+            const e = await ctx.alarm.melden({
+              regel: 'zentrale.tagesrueckblick',
+              titel: 'Pi Hub: Tagesrückblick',
+              text: text || 'Nichts Besonderes heute',
+              schluessel: 'tagesrueckblick',
+              tags: ['crescent_moon'],
+            });
+            return `${teile.length} Teile, ${e.status}`;
+          },
+        },
         {
           id: 'systemwache',
           name: 'Systemwerte prüfen',

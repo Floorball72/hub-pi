@@ -258,6 +258,12 @@ export function kernRouten(app: FastifyInstance, hub: Hub) {
     };
   });
 
+  app.get('/api/abendbericht', async () => ({
+    teile: await hub.abendbericht(),
+    zeit: hub.jetzt().toISOString(),
+    demo: hub.konfig.demo,
+  }));
+
   app.get('/api/karte/ebenen', async () => {
     const ebenen: Ebene[] = [];
     for (const [id, m] of hub.module) {

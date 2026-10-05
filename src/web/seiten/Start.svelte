@@ -21,6 +21,8 @@
   let daten = $state<{ status: Ampel; kacheln: Record<string, Kachel>; module: ModulInfo[]; demo: boolean } | null>(null);
   let briefing = $state<{ teile: BriefingTeil[] } | null>(null);
   let jetzt = $state(new Date());
+  // Ab 18 Uhr Rückblick auf den Tag statt Morgenbriefing
+  const abend = $derived(jetzt.getHours() >= 18);
   let fehler = $state(false);
   let live = $state<{ helis: LiveHeli[]; abgestellt?: AbgestellterHeli[]; fehler?: string } | null>(null);
   const rettungAktiv = $derived(!!daten?.module.some((m) => m.id === 'rettung' && m.aktiv));
@@ -54,7 +56,10 @@
       .get<NonNullable<typeof live>>('/api/m/rettung/live')
       .then((l) => (live = l))
       .catch(() => (live = null));
-    api.get<{ teile: BriefingTeil[] }>('/api/briefing').then((b) => (briefing = b)).catch(() => {});
+    api
+      .get<{ teile: BriefingTeil[] }>(abend ? '/api/abendbericht' : '/api/briefing')
+      .then((b) => (briefing = b))
+      .catch(() => {});
   }
 
   $effect(() => {
@@ -148,7 +153,7 @@
 
   {#if briefing?.teile.length}
     <section class="briefing">
-      <h2><Icon name="sonne" groesse={18} /> Briefing</h2>
+      <h2><Icon name={abend ? 'mond' : 'sonne'} groesse={18} /> {abend ? 'Tagesrückblick' : 'Briefing'}</h2>
       <div class="briefing-raster">
         {#each briefing.teile as t (t.modul + t.titel)}
           <div class="briefing-teil panel">

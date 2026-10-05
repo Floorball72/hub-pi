@@ -43,6 +43,7 @@ export interface Kontext {
     modulNeuLaden: (id: string) => Promise<boolean>;
     metriken: MetrikRegistry;
     timeline: (von: Date, bis: Date) => Promise<TimelineEintrag[]>;
+    abendbericht: () => Promise<BriefingTeil[]>;
   };
   /** Meldet eine Zahl an die Auffälligkeiten Erkennung. Gibt eine Funktion zum Erfassen zurück. */
   metrik: (def: MetrikDef) => (wert: number | null | undefined) => Promise<void>;
@@ -58,6 +59,8 @@ export interface ModulLaufzeit {
   suche?: (q: string) => Promise<SuchTreffer[]>;
   timeline?: (von: Date, bis: Date) => Promise<TimelineEintrag[]>;
   briefing?: () => Promise<BriefingTeil | null>;
+  /** Teil des Tagesrückblicks am Abend */
+  abendbericht?: () => Promise<BriefingTeil | null>;
 }
 
 export interface ModulDef {

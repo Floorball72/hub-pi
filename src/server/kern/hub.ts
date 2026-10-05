@@ -2,7 +2,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { type Daten, datenErstellen } from '../daten/index.ts';
 import type { Tabelle } from '../daten/schema.ts';
-import type { ModulInfo, TimelineEintrag } from '../geteilt/typen.ts';
+import type { BriefingTeil, ModulInfo, TimelineEintrag } from '../geteilt/typen.ts';
 import { geheimeWerte, type Konfig } from '../konfig.ts';
 import { MODULE } from '../modules/index.ts';
 import { Quelle, type QuellenDef } from '../quellen/quelle.ts';
@@ -126,6 +126,7 @@ export class Hub {
         modulNeuLaden: (id) => this.modulNeuLaden(id),
         metriken: this.metriken,
         timeline: (von, bis) => this.timeline(von, bis),
+        abendbericht: () => this.abendbericht(),
       },
       metrik: (def) => this.metriken.registrieren({ modul: modulId, ...def }),
       quelle: <P, T>(def: QuellenDef<P, T>) => {
@@ -181,6 +182,26 @@ export class Hub {
       }),
     );
     return eintraege.sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  /** Tagesrückblick: Teile aller aktiven Module, sortiert */
+  async abendbericht(): Promise<BriefingTeil[]> {
+    const teile: BriefingTeil[] = [];
+    await Promise.all(
+      [...this.module.entries()].map(async ([id, m]) => {
+        if (!m.laufzeit.abendbericht || !this.modulAktiv(id)) return;
+        try {
+          const t = await Promise.race([
+            m.laufzeit.abendbericht(),
+            new Promise<null>((_, r) => setTimeout(() => r(new Error('Zeitüberschreitung')), 8000).unref()),
+          ]);
+          if (t) teile.push(t);
+        } catch (e) {
+          this.log.warn({ modul: id, fehler: fehlerText(e) }, 'Tagesrückblick fehlgeschlagen');
+        }
+      }),
+    );
+    return teile.sort((a, b) => a.reihenfolge - b.reihenfolge);
   }
 
   /** Erstellt ein Modul neu (z.B. nach einem Fehler beim Laden). Jobs werden ersetzt. */

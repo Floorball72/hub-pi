@@ -203,6 +203,7 @@ for (const m of MODULE) {
         () => false,
       ),
       timeline: async () => [],
+      abendbericht: async () => [],
     },
     metrik: () => async () => {},
     quelle: <P, T>(def: QuellenDef<P, T>) => {

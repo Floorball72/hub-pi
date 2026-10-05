@@ -4,7 +4,7 @@ import { EingabeFehler } from '../../daten/schema.ts';
 import { verdichten } from '../../daten/verdichtung.ts';
 import type { Ampel, Kachel, TimelineEintrag } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
-import { lokalDatum } from '../../kern/zeit.ts';
+import { lokalDatum, tagesBeginn } from '../../kern/zeit.ts';
 import { httpAnfrage, httpJson } from '../../quellen/http.ts';
 import {
   monatsDaten,
@@ -812,5 +812,38 @@ function scontLaufzeit(ctx: Kontext) {
     await zusatzRouten(app);
   };
 
-  return { jobs, routen: alleRouten, oeffentlicheRouten, kachel, timeline, briefing };
+  // Tagesrückblick: Ausfälle seit Mitternacht
+  async function abendbericht() {
+    const z = await zustaende();
+    const aktiv = z.filter((x) => x.seite.aktiv);
+    const unten = aktiv.filter((x) => x.online === false);
+    const vorfaelle = await daten.liste<{ seite_id: string; start: string; ende: string | null }>(
+      'vorfaelle',
+      {
+        filter: { start: { gte: tagesBeginn(ctx.jetzt()).toISOString() } },
+        limit: 50,
+      },
+    );
+    const name = (id: string) => z.find((x) => x.seite.id === id)?.seite.name ?? 'Seite';
+    const proSeite = new Map<string, number>();
+    for (const v of vorfaelle) if (v.ende) proSeite.set(v.seite_id, (proSeite.get(v.seite_id) ?? 0) + 1);
+    const zeilen = [
+      ...unten.map((x) => ({ text: `${x.seite.name} ist offline`, status: 'ausfall' as Ampel })),
+      ...[...proSeite].map(([id, n]) => ({
+        text: `${name(id)} war ${n === 1 ? 'einmal' : `${n} mal`} weg`,
+        status: 'warnung' as Ampel,
+      })),
+    ];
+    if (!zeilen.length)
+      zeilen.push({ text: `Alle ${aktiv.length} Seiten den ganzen Tag online`, status: 'ok' });
+    return {
+      modul: 'scont',
+      titel: 'Kundenseiten',
+      zeilen,
+      status: (unten.length ? 'ausfall' : proSeite.size ? 'warnung' : 'ok') as Ampel,
+      reihenfolge: 30,
+    };
+  }
+
+  return { jobs, routen: alleRouten, oeffentlicheRouten, kachel, timeline, briefing, abendbericht };
 }

@@ -10,6 +10,7 @@ import type {
   SuchTreffer,
 } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
+import { tagesBeginn } from '../../kern/zeit.ts';
 import { GEOADMIN_NAMENSNENNUNG, WMS, WMTS } from '../../quellen/geoadmin.ts';
 import { distanzKm, richtungText } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
@@ -1744,5 +1745,48 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
     }));
   }
 
-  return { jobs, routen, ebenen, kachel, briefing, suche };
+  // Tagesrückblick: Einsätze seit Mitternacht, aus den Flügen zusammengesetzt
+  async function abendbericht() {
+    await demoVorbereiten();
+    const fluege = await daten.liste<ChronikFlug>('heli_fluege', {
+      filter: { start: { gte: tagesBeginn(ctx.jetzt()).toISOString() } },
+      sortierung: '-start',
+      limit: 500,
+    });
+    const einsaetze = einsaetzeBilden(fluege.map(({ spur: _s, ...f }) => f));
+    const rega = einsaetze.filter((e) => e.organisation === 'Rega');
+    const andere = new Map<string, number>();
+    for (const e of einsaetze) {
+      if (e.organisation === 'Rega') continue;
+      const o = e.organisation ?? 'Andere';
+      andere.set(o, (andere.get(o) ?? 0) + 1);
+    }
+    const flugMin = rega.reduce((s, e) => s + e.flugMin, 0);
+    const ARTEN = { einsatzort: 'Einsatzort', verlegung: 'Verlegung', spital: 'Spitalflug', unklar: 'Flug' };
+    const zeilen = [
+      {
+        text: rega.length
+          ? `Rega: ${rega.length} ${rega.length === 1 ? 'Einsatz' : 'Einsätze'}, ${Math.floor(flugMin / 60)} h ${String(flugMin % 60).padStart(2, '0')} Flugzeit`
+          : 'Rega: keine Einsätze erfasst',
+        wert: '',
+      },
+      ...rega
+        .slice(0, 4)
+        .reverse()
+        .map((e) => ({
+          text: `${e.kennzeichen ?? e.hex} ${ARTEN[e.art]}${e.einsatzort ? ` ${e.einsatzort.name}` : e.spitaeler.length ? ` ${e.spitaeler.join(', ')}` : ''}`,
+          wert: UHRZEIT(e.start),
+        })),
+      ...[...andere].map(([o, n]) => ({ text: `${o}: ${n} ${n === 1 ? 'Einsatz' : 'Einsätze'}`, wert: '' })),
+    ];
+    return {
+      modul: 'rettung',
+      titel: 'Helikopter heute',
+      zeilen,
+      status: 'neutral' as Ampel,
+      reihenfolge: 40,
+    };
+  }
+
+  return { jobs, routen, ebenen, kachel, briefing, abendbericht, suche };
 }

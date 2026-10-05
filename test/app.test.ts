@@ -133,3 +133,18 @@ describe('scont im Demo Modus', () => {
     assert.equal(seite.intervall_min, 5);
   });
 });
+
+describe('Tagesrückblick', () => {
+  it('sammelt Teile der Module und hat eine Regel ohne Nachtmeldung', async () => {
+    const r = (await anfrage('GET', '/api/abendbericht')).json();
+    const module = r.teile.map((t: { modul: string }) => t.modul);
+    for (const m of ['scont', 'rettung', 'zentrale']) assert.ok(module.includes(m), m);
+    const morgen = r.teile.find((t: { titel: string }) => t.titel === 'Morgen');
+    assert.ok(morgen.zeilen.length >= 1);
+    const regel = (await anfrage('GET', '/api/alarm/regeln'))
+      .json()
+      .find((x: { id: string }) => x.id === 'zentrale.tagesrueckblick');
+    assert.ok(regel);
+    assert.equal(regel.nachts, false);
+  });
+});
