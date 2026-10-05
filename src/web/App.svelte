@@ -399,8 +399,9 @@
     display: none;
   }
   .willkommen {
-    max-width: 480px;
+    width: min(100% - 32px, 480px);
     margin: 15vh auto;
+    margin: 15dvh auto;
   }
   .schleier {
     display: none;

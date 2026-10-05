@@ -251,14 +251,16 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-button.primaer {
+button.primaer,
+.knopf.primaer {
   background: linear-gradient(180deg, #2bb3df, #1a8fb8);
   border-color: #4cc9f0;
   color: #04111a;
   font-weight: 600;
 }
 @media (hover: hover) and (pointer: fine) {
-  button.primaer:hover {
+  button.primaer:hover,
+  .knopf.primaer:hover {
     background: linear-gradient(180deg, #3cc2ec, #209ac4);
   }
 }
