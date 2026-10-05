@@ -4,6 +4,7 @@
   import { AKTIONEN, type Befehl, filtern, modulBefehle, SEITEN } from '../lib/befehle.ts';
   import { palette } from '../lib/palette.svelte.ts';
   import { navigieren } from '../lib/router.svelte.ts';
+  import { melden } from '../lib/meldung.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
   import Icon from './Icon.svelte';
 
@@ -71,7 +72,15 @@
       const schon = new Set(zuletzt);
       return [...letzte, ...SEITEN.filter((b) => !schon.has(b.id)).slice(0, 5), ...AKTIONEN.filter((b) => !schon.has(b.id)).slice(0, 2)];
     }
-    return [...filtern(alle, q, 14), ...inhalte];
+    // Immer am Schluss: in allen Inhalten suchen oder den Text als Notiz speichern
+    const zum: Befehl[] =
+      q.length >= 2
+        ? [
+            { id: 'z:suche', titel: `Überall suchen nach «${q}»`, gruppe: 'Mehr', symbol: 'suche', link: `/suche?q=${encodeURIComponent(q)}` },
+            { id: 'z:notiz', titel: 'Als Notiz speichern', text: q, gruppe: 'Mehr', symbol: 'notiz', aktion: 'notiz' },
+          ]
+        : [];
+    return [...filtern(alle, q, 14), ...inhalte, ...zum];
   });
 
   // Gruppen in der Reihenfolge des ersten Auftretens, Index über alle Treffer
@@ -101,7 +110,28 @@
     palette.eingabe = '';
   }
 
+  async function notizSpeichern(text: string) {
+    try {
+      await api.post('/api/daten/notizen', { text, angeheftet: true });
+      melden('Notiz gespeichert und angeheftet');
+      window.dispatchEvent(new Event('pihub:notizen'));
+    } catch {
+      melden('Notiz konnte nicht gespeichert werden', 'ausfall');
+    }
+  }
+
   function ausfuehren(b: Befehl) {
+    if (b.aktion === 'notiz') {
+      const text = palette.eingabe.trim();
+      schliessen();
+      notizSpeichern(text);
+      return;
+    }
+    if (b.gruppe === 'Mehr') {
+      schliessen();
+      if (b.link) navigieren(b.link);
+      return;
+    }
     zuletzt = [b.id, ...zuletzt.filter((x) => x !== b.id)].slice(0, 5);
     if (b.gruppe !== 'Inhalte') schreiben('palette.zuletzt', zuletzt);
     schliessen();

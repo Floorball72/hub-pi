@@ -10,6 +10,7 @@
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
   import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { melden } from '../lib/meldung.svelte.ts';
   import { navigieren } from '../lib/router.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
   import { LEERES_LAYOUT, ordnen, type StartLayout, umschalten, verschieben } from '../lib/startLayout.ts';
@@ -26,6 +27,15 @@
   // Ab 18 Uhr Rückblick auf den Tag statt Morgenbriefing
   const abend = $derived(jetzt.getHours() >= 18);
   let fehler = $state(false);
+  interface Notiz {
+    id: string;
+    text: string;
+    bezug_name: string | null;
+    angeheftet: boolean | number;
+    erstellt: string;
+  }
+  let notizen = $state<Notiz[]>([]);
+  let neueNotiz = $state('');
   let live = $state<{ helis: LiveHeli[]; abgestellt?: AbgestellterHeli[]; fehler?: string } | null>(null);
   const rettungAktiv = $derived(!!daten?.module.some((m) => m.id === 'rettung' && m.aktiv));
   const inDerLuft = $derived((live?.helis ?? []).filter((h) => !h.amBoden));
@@ -47,6 +57,18 @@
     anim.abgestellt(live.abgestellt ?? []);
   });
 
+  function notizenLaden() {
+    api
+      .get<Notiz[]>('/api/daten/notizen?sort=-erstellt&limit=100')
+      .then((n) => (notizen = n.filter((x) => !!x.angeheftet).slice(0, 8)))
+      .catch(() => (notizen = []));
+  }
+  $effect(() => {
+    // Neue Notiz aus der Befehlspalette sofort zeigen
+    window.addEventListener('pihub:notizen', notizenLaden);
+    return () => window.removeEventListener('pihub:notizen', notizenLaden);
+  });
+
   async function laden() {
     try {
       daten = await api.get('/api/start');
@@ -58,6 +80,7 @@
       .get<NonNullable<typeof live>>('/api/m/rettung/live')
       .then((l) => (live = l))
       .catch(() => (live = null));
+    notizenLaden();
     api
       .get<{ teile: BriefingTeil[] }>(abend ? '/api/abendbericht' : '/api/briefing')
       .then((b) => (briefing = b))
@@ -73,6 +96,28 @@
       clearInterval(u);
     };
   });
+
+  async function notizAnheften(e: SubmitEvent) {
+    e.preventDefault();
+    const text = neueNotiz.trim();
+    if (!text) return;
+    try {
+      const n = await api.post<Notiz>('/api/daten/notizen', { text, angeheftet: true });
+      notizen = [n, ...notizen].slice(0, 8);
+      neueNotiz = '';
+    } catch {
+      melden('Notiz konnte nicht gespeichert werden', 'ausfall');
+    }
+  }
+  async function notizLoesen(n: Notiz) {
+    try {
+      await api.put(`/api/daten/notizen/${n.id}`, { angeheftet: false });
+      notizen = notizen.filter((x) => x.id !== n.id);
+      melden('Notiz gelöst, sie bleibt unter Notizen');
+    } catch {
+      melden('Notiz konnte nicht geändert werden', 'ausfall');
+    }
+  }
 
   const TITEL: Record<Ampel, string> = {
     ok: 'Alles gut',
@@ -195,6 +240,33 @@
     </section>
   {/if}
 
+  {#if !ansicht.fokus && !ansicht.kiosk && daten && !versteckt('abschnitt.notizen')}
+    <section class="notizen">
+      <div class="zeile-zwischen">
+        <h2><Icon name="notiz" groesse={18} /> Angeheftet</h2>
+        <a class="klein" href="/notizen" onclick={(e) => { e.preventDefault(); navigieren('/notizen'); }}>Alle Notizen</a>
+      </div>
+      <div class="notiz-raster">
+        {#each notizen as n (n.id)}
+          <div class="notiz panel">
+            <p>{n.text}</p>
+            <div class="zeile-zwischen sehr-klein gedaempft">
+              <span>{n.bezug_name ? `${n.bezug_name} · ` : ''}{relativ(n.erstellt)}</span>
+              <button class="klein" aria-label="Notiz lösen" onclick={() => notizLoesen(n)}>Lösen</button>
+            </div>
+          </div>
+        {/each}
+        <form class="notiz neu panel" onsubmit={notizAnheften}>
+          <textarea bind:value={neueNotiz} rows="2" placeholder="Schnell etwas notieren…" aria-label="Neue Notiz" onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}></textarea>
+          <div class="zeile-zwischen sehr-klein gedaempft">
+            <span>Ctrl Enter speichert</span>
+            <button class="klein primaer" type="submit" disabled={!neueNotiz.trim()}>Anheften</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  {/if}
+
   <section>
     {#if ansicht.fokus}
       <div class="zeile-zwischen"><h2>Fokus: nur was Aufmerksamkeit braucht</h2></div>
@@ -214,6 +286,7 @@
             <label class="zeile klein"><input type="checkbox" checked={!versteckt('abschnitt.rettung')} onchange={() => zeigen('abschnitt.rettung')} /> Rettung jetzt</label>
           {/if}
           <label class="zeile klein"><input type="checkbox" checked={!versteckt('abschnitt.briefing')} onchange={() => zeigen('abschnitt.briefing')} /> Briefing und Tagesrückblick</label>
+          <label class="zeile klein"><input type="checkbox" checked={!versteckt('abschnitt.notizen')} onchange={() => zeigen('abschnitt.notizen')} /> Angeheftete Notizen</label>
         </div>
       {/if}
     {/if}
@@ -239,6 +312,32 @@
 </div>
 
 <style>
+  .notiz-raster {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .notiz {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 14px;
+    border-left: 3px solid var(--warnung);
+  }
+  .notiz p {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .notiz.neu {
+    border-left-color: var(--rand-hell);
+  }
+  .notiz textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 52px;
+  }
   .anpassen-kopf {
     margin-bottom: 8px;
     min-height: 32px;
