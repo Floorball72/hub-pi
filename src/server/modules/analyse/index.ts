@@ -17,6 +17,7 @@ import {
 } from './auswertung.ts';
 import { spielbericht, spielberichtPdf } from './bericht.ts';
 import { saisonverlauf } from './verlauf.ts';
+import { einschaetzung, gleicherGegner } from './vorbereitung.ts';
 import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse, demoStrafen } from './demo.ts';
 
 export const ANALYSE_SPIELE = tabelle({
@@ -286,6 +287,56 @@ function analyseLaufzeit(ctx: Kontext) {
       const filter = { spiel_id: { in: spiele.length ? spiele.map((s) => s.id) : ['-'] } };
       const [ereignisse, strafen] = await Promise.all([ereignisseLaden(filter), strafenLaden(filter)]);
       return { saison, saisons, team, teams, ...saisonverlauf(spiele, ereignisse, strafen) };
+    });
+
+    // Spielvorbereitung: Stärken und Schwächen der laufenden Saison, dazu die erfassten Spiele gegen den Gegner
+    app.get<{ Querystring: { team?: string; gegner?: string } }>('/vorbereitung', async (req) => {
+      await vorbereiten();
+      const [alle, spieler] = await Promise.all([spieleLaden(), spielerLaden()]);
+      const saison = [...new Set(alle.map((s) => s.saison).filter(Boolean))].sort().reverse()[0] ?? null;
+      const inSaison = alle.filter((s) => !saison || s.saison === saison);
+      const proTeam = new Map<string, number>();
+      for (const s of inSaison) if (s.team) proTeam.set(s.team, (proTeam.get(s.team) ?? 0) + 1);
+      const team = req.query.team || [...proTeam].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+      const spiele = inSaison.filter((s) => !team || s.team === team);
+      const filter = { spiel_id: { in: spiele.length ? spiele.map((s) => s.id) : ['-'] } };
+      const [ereignisse, strafen] = await Promise.all([ereignisseLaden(filter), strafenLaden(filter)]);
+      const verlauf = saisonverlauf(spiele, ereignisse, strafen);
+      const { staerken, schwaechen } = einschaetzung(auswerten(ereignisse, spieler, strafen), verlauf);
+
+      const gegner = req.query.gegner?.trim() || null;
+      const direktSpiele = gegner
+        ? alle
+            .filter((s) => (!team || s.team === team) && gleicherGegner(s.gegner, gegner))
+            .sort((a, b) => b.datum.localeCompare(a.datum))
+        : [];
+      const direkt = await Promise.all(
+        direktSpiele.slice(0, 5).map(async (s) => {
+          const r = resultat(await ereignisseLaden({ spiel_id: s.id }));
+          return { id: s.id, datum: s.datum, gegner: s.gegner, tore: r.eigen, gegentore: r.gegner };
+        }),
+      );
+      const letzter = direktSpiele[0] ? await berichtLaden(direktSpiele[0].id) : null;
+      return {
+        team,
+        saison,
+        spiele: verlauf.bilanz.spiele,
+        form: verlauf.form,
+        staerken,
+        schwaechen,
+        gegner,
+        direkt,
+        letzter: letzter
+          ? {
+              id: direktSpiele[0].id,
+              titel: letzter.titel,
+              unter: letzter.unter,
+              momente: letzter.momente.slice(0, 4),
+              beste: letzter.beste,
+              zahlen: letzter.zahlen,
+            }
+          : null,
+      };
     });
 
     // Abschluss aus der Live Erfassung. Ein Tor in Überzahl beendet die älteste 2 Minuten Strafe des Gegners.

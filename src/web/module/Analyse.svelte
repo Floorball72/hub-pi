@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GegnerCheck from '../komponenten/GegnerCheck.svelte';
   import Linie from '../komponenten/Linie.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import Spielfeld from '../komponenten/Spielfeld.svelte';
@@ -457,6 +458,43 @@
       })
       .catch(() => {});
   });
+  interface Vorbereitung {
+    team: string | null;
+    saison: string | null;
+    spiele: number;
+    form: ('S' | 'U' | 'N')[];
+    staerken: { text: string; detail: string }[];
+    schwaechen: { text: string; detail: string }[];
+    gegner: string | null;
+    direkt: { id: string; datum: string; gegner: string; tore: number; gegentore: number }[];
+    letzter: { id: string; titel: string; unter: string; momente: string[]; beste: { name: string; text: string }[]; zahlen: { text: string; wert: string }[] } | null;
+  }
+  interface UhTeam {
+    team: { id: string; name: string };
+    naechstes: { zeit: string | null; heim: string; gast: string; ort: string | null } | null;
+    rang: { team: string } | null;
+  }
+  let vorbereitung = $state<Vorbereitung | null>(null);
+  let naechstes = $state<{ teamId: string; gegner: string; zeit: string | null; ort: string | null } | null>(null);
+  const gleich = (a: string, b: string) => !!kern(a) && !!kern(b) && (kern(a) === kern(b) || kern(a).includes(kern(b)) || kern(b).includes(kern(a)));
+  $effect(() => {
+    if (tab !== 'Vorbereitung') return;
+    (async () => {
+      // Zuerst das eigene Team, dann das nächste Spiel aus dem Unihockey Modul, dann mit Gegner neu laden
+      const v = await api.get<Vorbereitung>('/api/m/analyse/vorbereitung');
+      vorbereitung = v;
+      if (!v.team) return;
+      const teams = await api.get<UhTeam[]>('/api/m/unihockey/uebersicht').catch(() => [] as UhTeam[]);
+      const t = teams.find((x) => gleich(x.team.name, v.team ?? '') || (x.rang && gleich(x.rang.team, v.team ?? '')));
+      const n = t?.naechstes;
+      if (!t || !n) return;
+      const eigen = [t.team.name, t.rang?.team ?? ''].filter(Boolean);
+      const gegner = eigen.some((e) => gleich(n.heim, e)) ? n.gast : n.heim;
+      naechstes = { teamId: t.team.id, gegner, zeit: n.zeit, ort: n.ort };
+      const q = new URLSearchParams({ team: v.team, gegner });
+      vorbereitung = await api.get<Vorbereitung>(`/api/m/analyse/vorbereitung?${q}`);
+    })().catch((e) => melden(fehlerText(e), 'ausfall'));
+  });
   const AUSGANG_NAME = { S: 'Sieg', U: 'Unentschieden', N: 'Niederlage' };
   const tagMonat = (t: number) => new Date(t).toLocaleDateString('de-CH', { day: 'numeric', month: 'short' });
   function berichtOeffnen(id: string) {
@@ -494,7 +532,7 @@
   </select>
 {/snippet}
 
-<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Bericht', 'Saison', 'Spieler', 'Spiele']} bind:tab>
+<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Bericht', 'Saison', 'Vorbereitung', 'Spieler', 'Spiele']} bind:tab>
   {#if !u}
     <div class="laedt" style="height:320px"></div>
   {:else if tab === 'Erfassen'}
@@ -846,6 +884,65 @@
       </div>
       <p class="sehr-klein gedaempft">Nur selbst erfasste Spiele. Punkte wie in der Meisterschaft: Sieg 3, nach Verlängerung 2 und 1.</p>
     {/if}
+  {:else if tab === 'Vorbereitung'}
+    {#if !vorbereitung}
+      <p class="laedt">Lade Spielvorbereitung…</p>
+    {:else}
+      {@const v = vorbereitung}
+      <div class="panel stapel">
+        <h3>Nächstes Spiel{naechstes ? `: ${v.team ?? ''} gegen ${naechstes.gegner}` : ''}</h3>
+        {#if naechstes}
+          <div class="sehr-klein gedaempft">
+            {naechstes.zeit ? new Date(naechstes.zeit).toLocaleString('de-CH', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : 'Zeit offen'}{naechstes.ort ? `, ${naechstes.ort}` : ''}
+          </div>
+        {:else}
+          <div class="sehr-klein gedaempft">Kein kommendes Spiel gefunden. Das Unihockey Modul liefert den Spielplan.</div>
+        {/if}
+        {#if v.form.length}
+          <div class="zeile"><span class="sehr-klein gedaempft">Eigene Form</span><span class="form">{#each v.form as f, i (i)}<span class="f-{f}" title={AUSGANG_NAME[f]}>{f}</span>{/each}</span></div>
+        {/if}
+      </div>
+      <div class="erfassen">
+        <div class="panel stapel">
+          <h3>Stärken</h3>
+          {#each v.staerken as p (p.text)}
+            <div class="punkt plus-rand"><div>{p.text}</div><div class="sehr-klein gedaempft">{p.detail}</div></div>
+          {:else}
+            <p class="leer">{v.spiele < 2 ? 'Ab zwei erfassten Spielen.' : 'Nichts Auffälliges.'}</p>
+          {/each}
+        </div>
+        <div class="panel stapel">
+          <h3>Schwächen</h3>
+          {#each v.schwaechen as p (p.text)}
+            <div class="punkt minus-rand"><div>{p.text}</div><div class="sehr-klein gedaempft">{p.detail}</div></div>
+          {:else}
+            <p class="leer">{v.spiele < 2 ? 'Ab zwei erfassten Spielen.' : 'Nichts Auffälliges.'}</p>
+          {/each}
+        </div>
+      </div>
+      <p class="sehr-klein gedaempft">Aus {v.spiele} erfassten Spielen der Saison {v.saison ?? ''}. Regeln: Drittel nach Tordifferenz, Spezialteams ab vier Situationen, Zonen ab zehn Abschlüssen.</p>
+      {#if naechstes}
+        <GegnerCheck teamId={naechstes.teamId} />
+        <div class="panel stapel">
+          <h3>Letzter Direktvergleich aus der Erfassung</h3>
+          {#if v.letzter}
+            <button class="zeile spielzeile" onclick={() => berichtOeffnen(v.letzter?.id ?? '')}>
+              <span class="wachsen"><strong>{v.letzter.titel}</strong><br /><span class="sehr-klein gedaempft">{v.letzter.unter}</span></span>
+              <span class="sehr-klein">Bericht</span>
+            </button>
+            {#each v.letzter.momente as m (m)}<div class="sehr-klein">{m}</div>{/each}
+            {#if v.letzter.beste.length}
+              <div class="sehr-klein gedaempft">Beste: {v.letzter.beste.map((b) => b.name).join(', ')}</div>
+            {/if}
+            {#if v.direkt.length > 1}
+              <div class="sehr-klein gedaempft">Frühere: {v.direkt.slice(1).map((d) => `${datum(d.datum)} ${d.tore}:${d.gegentore}`).join(', ')}</div>
+            {/if}
+          {:else}
+            <p class="leer">Noch kein erfasstes Spiel gegen {naechstes.gegner}.</p>
+          {/if}
+        </div>
+      {/if}
+    {/if}
   {:else if tab === 'Spieler'}
     <div class="zeile filter">{@render bereichWahl()}</div>
     {#if a?.bloecke.bloecke.length}
@@ -928,6 +1025,16 @@
   }
   .f-N {
     background: var(--ausfall);
+  }
+  .punkt {
+    padding: 6px 0 6px 10px;
+    border-left: 3px solid var(--rand);
+  }
+  .plus-rand {
+    border-left-color: var(--ok);
+  }
+  .minus-rand {
+    border-left-color: var(--ausfall);
   }
   .spielzeile {
     width: 100%;
