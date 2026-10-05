@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Linie from '../komponenten/Linie.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import Spielfeld from '../komponenten/Spielfeld.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
@@ -389,6 +390,75 @@
       melden('Kopieren nicht möglich', 'ausfall');
     }
   }
+  interface VerlaufSpiel {
+    id: string;
+    datum: string;
+    gegner: string;
+    tore: number;
+    gegentore: number;
+    ausgang: 'S' | 'U' | 'N';
+    verlaengerung: boolean;
+    punkte: number;
+    punkteSumme: number;
+    schuesse: number;
+    schuesseGegen: number;
+    ueberzahlQuote: number | null;
+    unterzahlQuote: number | null;
+  }
+  interface Saison {
+    saison: string | null;
+    saisons: string[];
+    team: string | null;
+    teams: string[];
+    spiele: VerlaufSpiel[];
+    bilanz: { spiele: number; siege: number; unentschieden: number; niederlagen: number; punkte: number; punkteProSpiel: number | null; tore: number; gegentore: number };
+    form: ('S' | 'U' | 'N')[];
+    serie: string | null;
+    drittel: { drittel: number; tore: number; gegentore: number }[];
+    ueberzahl: { tore: number; chancen: number; quote: number | null };
+    unterzahl: { gegentore: number; chancen: number; quote: number | null };
+  }
+  interface TabellenRang {
+    rang: number;
+    team: string;
+    spiele: number | null;
+    punkte: number | null;
+  }
+  let saisonWahl = $state(lesen('analyse.saison', ''));
+  let teamWahl = $state('');
+  let saison = $state<Saison | null>(null);
+  let tabellenRang = $state<{ zeile: TabellenRang; teams: number } | null>(null);
+  $effect(() => {
+    if (tab !== 'Saison') return;
+    schreiben('analyse.saison', saisonWahl);
+    const q = new URLSearchParams({ saison: saisonWahl, team: teamWahl });
+    api
+      .get<Saison>(`/api/m/analyse/saison?${q}`)
+      .then((x) => (saison = x))
+      .catch((e) => melden(fehlerText(e), 'ausfall'));
+  });
+  // Vergleich mit der offiziellen Rangliste aus dem Unihockey Modul, falls es läuft
+  const kern = (t: string) => t.toLowerCase().replace(/^(uhc|uh|fbc|sv|ufc)\s+/, '').trim();
+  $effect(() => {
+    const team = saison?.team;
+    tabellenRang = null;
+    if (!team) return;
+    api
+      .get<{ rangliste: { zeilen: TabellenRang[] } | null }[]>('/api/m/unihockey/uebersicht')
+      .then((liste) => {
+        for (const t of liste) {
+          const zeilen = t.rangliste?.zeilen ?? [];
+          const zeile = zeilen.find((z) => kern(z.team) === kern(team) || kern(z.team).includes(kern(team)) || kern(team).includes(kern(z.team)));
+          if (zeile) {
+            tabellenRang = { zeile, teams: zeilen.length };
+            return;
+          }
+        }
+      })
+      .catch(() => {});
+  });
+  const AUSGANG_NAME = { S: 'Sieg', U: 'Unentschieden', N: 'Niederlage' };
+  const tagMonat = (t: number) => new Date(t).toLocaleDateString('de-CH', { day: 'numeric', month: 'short' });
   function berichtOeffnen(id: string) {
     berichtSpiel = id;
     tab = 'Bericht';
@@ -424,7 +494,7 @@
   </select>
 {/snippet}
 
-<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Bericht', 'Spieler', 'Spiele']} bind:tab>
+<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Bericht', 'Saison', 'Spieler', 'Spiele']} bind:tab>
   {#if !u}
     <div class="laedt" style="height:320px"></div>
   {:else if tab === 'Erfassen'}
@@ -685,6 +755,97 @@
         </div>
       </div>
     {/if}
+  {:else if tab === 'Saison'}
+    <div class="zeile filter">
+      <select bind:value={saisonWahl} aria-label="Saison">
+        <option value="">Neueste Saison</option>
+        {#each saison?.saisons ?? [] as s (s)}<option value={s}>{s}</option>{/each}
+      </select>
+      {#if (saison?.teams.length ?? 0) > 1}
+        <select bind:value={teamWahl} aria-label="Team">
+          <option value="">{saison?.teams[0]}</option>
+          {#each saison?.teams.slice(1) ?? [] as t (t)}<option value={t}>{t}</option>{/each}
+        </select>
+      {/if}
+    </div>
+    {#if !saison}
+      <p class="laedt">Lade Saisonverlauf…</p>
+    {:else if !saison.spiele.length}
+      <p class="leer">Noch keine erfassten Spiele in dieser Saison.</p>
+    {:else}
+      {@const b = saison.bilanz}
+      <div class="kennzahlen">
+        <div class="panel">
+          <div class="sehr-klein gedaempft">Bilanz {saison.team ?? ''}</div>
+          <div class="zahl gross">{b.siege} · {b.unentschieden} · {b.niederlagen}</div>
+          <div class="sehr-klein gedaempft">Siege, Unentschieden, Niederlagen</div>
+        </div>
+        <div class="panel">
+          <div class="sehr-klein gedaempft">Punkte</div>
+          <div class="zahl gross">{b.punkte}</div>
+          <div class="sehr-klein gedaempft">{b.punkteProSpiel ?? '–'} pro Spiel, Tore {b.tore}:{b.gegentore}</div>
+        </div>
+        <div class="panel">
+          <div class="sehr-klein gedaempft">Form</div>
+          <div class="form">
+            {#each saison.form as f, i (i)}<span class="f-{f}" title={AUSGANG_NAME[f]}>{f}</span>{/each}
+          </div>
+          <div class="sehr-klein gedaempft">{saison.serie ?? 'Letzte Spiele, das neueste rechts'}</div>
+        </div>
+        <div class="panel">
+          <div class="sehr-klein gedaempft">Überzahl</div>
+          <div class="zahl gross">{pct(saison.ueberzahl.quote)}</div>
+          <div class="sehr-klein gedaempft">{saison.ueberzahl.tore} von {saison.ueberzahl.chancen} genutzt</div>
+        </div>
+        <div class="panel">
+          <div class="sehr-klein gedaempft">Unterzahl überstanden</div>
+          <div class="zahl gross">{pct(saison.unterzahl.quote)}</div>
+          <div class="sehr-klein gedaempft">{saison.unterzahl.gegentore} Gegentore in {saison.unterzahl.chancen} Unterzahlen</div>
+        </div>
+      </div>
+      {#if tabellenRang}
+        {@const z = tabellenRang.zeile}
+        <div class="panel sehr-klein">
+          Rangliste: Rang {z.rang} von {tabellenRang.teams}, {z.punkte ?? '–'} Punkte aus {z.spiele ?? '–'} Spielen{#if z.punkte != null && z.spiele}&nbsp;({Math.round((z.punkte / z.spiele) * 100) / 100} pro Spiel){/if}.
+          In den {b.spiele} erfassten Spielen {b.punkteProSpiel ?? '–'} Punkte pro Spiel.
+        </div>
+      {/if}
+      <div class="panel">
+        <Linie titel="Punkte über die Saison" punkte={saison.spiele.map((s) => ({ t: Date.parse(s.datum), v: s.punkteSumme }))} min={0} zeitFormat={tagMonat} />
+      </div>
+      <div class="panel">
+        <Linie titel="Überzahl Quote über die Saison" einheit="%" punkte={saison.spiele.map((s) => ({ t: Date.parse(s.datum), v: s.ueberzahlQuote }))} min={0} max={100} zeitFormat={tagMonat} />
+        <Linie titel="Unterzahl überstanden über die Saison" einheit="%" farbe="var(--ok)" punkte={saison.spiele.map((s) => ({ t: Date.parse(s.datum), v: s.unterzahlQuote }))} min={0} max={100} zeitFormat={tagMonat} />
+      </div>
+      <h3>Tore pro Drittel</h3>
+      <div class="panel tabelle-scroll">
+        <table>
+          <thead><tr><th>Drittel</th><th>Tore</th><th>Gegentore</th><th>Differenz</th></tr></thead>
+          <tbody>
+            {#each saison.drittel as d (d.drittel)}
+              <tr>
+                <td>{d.drittel === 4 ? 'Verlängerung' : `${d.drittel}. Drittel`}</td>
+                <td class="zahl">{d.tore}</td>
+                <td class="zahl">{d.gegentore}</td>
+                <td class="zahl" class:plus={d.tore > d.gegentore} class:minus={d.tore < d.gegentore}>{d.tore - d.gegentore > 0 ? '+' : ''}{d.tore - d.gegentore}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <h3>Spiele</h3>
+      <div class="liste">
+        {#each [...saison.spiele].reverse() as s (s.id)}
+          <button class="zeile spielzeile" onclick={() => berichtOeffnen(s.id)}>
+            <span class="form"><span class="f-{s.ausgang}">{s.ausgang}</span></span>
+            <span class="wachsen">{s.gegner}<span class="sehr-klein gedaempft"> · {datum(s.datum)}</span></span>
+            <span class="zahl">{s.tore}:{s.gegentore}{s.verlaengerung ? ' n.V.' : ''}</span>
+            <span class="sehr-klein gedaempft">{s.schuesse}:{s.schuesseGegen} Schüsse</span>
+          </button>
+        {/each}
+      </div>
+      <p class="sehr-klein gedaempft">Nur selbst erfasste Spiele. Punkte wie in der Meisterschaft: Sieg 3, nach Verlängerung 2 und 1.</p>
+    {/if}
   {:else if tab === 'Spieler'}
     <div class="zeile filter">{@render bereichWahl()}</div>
     {#if a?.bloecke.bloecke.length}
@@ -744,6 +905,41 @@
 </ModulRahmen>
 
 <style>
+  .form {
+    display: flex;
+    gap: 4px;
+    margin: 4px 0;
+  }
+  .form span {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #0b0f14;
+  }
+  .f-S {
+    background: var(--ok);
+  }
+  .f-U {
+    background: #fbbf24;
+  }
+  .f-N {
+    background: var(--ausfall);
+  }
+  .spielzeile {
+    width: 100%;
+    min-height: 0;
+    text-align: left;
+    gap: 10px;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--rand);
+    border-radius: 0;
+    padding: 8px 0;
+  }
   .bericht {
     border-left: 4px solid var(--rand);
   }

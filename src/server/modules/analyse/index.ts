@@ -16,6 +16,7 @@ import {
   TYPEN,
 } from './auswertung.ts';
 import { spielbericht, spielberichtPdf } from './bericht.ts';
+import { saisonverlauf } from './verlauf.ts';
 import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse, demoStrafen } from './demo.ts';
 
 export const ANALYSE_SPIELE = tabelle({
@@ -268,6 +269,23 @@ function analyseLaufzeit(ctx: Kontext) {
         .type('application/pdf')
         .header('Content-Disposition', `inline; filename="${name}"`)
         .send(spielberichtPdf(b));
+    });
+
+    // Saisonverlauf eines Teams: ohne Angabe die neueste Saison und das häufigste Team
+    app.get<{ Querystring: { saison?: string; team?: string } }>('/saison', async (req) => {
+      await vorbereiten();
+      const alle = await spieleLaden();
+      const saisons = [...new Set(alle.map((s) => s.saison).filter(Boolean))].sort().reverse() as string[];
+      const saison = req.query.saison || saisons[0] || null;
+      const inSaison = alle.filter((s) => !saison || s.saison === saison);
+      const proTeam = new Map<string, number>();
+      for (const s of inSaison) if (s.team) proTeam.set(s.team, (proTeam.get(s.team) ?? 0) + 1);
+      const teams = [...proTeam].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+      const team = req.query.team || teams[0] || null;
+      const spiele = inSaison.filter((s) => !team || s.team === team);
+      const filter = { spiel_id: { in: spiele.length ? spiele.map((s) => s.id) : ['-'] } };
+      const [ereignisse, strafen] = await Promise.all([ereignisseLaden(filter), strafenLaden(filter)]);
+      return { saison, saisons, team, teams, ...saisonverlauf(spiele, ereignisse, strafen) };
     });
 
     // Abschluss aus der Live Erfassung. Ein Tor in Überzahl beendet die älteste 2 Minuten Strafe des Gegners.
