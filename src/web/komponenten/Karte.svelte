@@ -5,6 +5,7 @@
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
+  import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
 
   let {
@@ -102,7 +103,8 @@
   let reliefLayer: Leaflet.TileLayer | null = null;
   let ebenen = $state<Ebene[]>([]);
   let aktiv = $state<Set<string>>(new Set());
-  let basis = $state(basisStart ?? lesen('karte.basis', 'dunkel'));
+  // Nur der Startwert zählt, danach wählt die Person selbst
+  let basis = $state(untrack(() => basisStart) ?? lesen('karte.basis', 'dunkel'));
   let panelOffen = $state(false);
   let infos = $state<Record<string, { stand: string | null; demo: boolean; fehler?: string; hinweis?: string; anzahl: number }>>({});
   const layer = new Map<string, Leaflet.Layer>();
@@ -318,6 +320,7 @@
 
   $effect(() => {
     let abgebrochen = false;
+    let aufraeumen: (() => void) | null = null;
     (async () => {
       L = (await import('leaflet')).default;
       if (abgebrochen) return;
@@ -334,7 +337,6 @@
       seitenPunkteZeichnen(punkte, linien, heat);
       aufraeumen = bereit?.(L, karte) ?? null;
     })();
-    let aufraeumen: (() => void) | null = null;
     return () => {
       abgebrochen = true;
       aufraeumen?.();

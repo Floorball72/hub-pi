@@ -175,7 +175,7 @@
   </div>
   {#if einsatz}
     <div class="zeile" style="margin-top:6px">
-      <button type="button" class="klein" onclick={() => navigieren(`/heli/${einsatz.hex}`)}>Heli Details</button>
+      <button type="button" class="klein" onclick={() => navigieren(`/heli?hex=${encodeURIComponent(einsatz.hex)}`)}>Heli Details</button>
     </div>
   {/if}
   <p class="sehr-klein gedaempft">

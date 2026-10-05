@@ -285,7 +285,8 @@
         {@const w = stat.einsatz.woche}
         <h3 style="margin-top:14px">Einsätze, letzte 7 Tage im Vergleich zur Vorwoche</h3>
         <div class="raster werte">
-          {#each [['Einsätze', w.diese.einsaetze, w.vorher.einsaetze, ''], ['Mit Einsatzort', w.diese.mitEinsatzort, w.vorher.mitEinsatzort, ''], ['Flugzeit', w.diese.flugMin, w.vorher.flugMin, ' min']] as [titel, jetzt, vorher, einheit] (titel)}
+          {#each [['Einsätze', w.diese.einsaetze, w.vorher.einsaetze, ''], ['Mit Einsatzort', w.diese.mitEinsatzort, w.vorher.mitEinsatzort, ''], ['Flugzeit', w.diese.flugMin, w.vorher.flugMin, ' min']] as [titel, jetzt, vorher, e] (titel)}
+            {@const einheit = String(e)}
             {@const d = Number(jetzt) - Number(vorher)}
             <div class="panel">
               <h3>{titel}</h3>

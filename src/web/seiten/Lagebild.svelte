@@ -554,8 +554,8 @@
             <a class="knopf klein" href="/heli?hex={encodeURIComponent(camGross.hex)}" onclick={() => (ansicht.kiosk = false)}>Heli Details</a>
             <button class="knopf klein" onclick={() => (camGross = null)}>Schliessen</button>
           </span>
+          <span class="sehr-klein gedaempft lb-cam-hinweis">Nächste Webcam zur Position des Helis. Der Heli ist meist nicht im Bild.</span>
         </figcaption>
-        <p class="sehr-klein gedaempft">Nächste Webcam zur Position des Helis. Der Heli ist meist nicht im Bild.</p>
       </figure>
     </div>
   {/if}
@@ -822,6 +822,9 @@
   .lb-cam-gross figcaption {
     flex-wrap: wrap;
     gap: 8px;
+  }
+  .lb-cam-hinweis {
+    flex-basis: 100%;
   }
   .lb-heli.geparkt {
     border-style: dashed;
