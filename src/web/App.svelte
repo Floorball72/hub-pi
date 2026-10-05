@@ -4,6 +4,7 @@
   import Befehlspalette from './komponenten/Befehlspalette.svelte';
   import Bestaetigung from './komponenten/Bestaetigung.svelte';
   import Icon from './komponenten/Icon.svelte';
+  import JarvisLeiste from './komponenten/JarvisLeiste.svelte';
   import Meldungen from './komponenten/Meldungen.svelte';
   import { api } from './lib/api.ts';
   import { navigieren, ort, parameter } from './lib/router.svelte.ts';
@@ -220,6 +221,7 @@
 {/if}
 
 {#if sitzung?.angemeldet}<Befehlspalette {module} onaktion={aktion} />{/if}
+{#if sitzung?.angemeldet && !ansicht.kiosk && ort.pfad !== '/modul/jarvis' && module.some((m) => m.id === 'jarvis' && m.aktiv)}<JarvisLeiste />{/if}
 <Bestaetigung />
 <Meldungen />
 
