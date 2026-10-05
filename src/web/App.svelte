@@ -38,6 +38,7 @@
     analyse: () => import('./module/Analyse.svelte'),
     smarthome: () => import('./module/SmartHome.svelte'),
     aufgaben: () => import('./module/Aufgaben.svelte'),
+    finanzen: () => import('./module/Finanzen.svelte'),
     swissunihockey: () => import('./module/SwissUnihockey.svelte'),
     events: () => import('./module/Events.svelte'),
     content: () => import('./module/Content.svelte'),
