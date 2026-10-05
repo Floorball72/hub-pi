@@ -32,6 +32,7 @@ export interface AbgestellterHeli {
   art: 'landung' | 'signalverlust' | 'laufend';
   platz: string | null;
   anBasis: boolean;
+  vermutet?: boolean;
 }
 
 interface Zustand {
@@ -341,11 +342,13 @@ export function abgestelltOrt(h: AbgestellterHeli): string {
 
 function abgestelltSchild(h: AbgestellterHeli): string {
   const kz = h.kennzeichen ?? h.hex;
-  if (h.anBasis) return `${kz} · ${abgestelltOrt(h)}`;
+  if (h.anBasis) return `${kz} · ${h.vermutet ? 'vermutlich ' : ''}${abgestelltOrt(h)}`;
   return `${kz} · ${zeitKurz(h.zeit)}${h.platz ? ` ${abgestelltOrt(h)}` : ''}`;
 }
 
 export function abgestelltTitel(h: AbgestellterHeli): string {
+  if (h.vermutet)
+    return `${h.kennzeichen ?? h.hex}: Zuletzt gesehen ${zeitKurz(h.zeit)} ausserhalb der Basis. Rückflug nicht empfangen, vermutlich zurück an der ${abgestelltOrt(h)}.`;
   const was =
     h.art === 'landung'
       ? 'Gelandet'

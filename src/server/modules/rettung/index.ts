@@ -645,7 +645,7 @@ function rettungLaufzeit(ctx: Kontext) {
         .catch(() => letzteFluege?.liste ?? []);
       letzteFluege = { zeit: jetzt, liste };
     }
-    return letzteStandorte(letzteFluege.liste, erkennung.laufende(), aktuell);
+    return letzteStandorte(letzteFluege.liste, erkennung.laufende(), aktuell, undefined, jetzt);
   }
 
   async function demoVorbereiten() {

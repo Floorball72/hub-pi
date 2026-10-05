@@ -3,7 +3,7 @@
 import { distanzKm } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
 import { lokal, vonLokal } from '../../kern/zeit.ts';
-import { basisAusPlatz, basisName, endeBasis } from '../../geteilt/heli.ts';
+import { basisAusPlatz, basisName, endeBasis, REGA_BASEN } from '../../geteilt/heli.ts';
 
 export const ADSB_NAMENSNENNUNG = 'ADS-B Daten: adsb.lol (ODbL)';
 
@@ -450,7 +450,15 @@ export interface Abgestellt {
   art: 'landung' | 'signalverlust' | 'laufend';
   platz: string | null;
   anBasis: boolean;
+  /** Nicht gesehen, sondern angenommen: lange ausserhalb gelandet, Rückflug ohne Empfang */
+  vermutet?: boolean;
 }
+
+/**
+ * Nach so vielen Minuten ohne Signal ausserhalb einer Basis gilt ein Heli als zurückgeflogen.
+ * Rückflüge laufen oft tief durch Täler, der Empfänger sieht sie nicht.
+ */
+export const ABGESTELLT_MAX_MIN = 120;
 
 export interface FlugEnde {
   hex: string;
@@ -464,16 +472,30 @@ export interface FlugEnde {
   ende_ort: string | null;
 }
 
+/** Häufigste Rega Basis, an der ein Heli in den gespeicherten Flügen gelandet ist */
+function heimBasis(fluege: FlugEnde[], hex: string) {
+  const zaehler = new Map<string, number>();
+  for (const f of fluege) {
+    const b = f.hex === hex ? basisAusPlatz(f.ende_platz) : null;
+    if (b) zaehler.set(b.id, (zaehler.get(b.id) ?? 0) + 1);
+  }
+  const id = [...zaehler].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return id ? (REGA_BASEN.find((b) => b.id === id) ?? null) : null;
+}
+
 /**
  * Letzter bekannter Standort pro Heli, der gerade kein Signal sendet. Laufende Flüge ohne Position
  * zählen mit dem letzten Spurpunkt. Ein Ende an einer Rega Basis wird auf die Basis gesetzt.
  * Flüge, die den Empfangsbereich hoch verlassen haben, sagen nichts über den Standort und fallen weg.
+ * Mit jetzt: Wer länger als ABGESTELLT_MAX_MIN ausserhalb einer Basis steht, ist vermutlich zurück.
+ * Rega Helis kommen dann vermutet an ihre Heimbasis, andere fallen weg.
  */
 export function letzteStandorte(
   fluege: FlugEnde[],
   laufende: Flug[],
   aktuell: Set<string>,
   ortVon?: (lat: number, lon: number) => string | null,
+  jetzt?: number,
 ): Abgestellt[] {
   const aus = new Map<string, Abgestellt>();
   for (const f of laufende) {
@@ -512,6 +534,24 @@ export function letzteStandorte(
       platz: basis ? basisName(basis) : (f.ende_platz ?? f.ende_ort),
       anBasis: !!basis,
     });
+  }
+  if (jetzt !== undefined) {
+    for (const [hex, a] of aus) {
+      if (a.anBasis || jetzt - a.zeit <= ABGESTELLT_MAX_MIN * 60000) continue;
+      const heim = a.organisation === 'Rega' ? heimBasis(fluege, hex) : null;
+      if (!heim) {
+        aus.delete(hex);
+        continue;
+      }
+      aus.set(hex, {
+        ...a,
+        lat: heim.lat,
+        lon: heim.lon,
+        platz: basisName(heim),
+        anBasis: true,
+        vermutet: true,
+      });
+    }
   }
   return [...aus.values()].sort((a, b) => b.zeit - a.zeit);
 }

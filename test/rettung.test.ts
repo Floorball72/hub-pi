@@ -468,6 +468,44 @@ describe('Letzter Standort', () => {
     assert.equal(a.platz, 'Rega Basis Untervaz');
     assert.equal(a.lat, 46.9131);
   });
+
+  it('setzt Helis nach zwei Stunden ausserhalb zurück an die Heimbasis', async () => {
+    const { letzteStandorte } = await import('../src/server/modules/rettung/heli.ts');
+    const f = (
+      hex: string,
+      organisation: string,
+      ende: string,
+      lat: number,
+      lon: number,
+      platz: string | null,
+    ) => ({
+      hex,
+      organisation,
+      kennzeichen: hex.toUpperCase(),
+      ende,
+      ende_art: 'landung',
+      ende_lat: lat,
+      ende_lon: lon,
+      ende_platz: platz,
+      ende_ort: null,
+    });
+    const fluege = [
+      f('r', 'Rega', '2026-10-01T08:00:00Z', 47.405, 9.29, 'Rega Basis St. Gallen'),
+      f('r', 'Rega', '2026-10-01T15:00:00Z', 47.42, 9.37, 'Kantonsspital St. Gallen'),
+      f('z', 'Air Zermatt', '2026-10-01T15:00:00Z', 46.0, 7.7, null),
+      f('n', 'Rega', '2026-10-01T18:30:00Z', 47.3, 9.1, null),
+    ];
+    const jetzt = Date.parse('2026-10-01T19:00:00Z');
+    const liste = letzteStandorte(fluege, [], new Set(), undefined, jetzt);
+    // r steht vermutet an St. Gallen, z fällt weg, n ist erst 30 Minuten weg
+    assert.deepEqual(
+      liste.map((h) => [h.hex, h.platz, h.anBasis, !!h.vermutet]),
+      [
+        ['n', null, false, false],
+        ['r', 'Rega Basis St. Gallen', true, true],
+      ],
+    );
+  });
 });
 
 describe('Webcams', () => {
