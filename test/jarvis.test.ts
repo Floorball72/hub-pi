@@ -18,7 +18,7 @@ import {
   type ModellFn,
   sseLesen,
 } from '../src/server/modules/jarvis/modell.ts';
-import { adresseSicher, entscheid, htmlZuText } from '../src/server/modules/jarvis/werkzeuge.ts';
+import { HUB_ZIEL, adresseSicher, entscheid, htmlZuText } from '../src/server/modules/jarvis/werkzeuge.ts';
 
 describe('Jarvis Vollmacht', () => {
   it('lesen geht immer, Schreiben und Kritisches je nach Stufe', () => {
@@ -61,6 +61,19 @@ describe('Jarvis Hilfsfunktionen', () => {
     await assert.rejects(adresseSicher('https://192.168.1.5/x'));
     await assert.rejects(adresseSicher('https://[::1]/'));
     await assert.rejects(adresseSicher('https://user:pw@example.com/'));
+  });
+
+  it('erlaubt als Ziel nur Hub Seiten', () => {
+    for (const ok of ['/timeline', '/modul/rettung#tab=Karte', '/suche?q=Kaffee'])
+      assert.ok(HUB_ZIEL.test(ok), ok);
+    for (const nein of [
+      'https://example.com',
+      '//example.com',
+      '/api/logout',
+      '/login',
+      'javascript:alert(1)',
+    ])
+      assert.ok(!HUB_ZIEL.test(nein), nein);
   });
 
   it('macht aus HTML Text', () => {

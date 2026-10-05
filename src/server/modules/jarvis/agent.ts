@@ -14,6 +14,7 @@ export type AgentEreignis =
   | { art: 'werkzeug'; id: string; name: string; beschreibung: string }
   | { art: 'ergebnis'; id: string; ok: boolean; kurz: string }
   | { art: 'bestaetigung'; id: string; werkzeug: string; beschreibung: string }
+  | { art: 'navigation'; ziel: string }
   | { art: 'fertig'; gespraechId: string }
   | { art: 'fehler'; text: string };
 
@@ -271,6 +272,8 @@ export class Agent {
             res = await this.ausfuehren(w, a.input);
           }
           yield { art: 'ergebnis', id: a.id, ok: res.ok, kurz: res.text.slice(0, 160) };
+          if (res.ok && a.name === 'hub_oeffnen' && e === 'ja')
+            yield { art: 'navigation', ziel: String(a.input.ziel ?? '') };
           ergebnisse.push({
             type: 'tool_result',
             tool_use_id: a.id,

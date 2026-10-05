@@ -31,6 +31,10 @@ export function entscheid(art: Art, v: Vollmacht): 'ja' | 'fragen' | 'nein' {
   }
 }
 
+/** Erlaubte Ziele im Hub: interne Seiten, optional mit Tab (#tab=...) oder Suchbegriff (?q=...). */
+export const HUB_ZIEL =
+  /^\/(?!api(\/|$)|login|einrichtung)[a-z0-9/_-]*(\?q=[^&#\s]{1,80})?(#tab=[^#\s]{1,40})?$/i;
+
 export interface WerkzeugKontext {
   ctx: Kontext;
   gedaechtnis: Gedaechtnis;
@@ -450,6 +454,24 @@ export function werkzeugListe(): Werkzeug[] {
         await k.ctx.einstellungen.setze(`modul.${id}.aktiv`, !!e.aktiv);
         await k.ctx.kern.modulNeuLaden(id);
         return { modul: id, aktiv: !!e.aktiv };
+      },
+    },
+    {
+      art: 'lesen',
+      def: {
+        name: 'hub_oeffnen',
+        description:
+          'Öffnet eine Seite im Hub für Jerome (die Oberfläche wechselt). Beispiele: "/" Start, "/modul/aufgaben", "/modul/rettung#tab=Karte", "/karte", "/timeline", "/alarme", "/suche?q=Kaffee". Module heissen wie ihre id aus "uebersicht".',
+        input_schema: obj({ ziel: { type: 'string', description: 'Pfad der Seite, beginnt mit /' } }, [
+          'ziel',
+        ]),
+      },
+      beschreibung: (e) => `Seite öffnen: ${text(e, 'ziel', 80)}`,
+      lauf: async (e) => {
+        const ziel = text(e, 'ziel', 160);
+        if (!HUB_ZIEL.test(ziel))
+          throw new EingabeFehler('Ungültiges Ziel. Es muss ein Hub Pfad sein, z.B. /modul/aufgaben');
+        return { hinweis: `Die Seite ${ziel} wird für Jerome geöffnet.` };
       },
     },
     {

@@ -4,7 +4,9 @@
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
   import { api, fehlerText } from '../lib/api.ts';
   import { bestaetigen } from '../lib/bestaetigen.svelte.ts';
+  import { type JarvisEreignis, jarvisChat } from '../lib/jarvisChat.ts';
   import { melden } from '../lib/meldung.svelte.ts';
+  import { navigieren } from '../lib/router.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
 
   interface Status {
@@ -186,30 +188,12 @@
     eintraege.push(antwort);
     scrollen();
     abbruch = new AbortController();
+    let ziel = '';
     try {
-      const r = await fetch('/api/m/jarvis/chat', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', 'x-pihub': '1' },
-        body: JSON.stringify({ nachricht: t, gespraechId }),
-        signal: abbruch.signal,
+      await jarvisChat(t, gespraechId, abbruch.signal, (e) => {
+        if (e.art === 'navigation') ziel = String(e.ziel);
+        else ereignis(antwort, e);
       });
-      if (!r.ok || !r.body) throw new Error((await r.json().catch(() => null))?.fehler ?? `Fehler ${r.status}`);
-      const leser = r.body.getReader();
-      const dec = new TextDecoder();
-      let rest = '';
-      for (;;) {
-        const { done, value } = await leser.read();
-        if (done) break;
-        rest += dec.decode(value, { stream: true });
-        let i: number;
-        while ((i = rest.indexOf('\n\n')) >= 0) {
-          const zeile = rest.slice(0, i);
-          rest = rest.slice(i + 2);
-          if (zeile.startsWith('data:')) ereignis(antwort, JSON.parse(zeile.slice(5)));
-        }
-        scrollen();
-      }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') antwort.text ||= `Das hat nicht geklappt: ${fehlerText(e)}`;
     } finally {
@@ -218,12 +202,13 @@
       abbruch = null;
       if (zustand === 'denkt') zustand = 'ruhe';
       sprechen(antwort.text);
+      if (ziel) navigieren(ziel);
       api.get<Status>('/api/m/jarvis/status').then((s) => (status = s)).catch(() => undefined);
       api.get<Gespraech[]>('/api/m/jarvis/gespraeche').then((g) => (gespraeche = g)).catch(() => undefined);
     }
   }
 
-  function ereignis(a: Eintrag, e: any) {
+  function ereignis(a: Eintrag, e: JarvisEreignis & Record<string, any>) {
     if (e.art === 'gespraech') gespraechId = e.id;
     else if (e.art === 'text') a.text += e.text;
     else if (e.art === 'werkzeug') a.schritte.push({ id: e.id, name: e.name, beschreibung: e.beschreibung });
