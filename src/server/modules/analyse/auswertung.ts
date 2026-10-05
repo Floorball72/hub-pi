@@ -274,10 +274,17 @@ export function nachBlock(liste: Ereignis[], spieler: Spieler[]) {
         b == null ? [] : spieler.filter((s) => s.block === b).map((s) => name.get(s.id) ?? s.name),
       ),
     );
+  // Genau ein ganzer Block auf dem Feld steht schon in der Blocktabelle
+  const ganzerBlock = (ids: string[]) => {
+    const b = blockVon.get(ids[0]);
+    const block = spieler.filter((s) => b != null && s.block === b);
+    return block.length === ids.length && ids.every((id) => blockVon.get(id) === b);
+  };
+  const nummer = new Map(spieler.map((s) => [s.id, s.nummer ?? 999]));
   const aufstellungen = [...proAufstellung]
-    .filter(([, l]) => l.length >= 3)
+    .filter(([k, l]) => l.length >= 3 && !ganzerBlock(k.split(',')))
     .map(([k, l]) => {
-      const ids = k.split(',');
+      const ids = k.split(',').sort((x, y) => (nummer.get(x) ?? 999) - (nummer.get(y) ?? 999));
       return blockWerte(
         null,
         ids.map((id) => name.get(id) ?? '?').join(', '),
