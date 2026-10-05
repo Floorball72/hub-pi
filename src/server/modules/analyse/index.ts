@@ -15,6 +15,7 @@ import {
   strafeEndetDurchTor,
   TYPEN,
 } from './auswertung.ts';
+import { spielbericht, spielberichtPdf } from './bericht.ts';
 import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse, demoStrafen } from './demo.ts';
 
 export const ANALYSE_SPIELE = tabelle({
@@ -241,6 +242,32 @@ function analyseLaufzeit(ctx: Kontext) {
         strafenLaden({ spiel_id: spiel.id }),
       ]);
       return { spiel, ereignisse, strafen, resultat: resultat(ereignisse) };
+    });
+
+    // Spielbericht: Torfolge, Schlüsselmomente, beste Spieler und Zahlen, als JSON mit Text oder als PDF
+    async function berichtLaden(id: string) {
+      await vorbereiten();
+      const spiel = await daten.hole<Spiel>('analyse_spiele', id);
+      if (!spiel) return null;
+      const [ereignisse, strafen, spieler] = await Promise.all([
+        ereignisseLaden({ spiel_id: spiel.id }),
+        strafenLaden({ spiel_id: spiel.id }),
+        spielerLaden(),
+      ]);
+      return spielbericht(spiel, ereignisse, strafen, spieler);
+    }
+    app.get<{ Params: { id: string } }>('/spiel/:id/bericht', async (req, reply) => {
+      const b = await berichtLaden(req.params.id);
+      return b ?? reply.code(404).send({ fehler: 'Spiel nicht gefunden' });
+    });
+    app.get<{ Params: { id: string } }>('/spiel/:id/bericht.pdf', async (req, reply) => {
+      const b = await berichtLaden(req.params.id);
+      if (!b) return reply.code(404).send({ fehler: 'Spiel nicht gefunden' });
+      const name = `Spielbericht-${b.titel.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+      return reply
+        .type('application/pdf')
+        .header('Content-Disposition', `inline; filename="${name}"`)
+        .send(spielberichtPdf(b));
     });
 
     // Abschluss aus der Live Erfassung. Ein Tor in Überzahl beendet die älteste 2 Minuten Strafe des Gegners.

@@ -341,6 +341,43 @@
     spielId = id;
     tab = 'Erfassen';
   }
+
+  // Spielbericht
+  interface Bericht {
+    titel: string;
+    unter: string;
+    ausgang: string;
+    tore: { zeit: string; stand: string; team: string; schuetze: string | null; assist: string | null; situation: string | null }[];
+    momente: string[];
+    beste: { name: string; text: string }[];
+    zahlen: { text: string; wert: string }[];
+    text: string;
+  }
+  let berichtSpiel = $state(lesen('analyse.bericht', ''));
+  let bericht = $state<Bericht | null>(null);
+  const berichtId = $derived(berichtSpiel || u?.spiele.find((s) => s.resultat.eigen + s.resultat.gegner > 0)?.id || '');
+  $effect(() => {
+    if (tab !== 'Bericht' || !berichtId) return;
+    schreiben('analyse.bericht', berichtSpiel);
+    bericht = null;
+    api
+      .get<Bericht>(`/api/m/analyse/spiel/${berichtId}/bericht`)
+      .then((x) => (bericht = x))
+      .catch((e) => melden(fehlerText(e), 'ausfall'));
+  });
+  async function berichtKopieren() {
+    if (!bericht) return;
+    try {
+      await navigator.clipboard.writeText(bericht.text);
+      melden('Spielbericht kopiert', 'ok');
+    } catch {
+      melden('Kopieren nicht möglich', 'ausfall');
+    }
+  }
+  function berichtOeffnen(id: string) {
+    berichtSpiel = id;
+    tab = 'Bericht';
+  }
 </script>
 
 {#snippet bereichWahl()}
@@ -351,7 +388,7 @@
   </select>
 {/snippet}
 
-<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Spieler', 'Spiele']} bind:tab>
+<ModulRahmen modulId="analyse" tabs={['Erfassen', 'Auswertung', 'Bericht', 'Spieler', 'Spiele']} bind:tab>
   {#if !u}
     <div class="laedt" style="height:320px"></div>
   {:else if tab === 'Erfassen'}
@@ -555,6 +592,63 @@
         </div>
       </div>
     {/if}
+  {:else if tab === 'Bericht'}
+    <div class="zeile filter">
+      <select bind:value={berichtSpiel} aria-label="Spiel">
+        <option value="">Letztes erfasstes Spiel</option>
+        {#each u.spiele as s (s.id)}<option value={s.id}>{datum(s.datum)} gegen {s.gegner}</option>{/each}
+      </select>
+      {#if bericht}
+        <button onclick={berichtKopieren}>Text kopieren</button>
+        <a class="knopf" href={`/api/m/analyse/spiel/${berichtId}/bericht.pdf`} target="_blank" rel="noopener">PDF</a>
+      {/if}
+    </div>
+    {#if !berichtId}
+      <p class="leer">Noch kein Spiel erfasst.</p>
+    {:else if !bericht}
+      <div class="laedt" style="height:300px"></div>
+    {:else}
+      <div class="panel bericht" class:sieg={bericht.ausgang === 'sieg'} class:niederlage={bericht.ausgang === 'niederlage'}>
+        <h2>{bericht.titel}</h2>
+        <div class="sehr-klein gedaempft">{bericht.unter}</div>
+      </div>
+      <div class="erfassen" style="margin-top:12px">
+        <div class="stapel">
+          <h3>Torfolge</h3>
+          <div class="panel">
+            <ul class="liste">
+              {#each bericht.tore as t, i (i)}
+                <li class="zeile tor" class:gegen={t.team === 'gegner'}>
+                  <span class="sehr-klein gedaempft zahl zeit">{t.zeit}</span>
+                  <strong class="zahl">{t.stand}</strong>
+                  <span class="wachsen">
+                    {t.team === 'eigen' ? (t.schuetze ?? 'unbekannt') : 'Gegner'}
+                    {#if t.assist}<span class="sehr-klein gedaempft"> Assist {t.assist}</span>{/if}
+                  </span>
+                  {#if t.situation}<span class="sehr-klein gedaempft">{t.situation}</span>{/if}
+                </li>
+              {:else}<li class="leer">Keine Tore erfasst.</li>{/each}
+            </ul>
+          </div>
+        </div>
+        <div class="stapel">
+          {#if bericht.momente.length}
+            <h3>Schlüsselmomente</h3>
+            <div class="panel"><ul class="liste">{#each bericht.momente as m, i (i)}<li>{m}</li>{/each}</ul></div>
+          {/if}
+          {#if bericht.beste.length}
+            <h3>Beste Spieler</h3>
+            <div class="panel">
+              <ul class="liste">{#each bericht.beste as b, i (i)}<li class="zeile"><strong class="wachsen">{b.name}</strong><span class="sehr-klein gedaempft">{b.text}</span></li>{/each}</ul>
+            </div>
+          {/if}
+          <h3>Zahlen <span class="sehr-klein gedaempft">wir : Gegner</span></h3>
+          <div class="panel">
+            <ul class="liste">{#each bericht.zahlen as z, i (i)}<li class="zeile"><span class="wachsen">{z.text}</span><strong class="zahl">{z.wert}</strong></li>{/each}</ul>
+          </div>
+        </div>
+      </div>
+    {/if}
   {:else if tab === 'Spieler'}
     <div class="zeile filter">{@render bereichWahl()}</div>
     <div class="panel tabelle-scroll">
@@ -587,6 +681,7 @@
             <span class="wachsen">gegen {s.gegner}</span>
             <span class="sehr-klein gedaempft">{s.schuesse.eigen}:{s.schuesse.gegner} Schüsse</span>
             <strong class="zahl">{s.resultat.eigen}:{s.resultat.gegner}</strong>
+            <button class="leise klein" onclick={() => berichtOeffnen(s.id)}>Bericht</button>
             <button class="leise klein" onclick={() => spielOeffnen(s.id)}>Erfassen</button>
           </li>
         {:else}<li class="leer">Noch keine Spiele.</li>{/each}
@@ -598,6 +693,25 @@
 </ModulRahmen>
 
 <style>
+  .bericht {
+    border-left: 4px solid var(--rand);
+  }
+  .bericht.sieg {
+    border-left-color: var(--ok);
+  }
+  .bericht.niederlage {
+    border-left-color: var(--ausfall);
+  }
+  .bericht h2 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+  }
+  .tor.gegen strong {
+    color: var(--ausfall);
+  }
+  .tor .zeit {
+    width: 44px;
+  }
   .erfassen {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);

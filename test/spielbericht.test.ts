@@ -1,99 +1,74 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  berichtAbsatz,
-  entwurf,
-  pushText,
-  spielBericht,
-} from '../src/server/modules/swissunihockey/bericht.ts';
-import type { Spiel, SpielEreignis } from '../src/server/quellen/swissunihockey.ts';
+import type { Ereignis } from '../src/server/modules/analyse/auswertung.ts';
+import { spielbericht, spielberichtPdf } from '../src/server/modules/analyse/bericht.ts';
 
-const spiel = (resultat: string): Spiel => ({
-  id: 's1',
-  zeit: null,
-  datumText: '',
-  zeitText: '',
-  heim: 'UHC Heim',
-  gast: 'UHC Gast',
-  resultat,
-  zusatz: null,
-  ort: null,
-  lat: null,
-  lon: null,
-  status: 'Spiel beendet',
-  beendet: true,
-  liga: 'Herren NLB',
-});
+const spieler = [
+  { id: 'a', nummer: 7, name: 'Nico', position: 'Sturm' },
+  { id: 'b', nummer: 10, name: 'Lars', position: 'Center' },
+];
+let n = 0;
 const tor = (
-  zeit: string,
-  seite: 'heim' | 'gast',
-  spieler: string,
+  team: 'eigen' | 'gegner',
+  sek: number,
+  schuetze: string | null = null,
   assist: string | null = null,
-): SpielEreignis => ({
-  zeit,
+): Ereignis => ({
+  id: String(n++),
+  spiel_id: 's',
   typ: 'tor',
-  text: 'Torschütze',
-  seite,
-  spieler,
-  assist,
-  minuten: null,
+  team,
+  x: 0.5,
+  y: 0.3,
+  spieler_id: schuetze,
+  assist_id: assist,
+  drittel: 1 + Math.floor(sek / 1200),
+  minute: Math.floor(sek / 60),
+  situation: 'gleich',
+  auf_feld: 'a,b',
+  zeit_sek: sek,
 });
 
-test('Spielbericht: Torfolge, Siegtreffer und Wende', () => {
-  const e = {
-    heim: 'UHC Heim',
-    gast: 'UHC Gast',
-    ereignisse: [
-      tor('03:10', 'gast', 'M. Bösch'),
-      tor('11:00', 'gast', 'M. Bösch', 'P. Frei'),
-      tor('25:30', 'heim', 'A. Wyler', 'A. Huber'),
-      tor('40:02', 'heim', 'A. Huber'),
-      tor('52:44', 'heim', 'A. Wyler'),
+test('Spielbericht: Torfolge, Wende, Siegtreffer und Aufholjagd', () => {
+  const b = spielbericht(
+    { datum: '2026-10-03', gegner: 'UHC Wil', team: 'Vipers', ort: 'heim' },
+    [
+      tor('gegner', 100),
+      tor('gegner', 1300),
+      tor('eigen', 1500, 'a', 'b'),
+      tor('eigen', 2500, 'b'),
+      tor('eigen', 2560, 'a'),
+      tor('gegner', 3500),
     ],
-  };
-  const b = spielBericht(spiel('3:2'), e);
+    [],
+    spieler,
+  );
+  assert.equal(b.titel, 'Vipers gegen UHC Wil 3:3 (0:1, 1:1, 2:1)');
+  assert.equal(b.ausgang, 'unentschieden');
   assert.deepEqual(
     b.tore.map((t) => t.stand),
-    ['0:1', '0:2', '1:2', '2:2', '3:2'],
+    ['0:1', '0:2', '1:2', '2:2', '3:2', '3:3'],
   );
-  assert.equal(b.siegtreffer?.spieler, 'A. Wyler');
-  assert.equal(b.siegtreffer?.stand, '3:2');
-  assert.equal(b.rueckstandSieger, 2);
-  const absatz = berichtAbsatz(b);
-  assert.match(absatz, /UHC Heim gewinnt zu Hause gegen UHC Gast mit 3:2\./);
-  assert.match(absatz, /mit 2 Toren im Rückstand und drehte das Spiel/);
-  assert.match(absatz, /zum 3:2 erzielte A\. Wyler in der 53\. Minute/);
-  assert.match(absatz, /Tore UHC Heim: A\. Wyler 2, A\. Huber\. Tore UHC Gast: M\. Bösch 2\./);
-  assert.doesNotMatch(absatz, /[–—]/);
-  const nv = spielBericht(spiel('2:3'), {
-    heim: 'UHC Heim',
-    gast: 'UHC Gast',
-    ereignisse: [
-      tor('10:00', 'heim', 'A'),
-      tor('20:00', 'heim', 'A'),
-      tor('30:00', 'gast', 'B'),
-      tor('59:00', 'gast', 'B'),
-      tor('62:15', 'gast', 'C'),
-    ],
-  });
-  assert.match(
-    berichtAbsatz(nv),
-    /mit 3:2 nach Verlängerung\. .*Bester Skorer bei UHC Heim war A mit 2 Toren\./,
-  );
+  assert.equal(b.tore[2].schuetze, 'Nico (7)');
+  assert.equal(b.tore[2].assist, 'Lars (10)');
+  assert.ok(b.momente.includes('Ausgleich zum 2:2 durch Lars (41:40)'));
+  assert.ok(b.momente.includes('Wende: Führung zum 3:2 durch Nico (42:40)'));
+  assert.ok(b.momente.some((m) => m.startsWith('Doppelschlag von uns')));
+  assert.ok(b.momente.includes('Punkt gerettet nach 2 Toren Rückstand'));
+  assert.equal(b.beste[0].name, 'Nico (7)');
+  assert.ok(b.text.includes('Torfolge'));
+  assert.ok(!/[–—]/.test(b.text));
+  assert.equal(spielberichtPdf(b).subarray(0, 5).toString(), '%PDF-');
 });
 
-test('Spielbericht: Auswärtssieg, Unentschieden und fehlende Ereignisse', () => {
-  const ohne = spielBericht(spiel('1:4'), null);
-  assert.equal(ohne.ohneEreignisse, true);
-  assert.equal(berichtAbsatz(ohne), 'UHC Gast gewinnt auswärts bei UHC Heim mit 4:1.');
-  assert.equal(berichtAbsatz(spielBericht(spiel('2:2'), null)), 'UHC Heim und UHC Gast trennen sich 2:2.');
-
-  const e = entwurf([ohne]);
-  assert.equal(e.resultate, 'Herren NLB\nUHC Heim gegen UHC Gast 1:4');
-  assert.equal(pushText([ohne]), 'UHC Heim gegen UHC Gast 1:4');
-  const lang = pushText(
-    Array.from({ length: 50 }, () => ohne),
-    100,
+test('Spielbericht: Siegtreffer', () => {
+  const b = spielbericht(
+    { datum: '2026-10-03', gegner: 'X', team: null, ort: 'auswaerts' },
+    [tor('eigen', 60, 'a'), tor('gegner', 600), tor('eigen', 900, 'b'), tor('eigen', 3000, 'a')],
+    [],
+    spieler,
   );
-  assert.equal(lang.length, 100);
+  assert.equal(b.ausgang, 'sieg');
+  assert.ok(b.momente.includes('Siegtreffer zum 2:1 durch Lars (15:00)'));
+  assert.equal(b.unter, '3.10.2026, auswärts');
 });

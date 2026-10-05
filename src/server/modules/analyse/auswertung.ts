@@ -36,6 +36,8 @@ export interface Ereignis {
   situation: string | null;
   /** Spieler ids auf dem Feld, mit Komma getrennt (für Plus Minus) */
   auf_feld?: string | null;
+  /** Spielzeit in Sekunden ab Spielbeginn */
+  zeit_sek?: number | null;
 }
 
 /** Überzahl und Unterzahl: Chancen sind die Strafen des anderen Teams, die das Kräfteverhältnis ändern */
