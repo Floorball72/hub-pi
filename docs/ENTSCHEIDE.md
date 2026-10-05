@@ -189,3 +189,12 @@ Grundsatz bei Unklarheit: die einfachere und ressourcenschonendere Variante.
 ### E42 Dreh Wetter Wächter nutzt die zentrale Timeline
 - **Was:** Prüfpunkte 72, 48, 24 und 4 Stunden vorher gegen das Mindestwetter des Drehorts. Ausweichtermine: gleiche Dauer, 7 bis 20 Uhr bei Tageslicht, gutes Wetter, keine Überschneidung mit Einträgen der Timeline (Kalender, swiss unihockey Einsätze, Veranstaltungen, andere Drehs). Ganztägige Kalendereinträge blockieren nicht. Höchstens ein Vorschlag pro Tag.
 - **Warum:** Die Timeline sammelt schon alle Termine, so braucht es keine eigene Abfrage pro Quelle. Der Hub verschiebt nie selbst.
+
+## Jarvis
+
+- Modell: Claude API per `fetch` mit SSE, ohne SDK (RAM). Ein lokales Modell läuft auf dem Pi 3 nicht. Schlüssel `ANTHROPIC_API_KEY` nur in der `.env`.
+- Vollmacht gestuft: `nur_lesen`, `fragen`, `autonom` (Standard), `voll`. Bei `autonom` laufen Lesen und Schreiben direkt, kritische Aktionen (Löschen, Module schalten, Neustart, Update) brauchen Bestätigung. Grund: CLAUDE.md verlangt Bestätigung für Veränderndes, und Inhalte aus Webseiten oder Notizen könnten Anweisungen einschleusen (Prompt Injection). `voll` ist ein bewusster Schalter.
+- Gedächtnis ohne Embeddings: Wortsuche mit Ranking, die wichtigsten Erinnerungen stehen im Profil des Prompts, nächtliche Rückschau um 03:20 mit dem schnellen Modell. Spart RAM und externe Dienste.
+- Webzugriff nur https, DNS Auflösung, private Netze gesperrt (SSRF Schutz), Tabellen `einstellungen` und `puffer` sind für Jarvis gesperrt.
+- Sprache: Web Speech API im Browser (Weckwort «Hey Jarvis», Vorlesen). Läuft nur bei offener Seite und HTTPS. Es gibt keinen Dauerbetrieb im Hintergrund.
+- Tageslimit in Tokens (Standard 600000) begrenzt die Kosten.

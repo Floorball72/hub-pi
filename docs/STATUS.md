@@ -133,3 +133,7 @@ Vorgaben deines Rettungsdienstes prüfen (Code: `src/server/geteilt/toolbox.ts`,
 
 - `node:sqlite` ist in Node noch experimentell markiert (funktioniert, Warnung unterdrückt)
 - Der Button «Deploy (Git Pull)» funktioniert nur, wenn `/opt/pihub/quelle` ein Git Clone mit Lesezugriff auf das Repository ist (Deploy Key). Sonst `npm run deploy` vom Laptop.
+
+## Jarvis
+
+Backend (Agent, Gedächtnis, 20 Werkzeuge, Vollmacht, Streaming) und Oberfläche (HUD, Chat, Gedächtnis, Einstellungen, Sprache) sind gebaut. Zum Starten `ANTHROPIC_API_KEY` in die `.env` eintragen, ohne Schlüssel läuft nur der Demo Modus. Offen: proaktive Pushes, Websuche als Werkzeug.
