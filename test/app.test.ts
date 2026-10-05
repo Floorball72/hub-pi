@@ -147,4 +147,16 @@ describe('Tagesrückblick', () => {
     assert.ok(regel);
     assert.equal(regel.nachts, false);
   });
+
+  it('Wochenrückblick mit eigenen Titeln und Regel', async () => {
+    const r = (await anfrage('GET', '/api/abendbericht?zeitraum=woche')).json();
+    const titel = r.teile.map((t: { titel: string }) => t.titel);
+    assert.ok(titel.includes('Nächste Woche'), titel.join());
+    assert.ok(titel.includes('Helikopter diese Woche'), titel.join());
+    const regel = (await anfrage('GET', '/api/alarm/regeln'))
+      .json()
+      .find((x: { id: string }) => x.id === 'zentrale.wochenrueckblick');
+    assert.ok(regel);
+    assert.equal(regel.nachts, false);
+  });
 });

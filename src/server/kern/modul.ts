@@ -10,6 +10,7 @@ import type { Einstellungen } from './einstellungen.ts';
 import type { MetrikDef, MetrikRegistry } from './metriken.ts';
 import type { Abrufplaner } from './planer.ts';
 import type { Scheduler } from './scheduler.ts';
+import type { Rueckblick } from './zeit.ts';
 
 export interface JobDef {
   id: string;
@@ -43,7 +44,7 @@ export interface Kontext {
     modulNeuLaden: (id: string) => Promise<boolean>;
     metriken: MetrikRegistry;
     timeline: (von: Date, bis: Date) => Promise<TimelineEintrag[]>;
-    abendbericht: () => Promise<BriefingTeil[]>;
+    abendbericht: (zeitraum?: Rueckblick) => Promise<BriefingTeil[]>;
   };
   /** Meldet eine Zahl an die Auffälligkeiten Erkennung. Gibt eine Funktion zum Erfassen zurück. */
   metrik: (def: MetrikDef) => (wert: number | null | undefined) => Promise<void>;
@@ -59,8 +60,8 @@ export interface ModulLaufzeit {
   suche?: (q: string) => Promise<SuchTreffer[]>;
   timeline?: (von: Date, bis: Date) => Promise<TimelineEintrag[]>;
   briefing?: () => Promise<BriefingTeil | null>;
-  /** Teil des Tagesrückblicks am Abend */
-  abendbericht?: () => Promise<BriefingTeil | null>;
+  /** Teil des Tages oder Wochenrückblicks am Abend */
+  abendbericht?: (zeitraum: Rueckblick) => Promise<BriefingTeil | null>;
 }
 
 export interface ModulDef {

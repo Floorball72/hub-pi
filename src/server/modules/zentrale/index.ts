@@ -2,7 +2,7 @@
 import { tabelle } from '../../daten/schema.ts';
 import type { ModulDef } from '../../kern/modul.ts';
 import { stromText, systemStatus } from '../../kern/system.ts';
-import { lokal, lokalZeit, tagesBeginn, vonLokal } from '../../kern/zeit.ts';
+import { lokal, lokalZeit, type Rueckblick, tageZurueck } from '../../kern/zeit.ts';
 import type { Ampel, BriefingTeil, Kachel } from '../../geteilt/typen.ts';
 
 export const NOTIZEN = tabelle({
@@ -69,27 +69,57 @@ export const zentrale: ModulDef = {
       prioritaet: 2,
       cooldownMin: 600,
     },
+    {
+      id: 'wochenrueckblick',
+      name: 'Wochenrückblick am Sonntag',
+      beschreibung:
+        'Sonntags um 20 Uhr statt des Tagesrückblicks: Heli Woche, Ausfälle der Kundenseiten, die nächsten sieben Tage',
+      prioritaet: 2,
+      cooldownMin: 3 * 24 * 60,
+    },
   ],
   erstellen(ctx) {
-    // Teil der Zentrale im Tagesrückblick: was morgen ansteht
-    async function abendbericht(): Promise<BriefingTeil> {
-      const heute = lokal(ctx.jetzt());
-      const morgen = tagesBeginn(vonLokal(heute.jahr, heute.monat, heute.tag + 1, 12));
-      const danach = tagesBeginn(vonLokal(heute.jahr, heute.monat, heute.tag + 2, 12));
+    // Teil der Zentrale im Rückblick: was morgen oder in den nächsten sieben Tagen ansteht
+    async function abendbericht(zeitraum: Rueckblick): Promise<BriefingTeil> {
+      const woche = zeitraum === 'woche';
+      const morgen = tageZurueck(ctx.jetzt(), -1);
+      const danach = tageZurueck(ctx.jetzt(), woche ? -8 : -2);
       const termine = (await ctx.kern.timeline(morgen, danach)).filter(
         (t) => new Date(t.start) >= morgen && new Date(t.start) < danach,
       );
+      const TAGE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+      const wann = (t: { start: string; ganztags?: boolean }) => {
+        const zeit = t.ganztags ? 'ganztags' : lokalZeit(new Date(t.start));
+        return woche ? `${TAGE[lokal(new Date(t.start)).wochentag]} ${zeit}` : zeit;
+      };
       return {
         modul: 'zentrale',
-        titel: 'Morgen',
+        titel: woche ? 'Nächste Woche' : 'Morgen',
         zeilen: termine.length
-          ? termine
-              .slice(0, 6)
-              .map((t) => ({ text: t.titel, wert: t.ganztags ? 'ganztags' : lokalZeit(new Date(t.start)) }))
+          ? termine.slice(0, woche ? 8 : 6).map((t) => ({ text: t.titel, wert: wann(t) }))
           : [{ text: 'Keine Termine', wert: '' }],
         status: 'neutral',
         reihenfolge: 90,
       };
+    }
+
+    async function rueckblickSenden(zeitraum: Rueckblick) {
+      const woche = zeitraum === 'woche';
+      const teile = await ctx.kern.abendbericht(zeitraum);
+      const text = teile
+        .map(
+          (t) => `${t.titel}: ${t.zeilen.map((z) => (z.wert ? `${z.text} (${z.wert})` : z.text)).join(', ')}`,
+        )
+        .join('\n')
+        .slice(0, 900);
+      const e = await ctx.alarm.melden({
+        regel: woche ? 'zentrale.wochenrueckblick' : 'zentrale.tagesrueckblick',
+        titel: woche ? 'Pi Hub: Wochenrückblick' : 'Pi Hub: Tagesrückblick',
+        text: text || (woche ? 'Nichts Besonderes diese Woche' : 'Nichts Besonderes heute'),
+        schluessel: woche ? 'wochenrueckblick' : 'tagesrueckblick',
+        tags: [woche ? 'calendar' : 'crescent_moon'],
+      });
+      return { grund: e.grund, meldung: `${woche ? 'Woche' : 'Tag'}, ${teile.length} Teile, ${e.status}` };
     }
 
     return {
@@ -97,25 +127,15 @@ export const zentrale: ModulDef = {
       jobs: [
         {
           id: 'tagesrueckblick',
-          name: 'Tagesrückblick senden',
+          name: 'Tages oder Wochenrückblick senden',
           taeglich: '20:00',
           lauf: async () => {
-            const teile = await ctx.kern.abendbericht();
-            const text = teile
-              .map(
-                (t) =>
-                  `${t.titel}: ${t.zeilen.map((z) => (z.wert ? `${z.text} (${z.wert})` : z.text)).join(', ')}`,
-              )
-              .join('\n')
-              .slice(0, 900);
-            const e = await ctx.alarm.melden({
-              regel: 'zentrale.tagesrueckblick',
-              titel: 'Pi Hub: Tagesrückblick',
-              text: text || 'Nichts Besonderes heute',
-              schluessel: 'tagesrueckblick',
-              tags: ['crescent_moon'],
-            });
-            return `${teile.length} Teile, ${e.status}`;
+            // Sonntags der Wochenrückblick, ausser seine Regel ist ausgeschaltet
+            if (lokal(ctx.jetzt()).wochentag === 0) {
+              const w = await rueckblickSenden('woche');
+              if (w.grund !== 'Regel ausgeschaltet') return w.meldung;
+            }
+            return (await rueckblickSenden('tag')).meldung;
           },
         },
         {

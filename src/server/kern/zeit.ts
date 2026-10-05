@@ -95,3 +95,16 @@ export function tagesBeginn(d: Date): Date {
   const l = lokal(d);
   return vonLokal(l.jahr, l.monat, l.tag);
 }
+
+/** Beginn des lokalen Tages, der n Tage vor d liegt (n = 0 ist heute) */
+export function tageZurueck(d: Date, n: number): Date {
+  const l = lokal(d);
+  return tagesBeginn(vonLokal(l.jahr, l.monat, l.tag - n, 12));
+}
+
+export type Rueckblick = 'tag' | 'woche';
+
+/** Beginn des Rückblicks: heute ab Mitternacht oder die letzten sieben Tage inklusive heute */
+export function rueckblickBeginn(d: Date, zeitraum: Rueckblick): Date {
+  return zeitraum === 'woche' ? tageZurueck(d, 6) : tagesBeginn(d);
+}

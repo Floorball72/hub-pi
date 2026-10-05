@@ -325,3 +325,14 @@ describe('ntfy Links', () => {
     assert.equal(klickAdresse(k, undefined), undefined);
   });
 });
+
+describe('Rückblick Zeitraum', () => {
+  it('Woche beginnt sechs Tage vorher um Mitternacht', async () => {
+    const { rueckblickBeginn, lokal } = await import('../src/server/kern/zeit.ts');
+    const jetzt = new Date('2026-10-04T18:30:00Z'); // Sonntag 20:30 in Zürich
+    const w = lokal(rueckblickBeginn(jetzt, 'woche'));
+    assert.deepEqual([w.monat, w.tag, w.stunde, w.minute, w.wochentag], [9, 28, 0, 0, 1]);
+    const t = lokal(rueckblickBeginn(jetzt, 'tag'));
+    assert.deepEqual([t.tag, t.stunde], [4, 0]);
+  });
+});

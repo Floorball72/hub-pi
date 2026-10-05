@@ -4,7 +4,7 @@ import { EingabeFehler } from '../../daten/schema.ts';
 import { verdichten } from '../../daten/verdichtung.ts';
 import type { Ampel, Kachel, TimelineEintrag } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
-import { lokalDatum, tagesBeginn } from '../../kern/zeit.ts';
+import { lokalDatum, type Rueckblick, rueckblickBeginn } from '../../kern/zeit.ts';
 import { httpAnfrage, httpJson } from '../../quellen/http.ts';
 import {
   monatsDaten,
@@ -812,30 +812,42 @@ function scontLaufzeit(ctx: Kontext) {
     await zusatzRouten(app);
   };
 
-  // Tagesrückblick: Ausfälle seit Mitternacht
-  async function abendbericht() {
+  // Tages oder Wochenrückblick: Ausfälle im Zeitraum mit gesamter Dauer
+  async function abendbericht(zeitraum: Rueckblick) {
     const z = await zustaende();
     const aktiv = z.filter((x) => x.seite.aktiv);
     const unten = aktiv.filter((x) => x.online === false);
     const vorfaelle = await daten.liste<{ seite_id: string; start: string; ende: string | null }>(
       'vorfaelle',
       {
-        filter: { start: { gte: tagesBeginn(ctx.jetzt()).toISOString() } },
-        limit: 50,
+        filter: { start: { gte: rueckblickBeginn(ctx.jetzt(), zeitraum).toISOString() } },
+        limit: 500,
       },
     );
     const name = (id: string) => z.find((x) => x.seite.id === id)?.seite.name ?? 'Seite';
     const proSeite = new Map<string, number>();
-    for (const v of vorfaelle) if (v.ende) proSeite.set(v.seite_id, (proSeite.get(v.seite_id) ?? 0) + 1);
+    const minuten = new Map<string, number>();
+    for (const v of vorfaelle) {
+      if (!v.ende) continue;
+      proSeite.set(v.seite_id, (proSeite.get(v.seite_id) ?? 0) + 1);
+      const min = (new Date(v.ende).getTime() - new Date(v.start).getTime()) / 60000;
+      minuten.set(v.seite_id, (minuten.get(v.seite_id) ?? 0) + min);
+    }
+    const dauer = (min: number) =>
+      min < 90 ? `${Math.max(1, Math.round(min))} min` : `${Math.round(min / 6) / 10} h`;
     const zeilen = [
       ...unten.map((x) => ({ text: `${x.seite.name} ist offline`, status: 'ausfall' as Ampel })),
       ...[...proSeite].map(([id, n]) => ({
         text: `${name(id)} war ${n === 1 ? 'einmal' : `${n} mal`} weg`,
+        wert: dauer(minuten.get(id) ?? 0),
         status: 'warnung' as Ampel,
       })),
     ];
     if (!zeilen.length)
-      zeilen.push({ text: `Alle ${aktiv.length} Seiten den ganzen Tag online`, status: 'ok' });
+      zeilen.push({
+        text: `Alle ${aktiv.length} Seiten ${zeitraum === 'woche' ? 'die ganze Woche' : 'den ganzen Tag'} online`,
+        status: 'ok',
+      });
     return {
       modul: 'scont',
       titel: 'Kundenseiten',

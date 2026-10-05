@@ -258,8 +258,8 @@ export function kernRouten(app: FastifyInstance, hub: Hub) {
     };
   });
 
-  app.get('/api/abendbericht', async () => ({
-    teile: await hub.abendbericht(),
+  app.get<{ Querystring: { zeitraum?: string } }>('/api/abendbericht', async (req) => ({
+    teile: await hub.abendbericht(req.query.zeitraum === 'woche' ? 'woche' : 'tag'),
     zeit: hub.jetzt().toISOString(),
     demo: hub.konfig.demo,
   }));

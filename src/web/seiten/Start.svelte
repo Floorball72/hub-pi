@@ -26,6 +26,8 @@
   let jetzt = $state(new Date());
   // Ab 18 Uhr Rückblick auf den Tag statt Morgenbriefing
   const abend = $derived(jetzt.getHours() >= 18);
+  // Sonntagabend: Rückblick auf die ganze Woche
+  const wochenende = $derived(abend && jetzt.getDay() === 0);
   let fehler = $state(false);
   interface Notiz {
     id: string;
@@ -82,7 +84,7 @@
       .catch(() => (live = null));
     notizenLaden();
     api
-      .get<{ teile: BriefingTeil[] }>(abend ? '/api/abendbericht' : '/api/briefing')
+      .get<{ teile: BriefingTeil[] }>(abend ? `/api/abendbericht${wochenende ? '?zeitraum=woche' : ''}` : '/api/briefing')
       .then((b) => (briefing = b))
       .catch(() => {});
   }
@@ -218,7 +220,7 @@
 
   {#if briefing?.teile.length && !versteckt('abschnitt.briefing')}
     <section class="briefing">
-      <h2><Icon name={abend ? 'mond' : 'sonne'} groesse={18} /> {abend ? 'Tagesrückblick' : 'Briefing'}</h2>
+      <h2><Icon name={abend ? 'mond' : 'sonne'} groesse={18} /> {wochenende ? 'Wochenrückblick' : abend ? 'Tagesrückblick' : 'Briefing'}</h2>
       <div class="briefing-raster">
         {#each briefing.teile as t (t.modul + t.titel)}
           <div class="briefing-teil panel">

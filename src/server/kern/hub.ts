@@ -14,6 +14,7 @@ import type { Kontext, ModulDef, ModulLaufzeit } from './modul.ts';
 import { METRIK_STUNDEN, METRIK_WERTE, MetrikRegistry } from './metriken.ts';
 import { Abrufplaner, type PlanerEinstellung } from './planer.ts';
 import { Scheduler } from './scheduler.ts';
+import type { Rueckblick } from './zeit.ts';
 
 export const KERN_TABELLEN: Tabelle[] = [
   EINSTELLUNGEN_TABELLE,
@@ -126,7 +127,7 @@ export class Hub {
         modulNeuLaden: (id) => this.modulNeuLaden(id),
         metriken: this.metriken,
         timeline: (von, bis) => this.timeline(von, bis),
-        abendbericht: () => this.abendbericht(),
+        abendbericht: (zeitraum) => this.abendbericht(zeitraum),
       },
       metrik: (def) => this.metriken.registrieren({ modul: modulId, ...def }),
       quelle: <P, T>(def: QuellenDef<P, T>) => {
@@ -184,15 +185,15 @@ export class Hub {
     return eintraege.sort((a, b) => a.start.localeCompare(b.start));
   }
 
-  /** Tagesrückblick: Teile aller aktiven Module, sortiert */
-  async abendbericht(): Promise<BriefingTeil[]> {
+  /** Tages oder Wochenrückblick: Teile aller aktiven Module, sortiert */
+  async abendbericht(zeitraum: Rueckblick = 'tag'): Promise<BriefingTeil[]> {
     const teile: BriefingTeil[] = [];
     await Promise.all(
       [...this.module.entries()].map(async ([id, m]) => {
         if (!m.laufzeit.abendbericht || !this.modulAktiv(id)) return;
         try {
           const t = await Promise.race([
-            m.laufzeit.abendbericht(),
+            m.laufzeit.abendbericht(zeitraum),
             new Promise<null>((_, r) => setTimeout(() => r(new Error('Zeitüberschreitung')), 8000).unref()),
           ]);
           if (t) teile.push(t);

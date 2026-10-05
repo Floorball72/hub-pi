@@ -10,7 +10,7 @@ import type {
   SuchTreffer,
 } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
-import { tagesBeginn } from '../../kern/zeit.ts';
+import { lokal, type Rueckblick, rueckblickBeginn } from '../../kern/zeit.ts';
 import { GEOADMIN_NAMENSNENNUNG, WMS, WMTS } from '../../quellen/geoadmin.ts';
 import { distanzKm, richtungText } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
@@ -1746,10 +1746,11 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
   }
 
   // Tagesrückblick: Einsätze seit Mitternacht, aus den Flügen zusammengesetzt
-  async function abendbericht() {
+  async function abendbericht(zeitraum: Rueckblick) {
     await demoVorbereiten();
+    const woche = zeitraum === 'woche';
     const fluege = await daten.liste<ChronikFlug>('heli_fluege', {
-      filter: { start: { gte: tagesBeginn(ctx.jetzt()).toISOString() } },
+      filter: { start: { gte: rueckblickBeginn(ctx.jetzt(), zeitraum).toISOString() } },
       sortierung: '-start',
       limit: 500,
     });
@@ -1763,6 +1764,29 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
     }
     const flugMin = rega.reduce((s, e) => s + e.flugMin, 0);
     const ARTEN = { einsatzort: 'Einsatzort', verlegung: 'Verlegung', spital: 'Spitalflug', unklar: 'Flug' };
+    // Woche: die häufigsten Einsatzorte und der strengste Tag statt einzelner Flüge
+    const TAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+    const zaehlen = (werte: string[]) => {
+      const m = new Map<string, number>();
+      for (const w of werte) m.set(w, (m.get(w) ?? 0) + 1);
+      return [...m].sort((a, b) => b[1] - a[1]);
+    };
+    const orte = zaehlen(rega.flatMap((e) => (e.einsatzort ? [e.einsatzort.name] : []))).slice(0, 3);
+    const strengster = zaehlen(rega.map((e) => TAGE[lokal(new Date(e.start)).wochentag]))[0];
+    const einzelne = woche
+      ? [
+          ...(strengster && strengster[1] > 1
+            ? [{ text: `Strengster Tag: ${strengster[0]}`, wert: `${strengster[1]} Einsätze` }]
+            : []),
+          ...orte.map(([o, n]) => ({ text: `Einsatzort ${o}`, wert: n > 1 ? `${n} mal` : '' })),
+        ]
+      : rega
+          .slice(0, 4)
+          .reverse()
+          .map((e) => ({
+            text: `${e.kennzeichen ?? e.hex} ${ARTEN[e.art]}${e.einsatzort ? ` ${e.einsatzort.name}` : e.spitaeler.length ? ` ${e.spitaeler.join(', ')}` : ''}`,
+            wert: UHRZEIT(e.start),
+          }));
     const zeilen = [
       {
         text: rega.length
@@ -1770,18 +1794,12 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
           : 'Rega: keine Einsätze erfasst',
         wert: '',
       },
-      ...rega
-        .slice(0, 4)
-        .reverse()
-        .map((e) => ({
-          text: `${e.kennzeichen ?? e.hex} ${ARTEN[e.art]}${e.einsatzort ? ` ${e.einsatzort.name}` : e.spitaeler.length ? ` ${e.spitaeler.join(', ')}` : ''}`,
-          wert: UHRZEIT(e.start),
-        })),
+      ...einzelne,
       ...[...andere].map(([o, n]) => ({ text: `${o}: ${n} ${n === 1 ? 'Einsatz' : 'Einsätze'}`, wert: '' })),
     ];
     return {
       modul: 'rettung',
-      titel: 'Helikopter heute',
+      titel: woche ? 'Helikopter diese Woche' : 'Helikopter heute',
       zeilen,
       status: 'neutral' as Ampel,
       reihenfolge: 40,
