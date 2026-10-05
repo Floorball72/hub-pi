@@ -20,6 +20,7 @@ export const MODUL_TABS: Record<string, string[]> = {
   abhaengigkeiten: ['Funde', 'Projekte'],
   abrufe: ['Quellen'],
   analyse: ['Erfassen', 'Auswertung', 'Spieler', 'Spiele'],
+  smarthome: ['Geräte', 'Zeitpläne', 'Szenen', 'Einrichten'],
   aenderungen: ['Änderungen', 'Seiten'],
   auffaelligkeiten: ['Messwerte'],
   content: ['Kalender', 'Checklisten', 'Alle Beiträge'],

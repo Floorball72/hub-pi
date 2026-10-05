@@ -36,6 +36,7 @@
     drohne: () => import('./module/Drohne.svelte'),
     unihockey: () => import('./module/Unihockey.svelte'),
     analyse: () => import('./module/Analyse.svelte'),
+    smarthome: () => import('./module/SmartHome.svelte'),
     swissunihockey: () => import('./module/SwissUnihockey.svelte'),
     events: () => import('./module/Events.svelte'),
     content: () => import('./module/Content.svelte'),
