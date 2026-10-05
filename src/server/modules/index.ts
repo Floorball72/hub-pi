@@ -4,6 +4,7 @@ import { analyse } from './analyse/index.ts';
 import { smarthome } from './smarthome/index.ts';
 import { aufgaben } from './aufgaben/index.ts';
 import { finanzen } from './finanzen/index.ts';
+import { inventar } from './inventar/index.ts';
 import { auffaelligkeiten } from './auffaelligkeiten/index.ts';
 import { abrufe } from './abrufe/index.ts';
 import { abhaengigkeiten } from './abhaengigkeiten/index.ts';
@@ -53,5 +54,6 @@ export const MODULE: ModulDef[] = [
   smarthome,
   aufgaben,
   finanzen,
+  inventar,
   mobilitaet,
 ];

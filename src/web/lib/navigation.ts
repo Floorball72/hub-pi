@@ -19,7 +19,7 @@ const GRUPPEN: { id: string; name: string; module: string[] }[] = [
   {
     id: 'alltag',
     name: 'Alltag',
-    module: ['aufgaben', 'finanzen', 'smarthome', 'wetter', 'mobilitaet', 'parken'],
+    module: ['aufgaben', 'finanzen', 'inventar', 'smarthome', 'wetter', 'mobilitaet', 'parken'],
   },
   { id: 'sport', name: 'Sport', module: ['swissunihockey', 'unihockey', 'analyse', 'teams'] },
   { id: 'drohne', name: 'Drohne', module: ['drohne'] },

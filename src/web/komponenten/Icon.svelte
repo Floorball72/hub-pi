@@ -10,6 +10,7 @@
     unihockey: 'M5 3l9 13a3 3 0 0 0 4 1l2-1M17 7a2 2 0 1 0 0 .01',
     aufgaben: 'M9 5h11M9 12h11M9 19h11M3.5 5l1.5 1.5L7.5 4M3.5 12l1.5 1.5 2.5-2.5M4 19h2',
     finanzen: 'M3 7h18v12H3zM3 11h18M7 15h3M16 4H6',
+    inventar: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8',
     smarthome: 'M3 11l9-7 9 7M5 10v10h14V10M10 20v-5h4v5',
     analyse: 'M4 4h16v16H4zM12 4v16M8 12a1 1 0 1 0 0 .01M15 8l2 2M17 8l-2 2M15 15l2 2M17 15l-2 2',
     swissunihockey: 'M4 5h16v14H4zM8 3v4M16 3v4M4 10h16M8 14l2 2 4-4',

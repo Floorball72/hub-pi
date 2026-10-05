@@ -39,6 +39,7 @@
     smarthome: () => import('./module/SmartHome.svelte'),
     aufgaben: () => import('./module/Aufgaben.svelte'),
     finanzen: () => import('./module/Finanzen.svelte'),
+    inventar: () => import('./module/Inventar.svelte'),
     swissunihockey: () => import('./module/SwissUnihockey.svelte'),
     events: () => import('./module/Events.svelte'),
     content: () => import('./module/Content.svelte'),
