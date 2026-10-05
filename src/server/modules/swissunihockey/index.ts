@@ -9,7 +9,9 @@ import type { Kontext, ModulDef } from '../../kern/modul.ts';
 import { lokal, lokalDatum } from '../../kern/zeit.ts';
 import { httpText } from '../../quellen/http.ts';
 import { icalParsen, type Termin } from '../../quellen/ical.ts';
-import { type Spiel, SUH_NAMENSNENNUNG, suhV2 } from '../../quellen/swissunihockey.ts';
+import { type Spiel, type SpielEreignisse, SUH_NAMENSNENNUNG, suhV2 } from '../../quellen/swissunihockey.ts';
+import { demoSpielEreignisse } from '../unihockey/demo.ts';
+import { entwurf, pushText, type SpielBericht, spielBericht } from './bericht.ts';
 import { demoSpieleAmTag, demoTermine } from './demo.ts';
 import { ablaufParsen, type Einsatz, einsatzAusTermin, schritteFuer } from './einsatz.ts';
 
@@ -73,7 +75,8 @@ export const swissunihockey: ModulDef = {
     {
       id: 'spielende',
       name: 'Spielende erreicht',
-      beschreibung: 'Die Spiele eines Einsatztages sind beendet (oder geschätzt zwei Stunden nach Termin).',
+      beschreibung:
+        'Die Spiele eines Einsatztages sind beendet (oder geschätzt zwei Stunden nach Termin). Mit Resultaten und Torschützen.',
       prioritaet: 4,
       cooldownMin: 180,
     },
@@ -113,6 +116,18 @@ function suhLaufzeit(ctx: Kontext) {
     demo: (datum) => demoSpieleAmTag(datum, ctx.jetzt()),
     namensnennung: SUH_NAMENSNENNUNG,
     testParameter: () => lokalDatum(new Date()),
+  });
+  const ereignisse = ctx.quelle<
+    { id: string; heim: string; gast: string; resultat: string | null },
+    SpielEreignisse
+  >({
+    id: 'swissunihockey.ereignisse',
+    name: 'swiss unihockey Spielereignisse',
+    modul: 'swissunihockey',
+    ttlSek: 6 * 3600,
+    abruf: (p) => suhV2.spielEreignisse(p.id),
+    demo: (p) => demoSpielEreignisse(p.id, p.heim, p.gast, p.resultat),
+    namensnennung: SUH_NAMENSNENNUNG,
   });
 
   async function vorlageLaden(ersetzen: boolean): Promise<number> {
@@ -166,6 +181,24 @@ function suhLaufzeit(ctx: Kontext) {
     );
   }
 
+  /** Beendete Spiele eines Einsatzes mit Torfolge und Skorern. Ohne passende Liga alle beendeten Spiele des Tages. */
+  async function berichte(
+    e: Einsatz,
+    spiele?: Spiel[],
+  ): Promise<{ berichte: SpielBericht[]; ligen: string[] }> {
+    const sp = spiele ?? (await spieleTag.hole(lokalDatum(new Date(e.start)))).daten ?? [];
+    const ligen = ligenImText(e, sp);
+    const relevant = ligen.length ? sp.filter((s) => s.liga && ligen.includes(s.liga)) : sp;
+    const fertig = relevant.filter((s) => s.beendet && s.id).slice(0, 8);
+    const liste = await Promise.all(
+      fertig.map(async (s) => {
+        const r = await ereignisse.hole({ id: s.id, heim: s.heim, gast: s.gast, resultat: s.resultat });
+        return spielBericht(s, r.daten ?? null);
+      }),
+    );
+    return { berichte: liste, ligen };
+  }
+
   async function routen(app: FastifyInstance) {
     app.get('/einsaetze', async () => {
       const e = await einsaetze(-2, 90);
@@ -204,6 +237,13 @@ function suhLaufzeit(ctx: Kontext) {
         spieleFehler: sp.fehler,
         ligen,
       };
+    });
+
+    app.get<{ Querystring: { schluessel: string } }>('/einsatz/bericht', async (req) => {
+      const e = (await einsaetze(-30, 120)).liste.find((x) => x.schluessel === req.query.schluessel);
+      if (!e) throw new EingabeFehler('Einsatz nicht gefunden');
+      const b = await berichte(e);
+      return { ...b, entwurf: b.berichte.length ? entwurf(b.berichte) : null };
     });
 
     app.get<{ Querystring: { datum?: string } }>('/tag', async (req) => {
@@ -313,14 +353,29 @@ function suhLaufzeit(ctx: Kontext) {
             : jetzt >= new Date(e.start).getTime() + 2 * 3600000;
           if (!fertig) continue;
           gemeldet.add(e.schluessel);
+          const b = relevant.length ? (await berichte(e, relevant)).berichte : [];
+          const postzeit = e.postzeit
+            ? new Date(e.postzeit).toLocaleTimeString('de-CH', {
+                timeZone: 'Europe/Zurich',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : 'offen';
           await ctx.alarm.melden({
             regel: 'swissunihockey.spielende',
             titel: `Spielende: ${e.typ ?? 'Einsatz'}`,
             text: relevant.length
-              ? `Alle Spiele (${ligen.join(', ')}) sind beendet. Geschätzte Postzeit ${e.postzeit ? new Date(e.postzeit).toLocaleTimeString('de-CH', { timeZone: 'Europe/Zurich', hour: '2-digit', minute: '2-digit' }) : 'offen'}.`
+              ? `${
+                  b.length
+                    ? `${pushText(b)}
+
+`
+                    : ''
+                }Alle Spiele (${ligen.join(', ')}) sind beendet. Geschätzte Postzeit ${postzeit}. Entwurf im Hub.`
               : 'Geschätztes Spielende erreicht (Termin plus zwei Stunden).',
             schluessel: `suhende:${e.schluessel}`,
             tags: ['memo'],
+            link: `/modul/swissunihockey?einsatz=${encodeURIComponent(e.schluessel)}`,
           });
         }
         return undefined;

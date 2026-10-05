@@ -26,7 +26,12 @@
   interface Spiel { id: string; zeitText: string; heim: string; gast: string; resultat: string | null; status: string | null; beendet: boolean; liga: string | null }
   interface Detail { einsatz: Einsatz; schritte: { id: string; abschnitt: string; text: string }[]; erledigt: string[]; notizen: string; spiele: Spiel[]; spieleFehler?: string; ligen: string[] }
 
+  interface Tor { zeit: string; seite: 'heim' | 'gast'; stand: string; spieler: string | null; assist: string | null }
+  interface SpielBericht { id: string; liga: string | null; heim: string; gast: string; resultat: string | null; zusatz: string | null; tore: Tor[]; ohneEreignisse: boolean }
+  interface Bericht { berichte: SpielBericht[]; entwurf: { resultate: string; bericht: string } | null }
+
   let tab = $state('Einsätze');
+  let bericht = $state<Bericht | null>(null);
   let liste = $state<{ einsaetze: Einsatz[]; fehler?: string; demo: boolean; konfiguriert: boolean; loginHinterlegt: boolean; vorlageAnzahl: number } | null>(null);
   let detail = $state<Detail | null>(null);
   let notizen = $state('');
@@ -38,6 +43,17 @@
   async function detailLaden(s: string) {
     detail = await api.get<Detail>(`/api/m/swissunihockey/einsatz?schluessel=${encodeURIComponent(s)}`);
     notizen = detail.notizen;
+    bericht = null;
+    if (detail.spiele.some((x) => x.beendet))
+      bericht = await api.get<Bericht>(`/api/m/swissunihockey/einsatz/bericht?schluessel=${encodeURIComponent(s)}`);
+  }
+  async function kopieren(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      melden('Kopiert');
+    } catch {
+      melden('Kopieren nicht möglich, Text bitte von Hand markieren', 'info');
+    }
   }
   $effect(() => {
     laden();
@@ -133,6 +149,44 @@
           <p class="sehr-klein gedaempft">Daten: swiss unihockey. Live Stand wird alle 2 Minuten aktualisiert.</p>
         </section>
       </div>
+
+      {#if bericht?.berichte.length}
+        <section class="panel stapel" style="margin-top:12px">
+          <h2>Nach dem Spiel</h2>
+          <p class="sehr-klein gedaempft">Torfolge und Entwurf aus den öffentlichen Spieldaten von swiss unihockey. Nur ein Vorschlag zum Kopieren, vor dem Verwenden prüfen. Der Hub postet nichts.</p>
+          {#each bericht.berichte as b (b.id)}
+            <details class="spielbericht">
+              <summary><span class="sehr-klein gedaempft">{b.liga}</span> <span class="wachsen">{b.heim} : {b.gast}</span> <strong class="zahl">{b.resultat}</strong>{#if b.zusatz}<span class="sehr-klein gedaempft">{' '}{b.zusatz}</span>{/if}</summary>
+              {#if b.ohneEreignisse}
+                <p class="sehr-klein gedaempft">Keine Torschützen verfügbar.</p>
+              {:else}
+                <ul class="liste">
+                  {#each b.tore as t, i (i)}
+                    <li class="zeile klein" class:gast={t.seite === 'gast'}>
+                      <span class="zahl sehr-klein gedaempft torzeit">{t.zeit}</span>
+                      <strong class="zahl">{t.stand}</strong>
+                      <span class="wachsen">{t.spieler ?? 'unbekannt'}{#if t.assist}<span class="gedaempft">{' '}({t.assist})</span>{/if}</span>
+                      <span class="sehr-klein gedaempft">{t.seite === 'heim' ? b.heim : b.gast}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </details>
+          {/each}
+          {#if bericht.entwurf}
+            <div class="raster-2">
+              <div>
+                <div class="zeile"><h3 class="wachsen">Resultate</h3><button class="klein leise" onclick={() => kopieren(bericht?.entwurf?.resultate ?? '')}>Kopieren</button></div>
+                <textarea readonly rows="6" value={bericht.entwurf.resultate}></textarea>
+              </div>
+              <div>
+                <div class="zeile"><h3 class="wachsen">Entwurf Matchbericht</h3><button class="klein leise" onclick={() => kopieren(bericht?.entwurf?.bericht ?? '')}>Kopieren</button></div>
+                <textarea readonly rows="6" value={bericht.entwurf.bericht}></textarea>
+              </div>
+            </div>
+          {/if}
+        </section>
+      {/if}
     {:else if liste}
       {#if liste.fehler}<div class="hinweis ausfall">{liste.fehler}</div>{/if}
       {#if !liste.konfiguriert}<div class="hinweis warnung">iCal Adresse fehlt. In der Einrichtung unter «Kalender» eintragen.</div>{/if}
@@ -164,6 +218,20 @@
 </ModulRahmen>
 
 <style>
+  .spielbericht summary {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    cursor: pointer;
+    padding: 6px 0;
+  }
+  .torzeit {
+    width: 44px;
+    flex: none;
+  }
+  .gast {
+    opacity: 0.85;
+  }
   .einsaetze {
     display: grid;
     gap: 12px;

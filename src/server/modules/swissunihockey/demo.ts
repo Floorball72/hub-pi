@@ -22,7 +22,17 @@ export function demoTermine(jetzt: Date): Termin[] {
     ende: new Date(new Date(start).getTime() + std * 3600000).toISOString(),
     ganztags: false,
   });
+  const gestern = lokalDatum(new Date(jetzt.getTime() - 86400000))
+    .split('-')
+    .map(Number);
   return [
+    t(
+      vonLokal(gestern[0], gestern[1], gestern[2], 14).toISOString(),
+      2,
+      'swiss unihockey | Matchbericht | fix',
+      'Herren NLB',
+      'gestern',
+    ),
     t(
       naechsterWochentag(jetzt, 6, 16),
       2,
