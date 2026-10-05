@@ -29,12 +29,14 @@ import {
   type AdsbFlugzeug,
   ADSB_NAMENSNENNUNG,
   adsbHolen,
+  adsbHexHolen,
   adsbTypHolen,
   type Flug,
   FlugErkennung,
   flugStatistik,
   type HeliPosition,
   heliFiltern,
+  positionenAuffrischen,
   platzBei,
   heatRaster,
   type FlugEnde,
@@ -195,6 +197,9 @@ function rettungLaufzeit(ctx: Kontext) {
   let positionen: HeliPosition[] = [];
   let positionenStand: string | null = null;
   let positionenFehler: string | undefined;
+  /** Schnelle Live Abfrage: Helis in der Luft, die gerade abgefragt werden, und feine Spur der letzten Minuten */
+  let liveHexe: string[] = [];
+  const feineSpur = new Map<string, [number, number, number][]>();
   const bekannteAlerts = new Set<string>();
   const bekannteBeben = new Set<string>();
   const ersterLauf = { alerts: true, beben: true };
@@ -223,6 +228,22 @@ function rettungLaufzeit(ctx: Kontext) {
     demo: () => [],
     namensnennung: ADSB_NAMENSNENNUNG,
     beschreibung: `Typen ${konfig.heliTypen.join(', ')}, gefiltert auf die Kennzeichen Liste und die Schweiz.`,
+  });
+  // Nur solange die Live Karte offen ist: wenige Helis per ICAO Adresse, alle paar Sekunden
+  const adsbLive = ctx.quelle<void, AdsbFlugzeug[]>({
+    id: 'rettung.adsb.live',
+    name: 'ADS-B Live Karte (adsb.lol)',
+    modul: 'rettung',
+    ttlSek: 4,
+    minSek: 4,
+    maxSek: 10,
+    tagesBudget: 6000,
+    abruf: () => adsbHexHolen(liveHexe),
+    demo: () => [],
+    nurMitEintrag: true,
+    namensnennung: ADSB_NAMENSNENNUNG,
+    beschreibung:
+      'Nur bei offener Live Karte und nur für Helis aus der Kennzeichen Liste, die in der Luft sind.',
   });
   const fotoWebcams = ctx.quelle<void, (Webcam & { km: number })[]>({
     id: 'rettung.webcams.fotowebcam',
@@ -448,6 +469,29 @@ function rettungLaufzeit(ctx: Kontext) {
     minDauerMin: 20,
   });
 
+  /** Positionen der fliegenden Helis auffrischen, höchstens alle 4 Sekunden (Cache der Quelle) */
+  async function liveAuffrischen() {
+    if (konfig.demo) return;
+    liveHexe = positionen
+      .filter((p) => p.organisation && !p.amBoden)
+      .map((p) => p.hex)
+      .slice(0, 20);
+    if (!liveHexe.length) return;
+    const r = await adsbLive.hole(undefined);
+    if (!r.daten?.length) return;
+    const jetzt = ctx.jetzt().getTime();
+    positionen = positionenAuffrischen(positionen, r.daten, jetzt);
+    for (const p of positionen) {
+      if (!liveHexe.includes(p.hex)) continue;
+      const s = feineSpur.get(p.hex) ?? [];
+      if (s.at(-1)?.[2] !== p.zeit) s.push([p.lat, p.lon, p.zeit]);
+      // Nur die letzten zehn Minuten behalten
+      while (s.length && s[0][2] < jetzt - 600000) s.shift();
+      feineSpur.set(p.hex, s);
+    }
+    for (const hex of feineSpur.keys()) if (!positionen.some((p) => p.hex === hex)) feineSpur.delete(hex);
+  }
+
   async function heliRunde() {
     const r = await adsb.hole(undefined, true);
     positionenFehler = r.fehler;
@@ -457,7 +501,25 @@ function rettungLaufzeit(ctx: Kontext) {
     const regional = heliFiltern(r.daten, k, konfig.heliAlle, region, jetzt);
     // Fällt die Abfrage nach Typ aus, läuft die Region allein weiter
     const ch = konfig.heliTypen.length ? await adsbSchweiz.hole(undefined, true) : null;
-    positionen = positionenVereinen(regional, ch?.daten ? schweizFiltern(ch.daten, k, jetzt) : []);
+    // Frischere Fixes aus der Live Abfrage nicht durch ältere aus dem Cache ersetzen
+    const vorher = new Map(positionen.map((p) => [p.hex, p]));
+    positionen = positionenVereinen(regional, ch?.daten ? schweizFiltern(ch.daten, k, jetzt) : []).map(
+      (p) => {
+        const v = vorher.get(p.hex);
+        return v && v.zeit > p.zeit
+          ? {
+              ...p,
+              lat: v.lat,
+              lon: v.lon,
+              hoeheFt: v.hoeheFt,
+              amBoden: v.amBoden,
+              speedKn: v.speedKn,
+              kurs: v.kurs,
+              zeit: v.zeit,
+            }
+          : p;
+      },
+    );
     await helisMetrik(positionen.length);
     positionenStand = r.stand;
     const ereignisse = erkennung.aktualisieren(positionen, jetzt);
@@ -980,9 +1042,25 @@ function rettungLaufzeit(ctx: Kontext) {
       };
     });
 
+    function spurMitFein(
+      grob: [number, number, number][],
+      fein: [number, number, number][],
+    ): [number, number][] {
+      const ab = fein[0]?.[2] ?? Number.POSITIVE_INFINITY;
+      return [...grob.filter((x) => x[2] < ab), ...fein]
+        .slice(-80)
+        .map(([la, lo]) => [la, lo] as [number, number]);
+    }
+
     // Helikopter aus der Kennzeichen Liste, die jetzt erfasst sind (ganze Schweiz)
-    app.get('/live', async () => {
+    app.get<{ Querystring: { schnell?: string } }>('/live', async (req) => {
       if (!positionenStand) await heliRunde().catch(() => undefined);
+      // Offene Live Karte: Positionen der fliegenden Helis frisch holen, aber nie länger als 5 s warten
+      if (req.query.schnell === '1')
+        await Promise.race([
+          liveAuffrischen().catch(() => undefined),
+          new Promise((ok) => setTimeout(ok, 5000)),
+        ]);
       const fluege = new Map(erkennung.laufende().map((f) => [f.hex, f]));
       // Gemeinde höchstens 2 s abwarten, die Abfrage läuft weiter und füllt den Cache
       const ortKurz = (lat: number, lon: number) =>
@@ -1011,8 +1089,8 @@ function rettungLaufzeit(ctx: Kontext) {
               lon: p.lon,
               kurs: p.kurs,
               zeit: p.zeit,
-              // Letzte Punkte des laufenden Flugs für die Spur auf der Karte
-              spur: f ? f.spur.slice(-40).map(([la, lo]) => [la, lo] as [number, number]) : [],
+              // Letzte Punkte des laufenden Flugs, ergänzt um die feinen Punkte der Live Abfrage
+              spur: spurMitFein(f?.spur ?? [], feineSpur.get(p.hex) ?? []),
             };
           }),
       );

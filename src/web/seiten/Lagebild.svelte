@@ -8,7 +8,7 @@
   import { ansicht } from '../lib/ansicht.svelte.ts';
   import { api } from '../lib/api.ts';
   import { relativ } from '../lib/format.ts';
-  import { type AbgestellterHeli, type AnimHeli, abgestelltOrt, abgestelltTitel, HeliAnimation, liveAnim } from '../lib/heliAnimation.ts';
+  import { type AbgestellterHeli, type AnimHeli, abgestelltOrt, abgestelltTitel, HeliAnimation, liveAnim, liveSchleife } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
   import { lesen, schreiben } from '../lib/speicher.ts';
 
@@ -228,9 +228,9 @@
     };
   }
 
-  function liveHolen() {
-    api
-      .get<NonNullable<typeof live>>('/api/m/rettung/live')
+  function liveHolen(schnell: boolean) {
+    return api
+      .get<NonNullable<typeof live>>(`/api/m/rettung/live${schnell ? '?schnell=1' : ''}`)
       .then((l) => {
         live = l;
         startsPruefen(l.helis);
@@ -238,8 +238,10 @@
           anim?.setzen(liveAnim(l.helis));
           anim?.abgestellt(l.abgestellt ?? []);
         }
-      })
-      .catch(() => {});
+        return l.helis.some((h) => !h.amBoden);
+      });
+  }
+  function basenHolen() {
     api
       .get<{ basen: Basis[]; punkte: GeoPunkt[] }>('/api/m/rettung/basen')
       .then((b) => (basen = b))
@@ -271,9 +273,10 @@
   }
 
   $effect(() => {
-    liveHolen();
+    const liveStop = liveSchleife(liveHolen);
+    basenHolen();
     lageHolen();
-    const a = setInterval(liveHolen, 20000);
+    const a = setInterval(basenHolen, 60000);
     const b = setInterval(lageHolen, 120000);
     const c = setInterval(() => (jetzt = new Date()), 1000);
     // Bildschirm wach halten, solange die Seite offen ist (wenn der Browser es kann)
@@ -288,6 +291,7 @@
     wach();
     document.addEventListener('visibilitychange', wach);
     return () => {
+      liveStop();
       clearInterval(a);
       clearInterval(b);
       clearInterval(c);

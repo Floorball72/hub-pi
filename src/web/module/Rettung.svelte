@@ -12,7 +12,7 @@
   import Toolbox from './Toolbox.svelte';
   import { api } from '../lib/api.ts';
   import { datumZeit, relativ } from '../lib/format.ts';
-  import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
+  import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim, liveSchleife } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
 
   interface Lage {
@@ -87,10 +87,12 @@
   });
   $effect(() => {
     if (tab !== 'Lage') return;
-    const holen = () => api.get<Live>('/api/m/rettung/live').then((l) => (live = l)).catch(() => {});
-    holen();
-    const t = setInterval(holen, 20000);
-    return () => clearInterval(t);
+    return liveSchleife((schnell) =>
+      api.get<Live>(`/api/m/rettung/live${schnell ? '?schnell=1' : ''}`).then((l) => {
+        live = l;
+        return l.helis.some((h) => !h.amBoden);
+      }),
+    );
   });
   $effect(() => {
     if (tab !== 'Lage') return;

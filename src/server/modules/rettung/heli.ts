@@ -64,6 +64,44 @@ export async function adsbTypHolen(typen: string[]): Promise<AdsbFlugzeug[]> {
   return d.ac ?? [];
 }
 
+/** Bestimmte Flugzeuge nach ICAO Adresse in einer Abfrage, für die schnelle Live Karte */
+export async function adsbHexHolen(hexe: string[]): Promise<AdsbFlugzeug[]> {
+  if (!hexe.length) return [];
+  const d = await httpJson<{ ac?: AdsbFlugzeug[] }>(
+    `https://api.adsb.lol/v2/hex/${hexe.map(encodeURIComponent).join(',')}`,
+    { timeoutMs: 6000, abstandMs: 3000 },
+  );
+  return d.ac ?? [];
+}
+
+/**
+ * Neuere Fixes aus der schnellen Abfrage auf die bekannten Positionen anwenden. Organisation und
+ * Kennzeichen bleiben aus der normalen Runde, nur Ort, Höhe, Tempo, Kurs und Zeit werden ersetzt.
+ */
+export function positionenAuffrischen(
+  alt: HeliPosition[],
+  neu: AdsbFlugzeug[],
+  jetzt: number,
+): HeliPosition[] {
+  const proHex = new Map(neu.map((a) => [a.hex, a]));
+  return alt.map((p) => {
+    const a = proHex.get(p.hex);
+    if (!a || typeof a.lat !== 'number' || typeof a.lon !== 'number') return p;
+    const f = position(a as AdsbFlugzeug & { lat: number; lon: number }, p.organisation, jetzt);
+    if (f.zeit <= p.zeit) return p;
+    return {
+      ...p,
+      lat: f.lat,
+      lon: f.lon,
+      hoeheFt: f.hoeheFt,
+      amBoden: f.amBoden,
+      speedKn: f.speedKn,
+      kurs: f.kurs,
+      zeit: f.zeit,
+    };
+  });
+}
+
 /** Grober Rahmen um die Schweiz (mit etwas Grenzgebiet) */
 export const SCHWEIZ = { sued: 45.8, nord: 47.85, west: 5.9, ost: 10.55 };
 

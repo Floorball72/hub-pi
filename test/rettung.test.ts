@@ -11,6 +11,7 @@ import {
   heliFiltern,
   inSchweiz,
   platzBei,
+  positionenAuffrischen,
   positionenVereinen,
   heatRaster,
   rueckblickFenster,
@@ -650,5 +651,34 @@ describe('Einsatz Chronik', () => {
     ]);
     assert.equal(r.size, 1);
     assert.deepEqual([...r.values()][0], { zeit: '2026-10-01T12:00:00Z', kennzeichen: 'HB-ZRY' });
+  });
+});
+
+describe('Schnelle Live Abfrage', () => {
+  const alt: HeliPosition = {
+    hex: '4b2d01',
+    kennzeichen: 'HB-ZRY',
+    typ: 'EC45',
+    rufzeichen: null,
+    organisation: 'Rega',
+    lat: 47.4,
+    lon: 9.3,
+    hoeheFt: 2000,
+    amBoden: false,
+    speedKn: 100,
+    kurs: 90,
+    zeit: 1_000_000,
+  };
+  it('übernimmt nur neuere Fixes und behält Organisation und Kennzeichen', () => {
+    const neu: AdsbFlugzeug[] = [
+      { hex: '4b2d01', r: 'FALSCH', lat: 47.41, lon: 9.32, alt_baro: 2100, gs: 110, track: 95, seen_pos: 1 },
+    ];
+    const [p] = positionenAuffrischen([alt], neu, 1_010_000);
+    assert.equal(p.lat, 47.41);
+    assert.equal(p.zeit, 1_009_000);
+    assert.equal(p.kennzeichen, 'HB-ZRY');
+    assert.equal(p.organisation, 'Rega');
+    const [q] = positionenAuffrischen([alt], [{ ...neu[0], seen_pos: 20 }], 1_010_000);
+    assert.equal(q.lat, 47.4);
   });
 });

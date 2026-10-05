@@ -357,3 +357,34 @@ export function abgestelltTitel(h: AbgestellterHeli): string {
         : 'Signal tief verloren';
   return `${h.kennzeichen ?? h.hex}: ${was} ${zeitKurz(h.zeit)}${h.platz ? `, ${abgestelltOrt(h)}` : ''}. Letzter bekannter Standort, kein aktuelles Signal.`;
 }
+
+/**
+ * Takt für die Live Karte: alle 5 s mit schneller Abfrage, solange ein Heli fliegt und die Seite
+ * sichtbar ist, sonst alle 20 s. `holen` bekommt mit, ob schnell abgefragt wird, und meldet zurück,
+ * ob ein Heli in der Luft ist.
+ */
+export function liveSchleife(holen: (schnell: boolean) => Promise<boolean>): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let aus = false;
+  let laeuft = false;
+  let luft = false;
+  const sichtbar = () => document.visibilityState === 'visible';
+  const runde = async () => {
+    if (aus || laeuft) return;
+    laeuft = true;
+    clearTimeout(timer);
+    if (sichtbar()) luft = await holen(luft).catch(() => false);
+    laeuft = false;
+    if (!aus) timer = setTimeout(runde, luft && sichtbar() ? 5000 : 20000);
+  };
+  const wieder = () => {
+    if (sichtbar()) void runde();
+  };
+  document.addEventListener('visibilitychange', wieder);
+  void runde();
+  return () => {
+    aus = true;
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', wieder);
+  };
+}
