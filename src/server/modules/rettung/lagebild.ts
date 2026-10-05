@@ -122,3 +122,71 @@ export function lageEreignisse(e: {
   }
   return aus.sort((a, b) => a.zeit - b.zeit);
 }
+
+export interface NachtFlug {
+  hex: string;
+  organisation: string;
+  kennzeichen: string | null;
+  start: string;
+  von: string | null;
+  nach: string | null;
+}
+
+const UHR = new Intl.DateTimeFormat('de-CH', {
+  timeZone: 'Europe/Zurich',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const anzahl = (n: number, eins: string, viele: string) => `${n} ${n === 1 ? eins : viele}`;
+
+/**
+ * Nachtbericht: Heli Flüge, Alertswiss, Warnungen und Erdbeben seit dem Vorabend.
+ * Zeilen für das Morgenbriefing und ein kurzer Push Text, null wenn nichts los war.
+ */
+export function nachtbericht(
+  fluege: NachtFlug[],
+  ereignisse: LageEreignis[],
+  zeitraum = '',
+): { zeilen: { text: string; wert: string }[]; push: string | null } {
+  const zeilen: { text: string; wert: string }[] = [];
+  const teile: string[] = [];
+  if (fluege.length) {
+    const proOrg = new Map<string, number>();
+    for (const f of fluege) proOrg.set(f.organisation, (proOrg.get(f.organisation) ?? 0) + 1);
+    const orgs = [...proOrg]
+      .sort((a, b) => b[1] - a[1])
+      .map(([o, n]) => `${o} ${n}`)
+      .join(', ');
+    const kopf = `${anzahl(fluege.length, 'Heli Flug', 'Heli Flüge')}`;
+    zeilen.push({ text: `${zeitraum ? `${zeitraum}: ` : ''}${kopf}: ${orgs}`, wert: '' });
+    teile.push(`${kopf} (${orgs})`);
+    for (const f of fluege.slice(-3))
+      zeilen.push({
+        text: `${f.organisation} ${f.kennzeichen ?? f.hex}: ${f.von ?? '?'} nach ${f.nach ?? '?'}`,
+        wert: UHR.format(new Date(f.start)),
+      });
+  }
+  const alerts = ereignisse.filter((e) => e.art === 'alert');
+  for (const a of alerts.slice(-3)) zeilen.push({ text: `Alertswiss: ${a.titel}`, wert: UHR.format(a.zeit) });
+  if (alerts.length)
+    teile.push(
+      alerts.length === 1 ? `Alertswiss: ${alerts[0].titel}` : `${alerts.length} Alertswiss Meldungen`,
+    );
+  const warnungen = ereignisse.filter((e) => e.art === 'warnung');
+  for (const w of warnungen.slice(0, 2)) zeilen.push({ text: `${w.titel}, ${w.text}`, wert: '' });
+  if (warnungen.length) teile.push(anzahl(warnungen.length, 'Unwetterwarnung', 'Unwetterwarnungen'));
+  const beben = ereignisse.filter((e) => e.art === 'erdbeben');
+  for (const b of beben.slice(-3))
+    zeilen.push({ text: `${b.titel}${b.text ? ` ${b.text}` : ''}`, wert: UHR.format(b.zeit) });
+  if (beben.length) {
+    const staerkstes = beben.reduce((a, b) =>
+      Number(b.titel.slice(10)) > Number(a.titel.slice(10)) ? b : a,
+    );
+    teile.push(
+      beben.length === 1
+        ? `${staerkstes.titel} ${staerkstes.text} um ${UHR.format(staerkstes.zeit)}`.trim()
+        : `${beben.length} Erdbeben, stärkstes ${staerkstes.titel.replace('Erdbeben ', '')} ${staerkstes.text}`.trim(),
+    );
+  }
+  return { zeilen, push: teile.length ? `${teile.join('. ')}.` : null };
+}

@@ -10,7 +10,7 @@ import type {
   SuchTreffer,
 } from '../../geteilt/typen.ts';
 import type { Kontext, ModulDef } from '../../kern/modul.ts';
-import { lokal, type Rueckblick, rueckblickBeginn } from '../../kern/zeit.ts';
+import { lokal, lokalDatum, type Rueckblick, rueckblickBeginn } from '../../kern/zeit.ts';
 import { GEOADMIN_NAMENSNENNUNG, WMS, WMTS } from '../../quellen/geoadmin.ts';
 import { distanzKm, richtungText } from '../../quellen/geo.ts';
 import { httpJson } from '../../quellen/http.ts';
@@ -75,7 +75,7 @@ import {
   warnungFuerGebiete,
   type Webcam,
 } from './quellen.ts';
-import { lageEreignisse } from './lagebild.ts';
+import { lageEreignisse, nachtbericht } from './lagebild.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
 import { basisName, endeBasis, heliFarbe, REGA_BASEN, startBasis } from '../../geteilt/heli.ts';
 
@@ -164,6 +164,14 @@ export const rettung: ModulDef = {
       schwelleLabel: 'Magnitude',
       prioritaet: 3,
       cooldownMin: 60,
+    },
+    {
+      id: 'nachtbericht',
+      name: 'Nachtbericht',
+      beschreibung:
+        'Am Morgen um 7 Uhr eine Zusammenfassung der Nacht in der Region: Heli Flüge, Alertswiss, Warnungen und Erdbeben. Nur wenn etwas los war.',
+      prioritaet: 2,
+      cooldownMin: 600,
     },
   ],
   erstellen: (ctx) => rettungLaufzeit(ctx),
@@ -742,6 +750,24 @@ function rettungLaufzeit(ctx: Kontext) {
       },
     },
     {
+      id: 'nachtbericht',
+      name: 'Nachtbericht senden',
+      taeglich: '07:00',
+      lauf: async () => {
+        const n = await nacht();
+        if (!n.push) return 'ruhige Nacht';
+        await ctx.alarm.melden({
+          regel: 'rettung.nachtbericht',
+          titel: 'Nachtbericht Region',
+          text: n.push,
+          schluessel: `nachtbericht-${lokalDatum(ctx.jetzt())}`,
+          tags: ['helicopter'],
+          link: '/lagebild',
+        });
+        return n.push;
+      },
+    },
+    {
       id: 'aufraeumen',
       name: 'Alte Einsatzmeldungen löschen',
       taeglich: '03:45',
@@ -968,33 +994,19 @@ function rettungLaufzeit(ctx: Kontext) {
     // Lagebild: Starts, Landungen, Alertswiss, Warnungen und Erdbeben auf einer Zeitleiste
     app.get<{ Querystring: { stunden?: string } }>('/lagebild/ereignisse', async (req) => {
       const stunden = Math.min(72, Math.max(1, Number(req.query.stunden) || 24));
-      const [w, a, m, e] = await Promise.all([
-        wiedergabeFluege(stunden),
-        alertswiss.hole(),
-        meteoalarm.hole(),
-        sed.hole(),
-      ]);
+      const [w, q] = await Promise.all([wiedergabeFluege(stunden), lageQuellen()]);
       const ereignisse = lageEreignisse({
         von: w.von,
         bis: w.bis,
         // Laufende Flüge sind noch nicht gelandet
         fluege: w.fluege.map((f) => (f.id.startsWith('live-') ? { ...f, ende: null } : f)),
-        alerts: (a.daten ?? [])
-          .filter((x) => alertInRegion(x, region))
-          .map((x) => ({ ...x, mitte: x.polygone.length ? polygonMitte(x.polygone[0]) : null })),
-        warnungen: (m.daten ?? []).filter((x) => warnungFuerGebiete(x, konfig.warnGebiete)),
-        // Kleine Beben nur in der Region, spürbare in der ganzen Schweiz
-        erdbeben: (e.daten ?? [])
-          .filter(istErdbeben)
-          .filter(
-            (x) => x.magnitude >= 2.5 || distanzKm(region.lat, region.lon, x.lat, x.lon) <= region.radiusKm,
-          ),
+        ...q,
       });
       return {
         von: w.von,
         bis: w.bis,
         ereignisse,
-        fehler: { alerts: a.fehler, warnungen: m.fehler, erdbeben: e.fehler },
+        fehler: q.fehler,
         hinweis: 'Verkehrslage fehlt noch: dafür braucht es einen Schlüssel von opentransportdata.swiss.',
         demo: konfig.demo,
       };
@@ -1726,28 +1738,48 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
     };
   }
 
-  async function briefing() {
+  // Alertswiss, Warnungen und Erdbeben, auf die Region gefiltert (Lagebild und Nachtbericht)
+  async function lageQuellen() {
+    const [a, m, e] = await Promise.all([alertswiss.hole(), meteoalarm.hole(), sed.hole()]);
+    return {
+      alerts: (a.daten ?? [])
+        .filter((x) => alertInRegion(x, region))
+        .map((x) => ({ ...x, mitte: x.polygone.length ? polygonMitte(x.polygone[0]) : null })),
+      warnungen: (m.daten ?? []).filter((x) => warnungFuerGebiete(x, konfig.warnGebiete)),
+      // Kleine Beben nur in der Region, spürbare in der ganzen Schweiz
+      erdbeben: (e.daten ?? [])
+        .filter(istErdbeben)
+        .filter(
+          (x) => x.magnitude >= 2.5 || distanzKm(region.lat, region.lon, x.lat, x.lon) <= region.radiusKm,
+        ),
+      fehler: { alerts: a.fehler, warnungen: m.fehler, erdbeben: e.fehler },
+    };
+  }
+
+  // Nachtbericht: was seit gestern Abend (vor 12 Uhr) bzw. seit Mitternacht in der Region passiert ist
+  async function nacht() {
     await demoVorbereiten();
     const rb = await rueckblick();
-    const fluege = rb.fluege.filter((f) => !f.laufend).reverse();
+    const fluege = rb.fluege.filter((f) => !f.laufend).sort((a, b) => a.start.localeCompare(b.start));
+    const q = await lageQuellen();
+    const ereignisse = lageEreignisse({
+      von: new Date(rb.von).getTime(),
+      bis: ctx.jetzt().getTime(),
+      fluege: [],
+      ...q,
+    });
+    return { rb, ...nachtbericht(fluege, ereignisse, rb.titel) };
+  }
+
+  async function briefing() {
+    const { rb, zeilen: nachtZeilen } = await nacht();
     const meld = await daten.liste<{ titel: string; zeit: string; kategorie: string }>('einsatz_meldungen', {
       filter: { zeit: { gte: new Date(ctx.jetzt().getTime() - 24 * 3600000).toISOString() } },
       sortierung: '-zeit',
       limit: 5,
     });
     const zeilen = [
-      ...(fluege.length
-        ? [
-            {
-              text: `${rb.titel}: ${fluege.length} ${fluege.length === 1 ? 'Heli Flug' : 'Heli Flüge'}`,
-              wert: '',
-            },
-          ]
-        : []),
-      ...fluege.slice(0, 4).map((f) => ({
-        text: `${f.organisation} ${f.kennzeichen ?? ''}: ${f.von ?? '?'} nach ${f.nach ?? '?'}`,
-        wert: UHRZEIT(f.start),
-      })),
+      ...nachtZeilen,
       ...meld
         .filter((m) => m.kategorie !== 'Mitteilung')
         .slice(0, 3)
@@ -1755,7 +1787,7 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
     ];
     if (!zeilen.length)
       zeilen.push({
-        text: `Ruhig: keine Heli Flüge ${rb.titel === 'Heute' ? 'heute' : 'seit gestern 20 Uhr'}`,
+        text: `Ruhig: keine Heli Flüge, Meldungen oder Erdbeben ${rb.titel === 'Heute' ? 'heute' : 'seit gestern 20 Uhr'}`,
         wert: '',
       });
     return {
