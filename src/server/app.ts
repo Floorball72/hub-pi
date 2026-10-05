@@ -1,7 +1,7 @@
 // Fastify Server: Sicherheit (Netz, Login, CSRF), Kern Routen, Modul Routen und Auslieferung des Frontends.
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, extname, join, normalize, resolve } from 'node:path';
+import { basename, extname, join, normalize, resolve, sep } from 'node:path';
 import Fastify, {
   LogController,
   type FastifyInstance,
@@ -230,13 +230,14 @@ export async function appErstellen(o: AppOptionen): Promise<{ app: FastifyInstan
   return { app, hub };
 }
 
-function statischAusliefern(app: FastifyInstance, wurzel: string) {
+function statischAusliefern(app: FastifyInstance, verzeichnis: string) {
+  const wurzel = resolve(verzeichnis);
   const index = join(wurzel, 'index.html');
   app.get('/*', async (req, reply) => {
     const pfad = decodeURIComponent(req.url.split('?')[0]);
     if (pfad.startsWith('/api/')) return reply.code(404).send({ fehler: 'Nicht gefunden' });
     const datei = normalize(join(wurzel, pfad));
-    if (datei.startsWith(wurzel) && existsSync(datei) && statSync(datei).isFile()) {
+    if (datei.startsWith(wurzel + sep) && existsSync(datei) && statSync(datei).isFile()) {
       const typ = MIME[extname(datei)] ?? 'application/octet-stream';
       // Dateien mit Hash im Namen dürfen lange gecacht werden
       reply.header(
