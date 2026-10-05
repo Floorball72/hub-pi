@@ -626,7 +626,7 @@ export interface Einsatz {
   ende: string | null;
   zurueck: boolean;
   art: 'einsatzort' | 'verlegung' | 'spital' | 'unklar';
-  einsatzort: { name: string; lat: number; lon: number } | null;
+  einsatzort: { name: string; lat: number; lon: number; gemeinde: string | null } | null;
   spitaeler: string[];
   flugMin: number;
   dauerMin: number | null;
@@ -717,7 +717,12 @@ function einsatzAus(fl: ChronikFlug[]): Einsatz {
     art: ort ? 'einsatzort' : spitaeler.length >= 2 ? 'verlegung' : spitaeler.length ? 'spital' : 'unklar',
     einsatzort:
       ort && ort.lat !== null && ort.lon !== null
-        ? { name: ort.nach ?? 'Unbekannter Ort', lat: ort.lat, lon: ort.lon }
+        ? {
+            name: ort.nach ?? 'Unbekannter Ort',
+            lat: ort.lat,
+            lon: ort.lon,
+            gemeinde: fl.find((f) => f.id === ort.id)?.ende_ort ?? null,
+          }
         : null,
     spitaeler,
     // Überlappende Flüge in den Rohdaten: Flugzeit nie länger als die Dauer
@@ -737,7 +742,10 @@ function einsatzAus(fl: ChronikFlug[]): Einsatz {
 export function einsatzStatistik(einsaetze: Einsatz[], jetzt: number) {
   const basen = new Map<string, { anzahl: number; flugMin: number; dauern: number[] }>();
   const spitaeler = new Map<string, number>();
+  const gemeinden = new Map<string, number>();
   for (const e of einsaetze) {
+    const g = e.einsatzort?.gemeinde;
+    if (g) gemeinden.set(g, (gemeinden.get(g) ?? 0) + 1);
     const b = e.basis ?? 'Unbekannte Basis';
     const x = basen.get(b) ?? { anzahl: 0, flugMin: 0, dauern: [] };
     x.anzahl++;
@@ -770,10 +778,40 @@ export function einsatzStatistik(einsaetze: Einsatz[], jetzt: number) {
       .map(([basis, x]) => ({ basis, anzahl: x.anzahl, flugMin: x.flugMin, dauerMin: median(x.dauern) }))
       .sort((a, b) => b.anzahl - a.anzahl),
     spitaeler: [...spitaeler.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10),
+    gemeinden: [...gemeinden.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12),
     orte: einsaetze
       .filter((e) => e.einsatzort)
       .slice(0, 400)
       .map((e) => ({ ...e.einsatzort!, basis: e.basis, start: e.start, kennzeichen: e.kennzeichen })),
     woche: { diese: arten(diese), vorher: arten(vorher) },
   };
+}
+
+/** Heatmap nur aus den vermuteten Einsatzorten, ohne Basen, Spitäler und Flugspuren */
+export function einsatzortHeat(einsaetze: Einsatz[]): [number, number, number][] {
+  return heatRaster(
+    einsaetze
+      .filter((e) => e.einsatzort)
+      .map((e) => ({
+        start_lat: null,
+        start_lon: null,
+        ende_lat: e.einsatzort!.lat,
+        ende_lon: e.einsatzort!.lon,
+      })),
+  );
+}
+
+/** Letzte Landung an jeder Rega Basis (Schlüssel: Basis id) aus den gespeicherten Flügen */
+export function letzteRueckkehr(
+  fluege: FlugEnde[],
+): Map<string, { zeit: string; kennzeichen: string | null }> {
+  const aus = new Map<string, { zeit: string; kennzeichen: string | null }>();
+  for (const f of fluege) {
+    if (!f.ende || f.ende_art === 'verlassen') continue;
+    const b = basisAusPlatz(f.ende_platz);
+    if (!b) continue;
+    const alt = aus.get(b.id);
+    if (!alt || f.ende > alt.zeit) aus.set(b.id, { zeit: f.ende, kennzeichen: f.kennzeichen });
+  }
+  return aus;
 }

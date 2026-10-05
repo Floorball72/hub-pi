@@ -39,6 +39,7 @@
       anzahl: number;
       proBasis: { basis: string; anzahl: number; flugMin: number; dauerMin: number | null }[];
       spitaeler: [string, number][];
+      gemeinden?: [string, number][];
       orte: { name: string; lat: number; lon: number; basis: string | null; start: string; kennzeichen: string | null }[];
       woche: Record<'diese' | 'vorher', { einsaetze: number; mitEinsatzort: number; flugMin: number }>;
     };
@@ -55,7 +56,20 @@
     quellen: string[];
   }
 
+  interface Basis {
+    id: string;
+    name: string;
+    status: 'unterwegs' | 'zuhause' | 'vermutet' | 'unbekannt';
+    unterwegs: { hex: string; kennzeichen: string | null }[];
+    zuHause: string[];
+    vermutet: string[];
+    letzteRueckkehr: { zeit: string; kennzeichen: string | null } | null;
+    heute: number;
+  }
+
   let tab = $state('Lage');
+  let basen = $state<Basis[] | null>(null);
+  let heatArt = $state('alles');
   let lage = $state<Lage | null>(null);
   let stat = $state<Statistik | null>(null);
   let meld = $state<Meldungen | null>(null);
@@ -78,6 +92,14 @@
     const t = setInterval(holen, 20000);
     return () => clearInterval(t);
   });
+  $effect(() => {
+    if (tab !== 'Lage') return;
+    const holen = () => api.get<{ basen: Basis[] }>('/api/m/rettung/basen').then((b) => (basen = b.basen)).catch(() => {});
+    holen();
+    const t = setInterval(holen, 60000);
+    return () => clearInterval(t);
+  });
+  const BASIS_STATUS: Record<Basis['status'], string> = { unterwegs: 'unterwegs', zuhause: 'zu Hause', vermutet: 'vermutlich zu Hause', unbekannt: 'keine Daten' };
   // Bewegte Helis auf der Karte, gespeist aus /live
   let anim = $state.raw<HeliAnimation | null>(null);
   function animStarten(L: typeof Leaflet, karte: Leaflet.Map) {
@@ -99,7 +121,7 @@
   });
   $effect(() => {
     if (tab !== 'Rega Statistik') return;
-    const q = new URLSearchParams({ organisation, tage: String(zeitraum), tageszeit, wochentage, basis });
+    const q = new URLSearchParams({ organisation, tage: String(zeitraum), tageszeit, wochentage, basis, nur: heatArt === 'einsatzorte' ? 'einsatzorte' : '' });
     api.get<{ heat: [number, number, number][]; hinweis: string }>(`/api/m/rettung/heatmap?${q}`).then((h) => (heat = h)).catch(() => (heat = null));
   });
 
@@ -155,6 +177,24 @@
         {:else}
           <p class="leer">Gerade kein Heli aus der Kennzeichen Liste mit Transponder erfasst.</p>
         {/each}
+      </section>
+    {/if}
+    {#if basen}
+      <section class="panel" style="margin-top:12px">
+        <h2>Rega Basen</h2>
+        <div class="basen">
+          {#each basen as b (b.id)}
+            <div class="basis-zeile klein">
+              <span class="zeile"><span class="farbpunkt status-{b.status}"></span><strong>{b.name.replace('Rega Basis ', '')}</strong></span>
+              <span class:gedaempft={b.status === 'unbekannt'}>
+                {BASIS_STATUS[b.status]}{b.status === 'unterwegs' ? `: ${b.unterwegs.map((u) => u.kennzeichen ?? u.hex).join(', ')}` : b.status === 'zuhause' ? `: ${b.zuHause.join(', ')}` : b.status === 'vermutet' ? `: ${b.vermutet.join(', ')}` : ''}
+              </span>
+              <span class="gedaempft">{b.letzteRueckkehr ? `zurück ${relativ(b.letzteRueckkehr.zeit)}` : ''}</span>
+              <span class="zahl">{b.heute} heute</span>
+            </div>
+          {/each}
+        </div>
+        <p class="sehr-klein gedaempft">Nur aus ADS-B abgeleitet. Am Boden gibt es oft keinen Empfang, deshalb gilt ein Heli nach der Landung an der Basis oder nach zwei Stunden ohne Signal als vermutlich zu Hause.</p>
       </section>
     {/if}
     <section class="panel" style="margin-top:12px"><HeliZeitstrahl maxZeilen={20} /></section>
@@ -309,6 +349,11 @@
             </div>
           </section>
           <section class="panel">
+            <h3>Einsatzorte nach Gemeinde</h3>
+            {#each stat.einsatz.gemeinden ?? [] as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch kein Einsatzort mit Gemeinde erfasst.</p>{/each}
+            <p class="sehr-klein gedaempft">Landungen ausserhalb von Basis und Spital, Gemeinde von geo.admin.ch. Vermutete Einsatzorte, ohne Gewähr.</p>
+          </section>
+          <section class="panel">
             <h3>Spitäler nach Häufigkeit</h3>
             {#each stat.einsatz.spitaeler as [o, n] (o)}<div class="zeile-zwischen klein"><span>{o}</span><span class="zahl">{n}</span></div>{:else}<p class="klein gedaempft">Noch keine Landung bei einem Spital erfasst.</p>{/each}
           </section>
@@ -320,6 +365,10 @@
       <div class="zeile-zwischen" style="margin-top:14px">
         <h3>Heatmap Schweiz</h3>
         <div class="zeile">
+          <select bind:value={heatArt} style="width:auto" aria-label="Inhalt der Heatmap">
+            <option value="alles">Alle Flüge</option>
+            <option value="einsatzorte">Nur Einsatzorte</option>
+          </select>
           <select bind:value={basis} style="width:auto" aria-label="Basis">
             <option value="">Alle Basen</option>
             {#each stat.startplaetze as [o] (o)}<option value={o}>{o}</option>{/each}
@@ -339,7 +388,7 @@
         </div>
       </div>
       <Karte hoehe="460px" ebenenFest={[]} heat={heat?.heat ?? []} zentrum={[46.8, 8.23]} zoom={7} />
-      <p class="sehr-klein gedaempft">{heat?.hinweis ?? 'Lade…'}. Start und Landung zählen doppelt. Nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
+      <p class="sehr-klein gedaempft">{heat?.hinweis ?? 'Lade…'}. {heatArt === 'einsatzorte' ? 'Nur Landungen ausserhalb von Basis und Spital.' : 'Start und Landung zählen doppelt.'} Nur aus selbst erfassten ADS-B Daten, nicht vollständig.</p>
     {/if}
   {:else if tab === 'Toolbox'}
     <Toolbox />
@@ -355,6 +404,28 @@
 </ModulRahmen>
 
 <style>
+  .basen {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 6px 12px;
+    align-items: center;
+  }
+  .basis-zeile {
+    display: contents;
+  }
+  .status-unterwegs {
+    background: #ff5d5d;
+  }
+  .status-zuhause {
+    background: #34d399;
+  }
+  .status-vermutet {
+    background: #6ee7b7;
+    opacity: 0.6;
+  }
+  .status-unbekannt {
+    background: #94a3b8;
+  }
   .heli {
     padding: 6px 0;
     border-bottom: 1px solid var(--rand);

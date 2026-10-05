@@ -42,7 +42,9 @@ import {
   einsaetzeBilden,
   einsatzLandung,
   einsatzStatistik,
+  einsatzortHeat,
   letzteStandorte,
+  letzteRueckkehr,
   ortArt,
   positionenVereinen,
   rueckblickFenster,
@@ -77,7 +79,14 @@ import {
 } from './quellen.ts';
 import { lageEreignisse, nachtbericht } from './lagebild.ts';
 import { RETTUNG_TABELLEN } from './tabellen.ts';
-import { basisName, endeBasis, heliFarbe, REGA_BASEN, startBasis } from '../../geteilt/heli.ts';
+import {
+  basisAusPlatz,
+  basisName,
+  endeBasis,
+  heliFarbe,
+  REGA_BASEN,
+  startBasis,
+} from '../../geteilt/heli.ts';
 
 export interface Lawine {
   region: string;
@@ -579,9 +588,12 @@ function rettungLaufzeit(ctx: Kontext) {
     name: string;
     lat: number;
     lon: number;
-    status: 'unterwegs' | 'zuhause' | 'unbekannt';
+    status: 'unterwegs' | 'zuhause' | 'vermutet' | 'unbekannt';
     unterwegs: { hex: string; kennzeichen: string | null; lat: number; lon: number }[];
     zuHause: string[];
+    /** Nicht gesehen, aber nach der letzten Landung oder langer Abwesenheit an der Basis angenommen */
+    vermutet: string[];
+    letzteRueckkehr: { zeit: string; kennzeichen: string | null } | null;
     heute: number;
   }
 
@@ -592,6 +604,8 @@ function rettungLaufzeit(ctx: Kontext) {
       limit: 1000,
     });
     const laufende = erkennung.laufende();
+    const abgestellt = await abgestellteHelis(new Set(positionen.map((p) => p.hex)));
+    const rueckkehr = letzteRueckkehr(letzteFluege?.liste ?? []);
     return REGA_BASEN.map((b) => {
       const name = basisName(b);
       const unterwegs = laufende
@@ -614,14 +628,31 @@ function rettungLaufzeit(ctx: Kontext) {
             distanzKm(p.lat, p.lon, b.lat, b.lon) <= 2,
         )
         .map((p) => p.kennzeichen ?? p.hex);
+      const vermutet = abgestellt
+        .filter(
+          (a) =>
+            a.organisation === 'Rega' &&
+            a.anBasis &&
+            basisAusPlatz(a.platz)?.id === b.id &&
+            !zuHause.includes(a.kennzeichen ?? a.hex),
+        )
+        .map((a) => a.kennzeichen ?? a.hex);
       return {
         id: b.id,
         name,
         lat: b.lat,
         lon: b.lon,
-        status: unterwegs.length ? 'unterwegs' : zuHause.length ? 'zuhause' : 'unbekannt',
+        status: unterwegs.length
+          ? 'unterwegs'
+          : zuHause.length
+            ? 'zuhause'
+            : vermutet.length
+              ? 'vermutet'
+              : 'unbekannt',
         unterwegs,
         zuHause,
+        vermutet,
+        letzteRueckkehr: rueckkehr.get(b.id) ?? null,
         heute:
           heute.filter((f) => f.start_platz === name).length +
           laufende.filter((f) => startPlaetze.get(f.hex) === name && f.start >= new Date(von).getTime())
@@ -909,11 +940,21 @@ function rettungLaufzeit(ctx: Kontext) {
             ? `Unterwegs: ${b.unterwegs.map((u) => u.kennzeichen ?? u.hex).join(', ')}`
             : b.status === 'zuhause'
               ? `Heli an der Basis: ${b.zuHause.join(', ')}`
-              : 'Kein Heli erfasst (am Boden oft kein Empfang)',
+              : b.status === 'vermutet'
+                ? `Vermutlich an der Basis: ${b.vermutet.join(', ')}`
+                : 'Kein Heli erfasst (am Boden oft kein Empfang)',
           `Heute ${b.heute} ${b.heute === 1 ? 'Start' : 'Starts'}`,
+          ...(b.letzteRueckkehr ? [`Letzte Rückkehr ${ZEIT(b.letzteRueckkehr.zeit)}`] : []),
         ].join(' · '),
         symbol: 'basis',
-        farbe: b.status === 'unterwegs' ? '#ff5d5d' : b.status === 'zuhause' ? '#34d399' : '#94a3b8',
+        farbe:
+          b.status === 'unterwegs'
+            ? '#ff5d5d'
+            : b.status === 'zuhause'
+              ? '#34d399'
+              : b.status === 'vermutet'
+                ? '#6ee7b7'
+                : '#94a3b8',
         groesse: b.status === 'unterwegs' ? 32 : 26,
       }));
       const linien: GeoLinie[] = basen.flatMap((b) =>
@@ -1262,6 +1303,7 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
         tageszeit?: string;
         wochentage?: string;
         basis?: string;
+        nur?: string;
       };
     }>('/heatmap', async (req): Promise<PunkteAntwort> => {
       await demoVorbereiten();
@@ -1276,6 +1318,25 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
       };
       const organisation = q.organisation ?? 'Rega';
       if (organisation !== 'alle') filter.organisation = organisation;
+      if (q.nur === 'einsatzorte') {
+        // Nur vermutete Einsatzorte: Flüge zu Einsätzen bündeln, Basis aus dem ganzen Einsatz
+        const alle = await daten.liste<ChronikFlug>('heli_fluege', {
+          filter,
+          sortierung: '-start',
+          limit: 3000,
+        });
+        const einsaetze = einsaetzeBilden(alle.map(({ spur: _s, ...f }) => f)).filter(
+          (e) =>
+            e.einsatzort && startPasst(e.start, tageszeit, wochentage) && (!q.basis || e.basis === q.basis),
+        );
+        return {
+          punkte: [],
+          heat: einsatzortHeat(einsaetze),
+          stand: ctx.jetzt().toISOString(),
+          demo: konfig.demo,
+          hinweis: `${einsaetze.length} Einsatzorte`,
+        };
+      }
       if (q.basis) filter.start_platz = q.basis.slice(0, 120);
       const fluege = (
         await daten.liste<{
@@ -1536,6 +1597,16 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
         datenUrl: '/api/m/rettung/heatmap',
         namensnennung: ADSB_NAMENSNENNUNG,
         hinweis: 'Start, Landung und Flugspuren der letzten 12 Monate',
+      },
+      {
+        id: 'rettung.einsatzorte',
+        name: 'Heli Einsatzorte (Heatmap)',
+        gruppe: 'Rettung',
+        modul: 'rettung',
+        art: 'heatmap',
+        datenUrl: '/api/m/rettung/heatmap?nur=einsatzorte',
+        namensnennung: ADSB_NAMENSNENNUNG,
+        hinweis: 'Rega Landungen ausserhalb von Basis und Spital, letzte 12 Monate. Vermutet, ohne Gewähr.',
       },
       {
         id: 'rettung.spital',

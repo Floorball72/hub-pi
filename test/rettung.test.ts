@@ -626,5 +626,29 @@ describe('Einsatz Chronik', () => {
     assert.equal(s.proBasis[0].anzahl, 2);
     assert.equal(s.woche.diese.einsaetze, 2);
     assert.equal(s.orte.length, 1);
+    assert.deepEqual(s.gemeinden, [['Wattwil', 1]]);
+  });
+
+  it('kennt die letzte Rückkehr pro Rega Basis', async () => {
+    const { letzteRueckkehr } = await import('../src/server/modules/rettung/heli.ts');
+    const f = (ende: string, platz: string | null, art = 'landung', kennzeichen = 'HB-ZRX') => ({
+      hex: 'abc',
+      organisation: 'Rega',
+      kennzeichen,
+      ende,
+      ende_art: art,
+      ende_lat: 47,
+      ende_lon: 9,
+      ende_platz: platz,
+      ende_ort: null,
+    });
+    const r = letzteRueckkehr([
+      f('2026-10-01T08:00:00Z', 'Rega Basis St. Gallen'),
+      f('2026-10-01T12:00:00Z', 'Rega Basis St. Gallen', 'landung', 'HB-ZRY'),
+      f('2026-10-01T13:00:00Z', 'Rega Basis St. Gallen', 'verlassen'),
+      f('2026-10-01T14:00:00Z', 'Kantonsspital St. Gallen'),
+    ]);
+    assert.equal(r.size, 1);
+    assert.deepEqual([...r.values()][0], { zeit: '2026-10-01T12:00:00Z', kennzeichen: 'HB-ZRY' });
   });
 });
