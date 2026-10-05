@@ -142,7 +142,7 @@ export async function appErstellen(o: AppOptionen): Promise<{ app: FastifyInstan
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('X-Frame-Options', 'SAMEORIGIN');
-    reply.header('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+    reply.header('Permissions-Policy', 'geolocation=(self), camera=(), microphone=(self)');
     reply.header(
       'Content-Security-Policy',
       "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
