@@ -214,7 +214,7 @@
     {/each}
   </section>
 {:else}
-  <p class="gedaempft">Lade...</p>
+  <p class="gedaempft">Lade…</p>
 {/if}
 
 <style>

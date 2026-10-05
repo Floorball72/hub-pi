@@ -266,6 +266,9 @@
     box-shadow: none;
     color: var(--text);
   }
+  .eingabe:focus-within {
+    border-bottom-color: #4cc9f088;
+  }
   .treffer {
     overflow-y: auto;
     padding: 6px;

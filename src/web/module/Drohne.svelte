@@ -96,7 +96,7 @@
         {#if neu}
           <form class="panel neu" onsubmit={ortSpeichern}>
             <div class="zeile">
-              <input placeholder="Name des Ortes" bind:value={neu.name} required />
+              <input placeholder="Name des Ortes…" bind:value={neu.name} required />
               <span class="mono sehr-klein">{neu.lat}, {neu.lon}</span>
             </div>
             <div class="zeile" style="justify-content:flex-end;margin-top:8px">
@@ -216,7 +216,7 @@
         <section class="panel">
           <h2>Notizen</h2>
           <form class="zeile" onsubmit={notizSpeichern}>
-            <input class="wachsen" placeholder="Notiz zu diesem Ort" bind:value={notiz} style="flex:1" />
+            <input class="wachsen" placeholder="Notiz zu diesem Ort…" bind:value={notiz} style="flex:1" />
             <button type="submit">Speichern</button>
           </form>
           <ul class="liste">

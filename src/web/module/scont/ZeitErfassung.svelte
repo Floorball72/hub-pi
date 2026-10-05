@@ -58,7 +58,7 @@
   {/if}
   <div class="feld" style="margin:12px 0">
     <label for="zb">Beschreibung für den nächsten Start (optional)</label>
-    <input id="zb" bind:value={beschreibung} placeholder="z.B. Inhalte aktualisiert" />
+    <input id="zb" bind:value={beschreibung} placeholder="z.B. Inhalte aktualisiert…" />
   </div>
   <div class="kunden">
     {#each d.kunden as k (k.id)}

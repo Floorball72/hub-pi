@@ -390,6 +390,7 @@ th {
 }
 td {
   padding: 8px;
+  font-variant-numeric: tabular-nums;
   border-bottom: 1px solid #1a2330;
   vertical-align: top;
 }

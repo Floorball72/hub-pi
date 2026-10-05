@@ -251,7 +251,7 @@
       <div class="feld"><label for="es">Beginn</label><input id="es" type="datetime-local" bind:value={neu.start} required /></div>
       <div class="feld"><label for="ev">Vorlage</label><select id="ev" bind:value={neu.vorlage_id}><option value="">Ohne Vorlage</option>{#each vorlagen as v (v.id)}<option value={v.id}>{v.name}</option>{/each}</select></div>
       <div class="feld"><label for="eo">Ort</label><input id="eo" bind:value={neu.ort_name} maxlength="200" /></div>
-      <div class="feld"><label for="ety">Typ</label><input id="ety" bind:value={neu.typ} maxlength="100" placeholder="z.B. Turnier, Hochzeit, Firmenanlass" /></div>
+      <div class="feld"><label for="ety">Typ</label><input id="ety" bind:value={neu.typ} maxlength="100" placeholder="z.B. Turnier, Hochzeit, Firmenanlass…" /></div>
       <div class="feld"><label for="el">Link</label><input id="el" type="url" bind:value={neu.link} placeholder="https://" /></div>
       <div class="feld"><label for="en">Notizen</label><textarea id="en" rows="3" bind:value={neu.notizen}></textarea></div>
       <p class="sehr-klein gedaempft">Koordinaten für das Wetter lassen sich danach unter «Alle Daten» ergänzen. Bitte keine Personendaten Dritter erfassen.</p>
