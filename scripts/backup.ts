@@ -20,6 +20,7 @@ try {
       ])
       .catch(() => {});
     console.log(`Backup erstellt: ${b.name} (${b.groesseKb} KB)`);
+    if (b.fehlend?.length) console.log(`Noch nicht migriert, übersprungen: ${b.fehlend.join(', ')}`);
   }
 } catch (e) {
   console.error(`Backup fehlgeschlagen: ${(e as Error).message}`);

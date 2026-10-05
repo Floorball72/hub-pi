@@ -10,6 +10,8 @@ export interface BackupDatei {
   name: string;
   groesseKb: number;
   zeit: string;
+  /** Tabellen, die es in der Datenbank noch nicht gibt (vor der Migration) */
+  fehlend?: string[];
 }
 
 export function backupVerzeichnis(datenVerzeichnis: string) {
@@ -24,12 +26,20 @@ export async function backupErstellen(
   const dir = backupVerzeichnis(datenVerzeichnis);
   mkdirSync(dir, { recursive: true });
   const inhalt: Record<string, unknown[]> = {};
+  const fehlend: string[] = [];
   for (const t of daten.alleTabellen()) {
     const zeilen: unknown[] = [];
-    for (let offset = 0; ; offset += 2000) {
-      const teil = await daten.liste(t.name, { sortierung: 'id', limit: 2000, offset });
-      zeilen.push(...teil);
-      if (teil.length < 2000) break;
+    try {
+      for (let offset = 0; ; offset += 2000) {
+        const teil = await daten.liste(t.name, { sortierung: 'id', limit: 2000, offset });
+        zeilen.push(...teil);
+        if (teil.length < 2000) break;
+      }
+    } catch (e) {
+      // Beim Update läuft das Backup vor der Migration: neue Tabellen gibt es dann noch nicht
+      if (!tabelleFehlt(e)) throw e;
+      fehlend.push(t.name);
+      continue;
     }
     inhalt[t.name] = zeilen;
   }
@@ -45,7 +55,13 @@ export async function backupErstellen(
   );
   writeFileSync(join(dir, name), daten_, { mode: 0o600 });
   aufraeumen(dir);
-  return { name, groesseKb: Math.round(daten_.length / 1024), zeit: jetzt.toISOString() };
+  return { name, groesseKb: Math.round(daten_.length / 1024), zeit: jetzt.toISOString(), fehlend };
+}
+
+/** Postgres «relation ... does not exist» oder SQLite «no such table» */
+export function tabelleFehlt(e: unknown): boolean {
+  const t = e instanceof Error ? e.message : String(e);
+  return /relation "[^"]+" does not exist|no such table/i.test(t);
 }
 
 function aufraeumen(dir: string) {
