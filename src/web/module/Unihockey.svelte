@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GegnerCheck from '../komponenten/GegnerCheck.svelte';
   import ModulRahmen from '../komponenten/ModulRahmen.svelte';
   import TabellenEditor from '../komponenten/TabellenEditor.svelte';
   import { api } from '../lib/api.ts';
@@ -83,6 +84,7 @@
               {:else}<p class="leer">Keine Rangliste.</p>{/if}
             </div>
           </div>
+          {#if t.naechstes}<div class="gegner"><GegnerCheck teamId={t.team.id} /></div>{/if}
         </section>
       {/each}
       <p class="sehr-klein gedaempft">Daten: swiss unihockey (öffentliche API v2).</p>
@@ -102,6 +104,9 @@
   }
   .gross {
     font-size: 1.5rem;
+  }
+  .gegner {
+    margin-top: 14px;
   }
   .innen {
     gap: 16px;

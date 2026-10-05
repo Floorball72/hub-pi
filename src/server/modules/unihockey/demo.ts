@@ -1,5 +1,5 @@
 // Demo Spielplan und Rangliste (erfundene Gegner).
-import type { Rangliste, Spiel } from '../../quellen/swissunihockey.ts';
+import type { Rangliste, Spiel, SpielEreignis, SpielEreignisse } from '../../quellen/swissunihockey.ts';
 
 const GEGNER = [
   'UHC Demo Nord',
@@ -17,7 +17,8 @@ export function demoTeamSpiele(team: string, jetzt: Date): { titel: string; spie
     const d = new Date(jetzt.getTime() + (i * 7 + 1) * 86400000);
     d.setUTCHours(14 + (i % 2), 0, 0, 0);
     const heim = i % 2 === 0;
-    const gegner = GEGNER[(i + 6) % GEGNER.length];
+    const andere = GEGNER.filter((g) => g !== name);
+    const gegner = andere[(i + 6) % andere.length];
     const vorbei = d.getTime() < jetzt.getTime();
     spiele.push({
       id: `demo-${name}-${i}`,
@@ -30,7 +31,7 @@ export function demoTeamSpiele(team: string, jetzt: Date): { titel: string; spie
       }),
       heim: heim ? name : gegner,
       gast: heim ? gegner : name,
-      resultat: vorbei ? `${(i * 7 + 11) % 9}:${(i * 5 + 13) % 8}` : null,
+      resultat: vorbei ? `${(((i * 7 + 11) % 9) + 9) % 9}:${(((i * 5 + 13) % 8) + 8) % 8}` : null,
       zusatz: null,
       ort: heim ? 'Sporthalle Demo' : 'Halle Gegner (Demo)',
       lat: null,
@@ -38,6 +39,7 @@ export function demoTeamSpiele(team: string, jetzt: Date): { titel: string; spie
       status: null,
       beendet: vorbei,
       liga: null,
+      eigen: heim ? 'heim' : 'gast',
     });
   }
   return { titel: `Spielübersicht ${name} (Demo)`, spiele };
@@ -55,6 +57,62 @@ export function demoRangliste(team: string): Rangliste {
       punkte: 16 - i * 2,
       tore: `${30 - i * 3}:${12 + i * 2}`,
       hervorgehoben: t === name,
+      teamId: `demo-${i}`,
     })),
   };
+}
+
+// Erfundene Kürzel, keine echten Personen
+const DEMO_NAMEN = ['A. Muster', 'B. Beispiel', 'C. Demo', 'D. Test', 'E. Probe', 'F. Vorlage', 'G. Entwurf'];
+
+/** Spielereignisse passend zum Resultat, gleichbleibend pro Spiel */
+export function demoSpielEreignisse(
+  spielId: string,
+  heim: string,
+  gast: string,
+  resultat: string | null,
+): SpielEreignisse {
+  const m = resultat ? /^(\d+):(\d+)/.exec(resultat) : null;
+  let h = m ? Number(m[1]) : 0;
+  let g = m ? Number(m[2]) : 0;
+  let saat = [...spielId].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const zufall = () => {
+    saat = (Math.imul(saat, 1103515245) + 12345) >>> 0;
+    return saat / 2 ** 32;
+  };
+  // Die ersten Namen treffen öfter
+  const name = () => DEMO_NAMEN[Math.floor(zufall() ** 1.8 * DEMO_NAMEN.length)];
+  const ereignisse: SpielEreignis[] = [];
+  const n = h + g;
+  let stand = [0, 0];
+  for (let i = 0; i < n; i++) {
+    const heimTor = h > 0 && (g === 0 || zufall() < h / (h + g));
+    if (heimTor) h--;
+    else g--;
+    stand = heimTor ? [stand[0] + 1, stand[1]] : [stand[0], stand[1] + 1];
+    const minute = Math.floor(((i + zufall()) / n) * 60);
+    const schuetze = name();
+    const assist = zufall() < 0.7 ? name() : null;
+    ereignisse.push({
+      zeit: `${String(minute).padStart(2, '0')}:${String(Math.floor(zufall() * 60)).padStart(2, '0')}`,
+      typ: 'tor',
+      text: `Torschütze ${stand[0]}:${stand[1]}`,
+      seite: heimTor ? 'heim' : 'gast',
+      spieler: schuetze,
+      assist: assist !== schuetze ? assist : null,
+      minuten: null,
+    });
+  }
+  if (zufall() < 0.6)
+    ereignisse.push({
+      zeit: '31:12',
+      typ: 'strafe',
+      text: "2'-Strafe (Stockschlag)",
+      seite: zufall() < 0.5 ? 'heim' : 'gast',
+      spieler: name(),
+      assist: null,
+      minuten: 2,
+    });
+  ereignisse.sort((a, b) => a.zeit.localeCompare(b.zeit));
+  return { heim, gast, ereignisse };
 }

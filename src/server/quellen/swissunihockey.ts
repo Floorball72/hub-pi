@@ -22,6 +22,8 @@ export interface Spiel {
   status: string | null;
   beendet: boolean;
   liga: string | null;
+  /** Welche Seite das abgefragte Team ist (nur im Spielplan eines Teams) */
+  eigen?: 'heim' | 'gast' | null;
 }
 
 export interface TabellenZeile {
@@ -31,6 +33,25 @@ export interface TabellenZeile {
   punkte: number | null;
   tore: string | null;
   hervorgehoben: boolean;
+  teamId?: string | null;
+}
+
+export interface SpielEreignis {
+  /** Spielzeit «39:42» */
+  zeit: string;
+  typ: 'tor' | 'strafe' | 'penalty' | 'anderes';
+  text: string;
+  seite: 'heim' | 'gast' | null;
+  spieler: string | null;
+  assist: string | null;
+  /** Strafminuten bei Strafen */
+  minuten: number | null;
+}
+
+export interface SpielEreignisse {
+  heim: string;
+  gast: string;
+  ereignisse: SpielEreignis[];
 }
 
 export interface Rangliste {
@@ -43,12 +64,14 @@ export interface SuhAdapter {
   teamSpiele(teamId: string, saison: number): Promise<{ titel: string; spiele: Spiel[] }>;
   rangliste(teamId: string, saison: number): Promise<Rangliste>;
   spieleAmTag(datum: string): Promise<Spiel[]>;
+  spielEreignisse(spielId: string): Promise<SpielEreignisse>;
 }
 
 // Tabellen API v2
 
 interface Zelle {
   text?: string[];
+  highlight?: boolean;
   link?: { type?: string; ids?: number[]; x?: number; y?: number };
 }
 interface Zeile {
@@ -62,6 +85,7 @@ interface Tabelle {
   data: {
     title?: string;
     headers: { text: string; key?: string }[];
+    tabs?: { text?: string | string[] }[];
     regions: { text?: string | null; rows: Zeile[] }[];
   };
 }
@@ -114,7 +138,8 @@ export function teamSpieleParsen(t: Tabelle): { titel: string; spiele: Spiel[] }
         status: null,
         beendet: !!resultat,
         liga: r.text ?? null,
-      };
+        eigen: z.cells[iHeim]?.highlight ? 'heim' : z.cells[iGast]?.highlight ? 'gast' : null,
+      } as Spiel;
     }),
   );
   return { titel: t.data.title ?? '', spiele };
@@ -136,6 +161,7 @@ export function ranglisteParsen(t: Tabelle, teamId?: string): Rangliste {
         punkte: iP >= 0 ? Number(text(z.cells[iP])) : null,
         tore: iT >= 0 ? text(z.cells[iT]) : null,
         hervorgehoben: !!z.highlight || (!!teamId && String(z.data?.team?.id) === teamId),
+        teamId: z.data?.team?.id != null ? String(z.data.team.id) : null,
       })),
     ),
   };
@@ -172,6 +198,45 @@ export function aktuelleSpieleParsen(t: Tabelle, datum: string): Spiel[] {
   );
 }
 
+/**
+ * Spielereignisse. Die Mannschaft steht ohne Zusatz wie «II» in den Ereignissen,
+ * die Namen der Seiten kommen aus den Reitern (Alle, Heim, Gast).
+ */
+export function spielEreignisseParsen(t: Tabelle): SpielEreignisse {
+  const tab = (i: number) => {
+    const x = t.data.tabs?.[i]?.text;
+    return (Array.isArray(x) ? x[0] : x)?.trim() ?? '';
+  };
+  const heim = tab(1);
+  const gast = tab(2);
+  const ereignisse = t.data.regions.flatMap((r) =>
+    r.rows.map((z): SpielEreignis => {
+      const art = text(z.cells[1]) ?? '';
+      const team = text(z.cells[2]);
+      const wer = text(z.cells[3]);
+      const m = wer ? /^(.*?)\s*(?:\((.*)\))?$/.exec(wer) : null;
+      const strafe = /^(\d+)'-Strafe/.exec(art);
+      return {
+        zeit: text(z.cells[0]) ?? '',
+        typ: /^Torschütze/.test(art)
+          ? 'tor'
+          : strafe
+            ? 'strafe'
+            : /^Penalty/.test(art)
+              ? 'penalty'
+              : 'anderes',
+        text: art,
+        seite: team && team === heim ? 'heim' : team && team === gast ? 'gast' : null,
+        spieler: m?.[1] || null,
+        assist: m?.[2] || null,
+        minuten: strafe ? Number(strafe[1]) : null,
+      };
+    }),
+  );
+  // Die API liefert das Neueste zuerst
+  return { heim, gast, ereignisse: ereignisse.reverse() };
+}
+
 const BASIS = 'https://api-v2.swissunihockey.ch/api';
 
 export const suhV2: SuhAdapter = {
@@ -202,6 +267,14 @@ export const suhV2: SuhAdapter = {
         abstandMs: 1000,
       }),
       datum,
+    );
+  },
+  async spielEreignisse(spielId) {
+    return spielEreignisseParsen(
+      await httpJson<Tabelle>(`${BASIS}/game_events/${encodeURIComponent(spielId)}`, {
+        timeoutMs: 15000,
+        abstandMs: 1000,
+      }),
     );
   },
 };

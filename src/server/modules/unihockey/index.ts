@@ -7,10 +7,15 @@ import {
   aktuelleSaison,
   type Rangliste,
   type Spiel,
+  type SpielEreignisse,
   SUH_NAMENSNENNUNG,
   suhV2,
 } from '../../quellen/swissunihockey.ts';
-import { demoRangliste, demoTeamSpiele } from './demo.ts';
+import { demoRangliste, demoSpielEreignisse, demoTeamSpiele } from './demo.ts';
+import { bilanz, gegnerVon, gespielte, namensKern, ranglistenZeile, seiteVon, skorer } from './gegner.ts';
+
+/** So viele gespielte Spiele des Gegners fliessen in die Skorerliste */
+const SKORER_SPIELE = 6;
 
 export const TEAMS = tabelle({
   name: 'teams',
@@ -100,6 +105,21 @@ function unihockeyLaufzeit(ctx: Kontext) {
     testParameter: () => ({ team: '429092', saison: aktuelleSaison(new Date()), name: 'Test' }),
   });
 
+  // Gespielte Spiele ändern sich nicht mehr, deshalb ein langer Cache
+  const ereignisse = ctx.quelle<
+    { spiel: string; heim: string; gast: string; resultat: string | null },
+    SpielEreignisse
+  >({
+    id: 'unihockey.ereignisse',
+    name: 'swiss unihockey Spielereignisse',
+    modul: 'unihockey',
+    ttlSek: 24 * 3600,
+    abruf: (p) => suhV2.spielEreignisse(p.spiel),
+    demo: (p) => demoSpielEreignisse(p.spiel, p.heim, p.gast, p.resultat),
+    namensnennung: SUH_NAMENSNENNUNG,
+    testParameter: () => ({ spiel: '1104358', heim: '', gast: '', resultat: null }),
+  });
+
   async function teams(): Promise<Team[]> {
     angelegt ??= (async () => {
       if ((await daten.anzahl('teams')) === 0 && !ctx.einstellungen.hole('unihockey.teams_angelegt', false)) {
@@ -143,8 +163,88 @@ function unihockeyLaufzeit(ctx: Kontext) {
     );
   }
 
+  /** Gegner Check für das nächste Spiel eines Teams */
+  async function gegnerCheck(teamZeile: string) {
+    const t = (await teams()).find((x) => x.id === teamZeile);
+    if (!t) return null;
+    const p = param(t);
+    const [s, r] = await Promise.all([spiele.hole(p), rangliste.hole(p)]);
+    const jetzt = ctx.jetzt().getTime();
+    const eigene = s.daten?.spiele ?? [];
+    const spiel =
+      eigene.find((x) => x.zeit && new Date(x.zeit).getTime() > jetzt - 2 * 3600000 && !x.resultat) ?? null;
+    const gegner = spiel ? gegnerVon(spiel) : null;
+    if (!spiel || !gegner) return { spiel, gegner: null, fehler: s.fehler ?? null };
+
+    const zeile = ranglistenZeile(r.daten?.zeilen ?? [], gegner);
+    // Direktvergleich aus dieser und der letzten Saison
+    const vorjahr = await spiele.hole({ ...p, saison: p.saison - 1 });
+    const kern = namensKern(gegner);
+    const direkt = gespielte(
+      [...eigene, ...(vorjahr.daten?.spiele ?? [])].filter((x) => {
+        const g = gegnerVon(x);
+        return g != null && namensKern(g) === kern;
+      }),
+    );
+
+    let form: ReturnType<typeof gespielte> = [];
+    let top: ReturnType<typeof skorer> = [];
+    let ausgewertet = 0;
+    let fehler: string | null = null;
+    if (zeile?.teamId) {
+      const gs = await spiele.hole({ team: zeile.teamId, saison: p.saison, name: gegner });
+      fehler = gs.fehler ?? null;
+      const liste = gs.daten?.spiele ?? [];
+      form = gespielte(liste, gegner);
+      const fuerSkorer = form.slice(0, SKORER_SPIELE).flatMap((f) => {
+        const sp = liste.find((x) => x.id === f.id);
+        const seite = sp ? seiteVon(sp, gegner) : null;
+        return sp && seite ? [{ sp, seite }] : [];
+      });
+      const geladen = await Promise.all(
+        fuerSkorer.map(async ({ sp, seite }) => {
+          const e = await ereignisse.hole({
+            spiel: sp.id,
+            heim: sp.heim,
+            gast: sp.gast,
+            resultat: sp.resultat,
+          });
+          return e.daten ? { ereignisse: e.daten, seite } : null;
+        }),
+      );
+      const ok = geladen.filter((x) => x !== null);
+      ausgewertet = ok.length;
+      top = skorer(ok)
+        .filter((x) => x.punkte > 0)
+        .slice(0, 8);
+    } else {
+      fehler = 'Gegner nicht in der Rangliste gefunden';
+    }
+
+    return {
+      spiel,
+      gegner,
+      rang: zeile,
+      ranglistenGroesse: r.daten?.zeilen.length ?? null,
+      form: form.slice(0, 10),
+      bilanz: bilanz(form),
+      formLetzte5: bilanz(form.slice(0, 5)),
+      direkt,
+      direktBilanz: bilanz(direkt),
+      skorer: top,
+      skorerSpiele: ausgewertet,
+      demo: s.demo,
+      fehler,
+    };
+  }
+
   async function routen(app: FastifyInstance) {
     app.get('/uebersicht', async () => uebersicht());
+    app.get<{ Params: { id: string } }>('/gegner/:id', async (req, rep) => {
+      const g = await gegnerCheck(req.params.id);
+      if (!g) return rep.code(404).send({ fehler: 'Team nicht gefunden' });
+      return g;
+    });
   }
 
   const jobs = [
