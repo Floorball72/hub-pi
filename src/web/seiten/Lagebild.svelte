@@ -596,12 +596,14 @@
   .lagebild {
     position: relative;
     height: calc(100vh - 120px);
+    height: calc(100dvh - 120px);
     border-radius: 14px;
     overflow: hidden;
     background: #05080c;
   }
   .lagebild.vollbild {
     height: calc(100vh - 24px);
+    height: calc(100dvh - 24px);
   }
   .lb-karte {
     position: absolute;

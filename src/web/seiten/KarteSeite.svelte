@@ -3,5 +3,5 @@
 </script>
 
 <div class="karten-seite">
-  <Karte hoehe="calc(100vh - 150px)" />
+  <Karte hoehe="calc(100dvh - 150px)" />
 </div>

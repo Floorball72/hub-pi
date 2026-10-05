@@ -221,6 +221,7 @@
     display: grid;
     grid-template-columns: 240px 1fr;
     min-height: 100vh;
+    min-height: 100dvh;
   }
   .rahmen.kiosk {
     grid-template-columns: 1fr;
@@ -229,6 +230,7 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
     overflow-y: auto;
     border-right: 1px solid var(--rand);
     background: #0a0f15cc;

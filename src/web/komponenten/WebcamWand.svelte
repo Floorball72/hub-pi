@@ -425,6 +425,7 @@
   figure img {
     max-width: 100%;
     max-height: calc(100vh - 110px);
+    max-height: calc(100dvh - 110px);
     object-fit: contain;
     border-radius: 8px;
     background: #0b1016;
