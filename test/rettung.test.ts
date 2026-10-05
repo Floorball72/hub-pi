@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { abfahrtenParsen } from '../src/server/modules/mobilitaet/oev.ts';
 import {
   type AdsbFlugzeug,
+  durchgeflogen,
   FlugErkennung,
   lueckenSchliessen,
   flugStatistik,
@@ -97,12 +98,11 @@ describe('Helikopter', () => {
       b.aktualisieren([p(0, false, 100, 3000)], 0).map((x) => x.art),
       ['erfasst'],
     );
-    assert.deepEqual(b.aktualisieren([], 60000), []);
-    // Nach drei Minuten noch offen, erst nach der Wartezeit verschwunden
-    assert.deepEqual(b.aktualisieren([], 240000), []);
+    // Nach 20 Sekunden noch offen, nach 30 Sekunden tief verschwunden
+    assert.deepEqual(b.aktualisieren([], 20000), []);
     assert.equal(b.laufende().length, 1);
     assert.deepEqual(
-      b.aktualisieren([], 13 * 60000).map((x) => x.art),
+      b.aktualisieren([], 40000).map((x) => x.art),
       ['signalverlust'],
     );
   });
@@ -123,16 +123,14 @@ describe('Helikopter', () => {
     });
     const e = new FlugErkennung();
     e.aktualisieren([p(0, 47.4, 9.3)], 0);
-    // Vier Minuten weg, am gleichen Ort wieder da: Störung
-    assert.deepEqual(e.aktualisieren([p(240000, 47.41, 9.3)], 240000), []);
-    // Acht Minuten weg, 20 km weiter: durchgeflogen
-    assert.deepEqual(e.aktualisieren([p(720000, 47.59, 9.3)], 720000), []);
-    assert.equal(e.laufende()[0].spur.length, 3);
-    // Zehn Minuten weg, am gleichen Ort wieder in der Luft: war wohl am Boden
-    assert.deepEqual(
-      e.aktualisieren([p(1320000, 47.59, 9.31)], 1320000).map((x) => x.art),
-      ['signalverlust', 'erfasst'],
-    );
+    // 25 Sekunden weg, dann wieder da: gleicher Flug, kein Ereignis
+    assert.deepEqual(e.aktualisieren([], 25000), []);
+    assert.deepEqual(e.aktualisieren([p(45000, 47.41, 9.3)], 45000), []);
+    assert.equal(e.laufende()[0].spur.length, 2);
+    assert.ok(durchgeflogen(47.4, 9.3, 47.41, 9.3, 120000));
+    assert.ok(durchgeflogen(47.4, 9.3, 47.59, 9.3, 480000));
+    assert.ok(!durchgeflogen(47.4, 9.3, 47.41, 9.3, 600000));
+    assert.ok(!durchgeflogen(47.4, 9.3, 47.9, 9.3, 3600000));
   });
   it('setzt durch kurze Lücken geteilte Flüge in der Chronik wieder zusammen', () => {
     const f = (

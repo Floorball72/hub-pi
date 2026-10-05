@@ -216,10 +216,12 @@ export interface FlugEreignis {
 
 const IN_DER_LUFT_KN = 25;
 const VERLUST_MS = 3 * 60000;
-/** So lange bleibt ein Flug offen, wenn das Signal weg ist: oft nur eine kurze Lücke im Empfang */
-export const WARTEN_MS = 12 * 60000;
+/** So lange bleibt ein Flug offen, wenn das Signal weg ist, danach gilt er als tief verschwunden */
+export const WARTEN_MS = 30000;
 /** Kürzere Lücken gelten immer als Störung, nie als Landung */
-const LUECKE_MS = 5 * 60000;
+const LUECKE_MS = 3 * 60000;
+/** Bis zu dieser Lücke kann ein Flug wieder zusammengesetzt werden, wenn der Heli durchgeflogen ist */
+const ZUSAMMEN_MS = 12 * 60000;
 
 /**
  * Taucht ein Heli nach einer Lücke in der Luft wieder auf: Ist er in der Zwischenzeit weit genug
@@ -233,7 +235,7 @@ export function durchgeflogen(
   lueckeMs: number,
 ): boolean {
   if (lueckeMs <= LUECKE_MS) return true;
-  if (lueckeMs > WARTEN_MS) return false;
+  if (lueckeMs > ZUSAMMEN_MS) return false;
   return distanzKm(vonLat, vonLon, nachLat, nachLon) / (lueckeMs / 3600000) >= 60;
 }
 
