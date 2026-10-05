@@ -11,6 +11,8 @@
   import { relativ } from '../lib/format.ts';
   import { type AbgestellterHeli, HeliAnimation, type LiveHeliPos, liveAnim } from '../lib/heliAnimation.ts';
   import { navigieren } from '../lib/router.svelte.ts';
+  import { lesen, schreiben } from '../lib/speicher.ts';
+  import { LEERES_LAYOUT, ordnen, type StartLayout, umschalten, verschieben } from '../lib/startLayout.ts';
 
   interface LiveHeli extends LiveHeliPos {
     ort: string | null;
@@ -91,8 +93,26 @@
       : [],
   );
 
+  // Anpassbare Startseite, pro Gerät
+  let layout = $state<StartLayout>(lesen('start.layout', LEERES_LAYOUT));
+  let anpassen = $state(false);
+  function layoutSetzen(neu: StartLayout) {
+    layout = neu;
+    schreiben('start.layout', neu);
+  }
+  const versteckt = (id: string) => layout.versteckt.includes(id);
+  const geordnet = $derived(ordnen(daten?.module ?? [], layout.reihenfolge));
+  function schieben(id: string, richtung: -1 | 1) {
+    layoutSetzen({ ...layout, reihenfolge: verschieben(geordnet.map((m) => m.id), id, richtung) });
+  }
+  function zeigen(id: string) {
+    layoutSetzen({ ...layout, versteckt: umschalten(layout.versteckt, id) });
+  }
+
   const sichtbareModule = $derived(
-    (daten?.module ?? []).filter((m) => {
+    geordnet.filter((m) => {
+      if (anpassen) return true;
+      if (versteckt(m.id)) return false;
       if (!ansicht.fokus) return true;
       const s = daten?.kacheln[m.id]?.status;
       return s === 'warnung' || s === 'ausfall';
@@ -126,7 +146,7 @@
     </div>
   </section>
 
-  {#if rettungAktiv && !ansicht.fokus}
+  {#if rettungAktiv && !ansicht.fokus && !versteckt('abschnitt.rettung')}
     <section class="rettung-jetzt">
       <div class="panel rj-liste">
         <div class="zeile-zwischen">
@@ -151,7 +171,7 @@
     </section>
   {/if}
 
-  {#if briefing?.teile.length}
+  {#if briefing?.teile.length && !versteckt('abschnitt.briefing')}
     <section class="briefing">
       <h2><Icon name={abend ? 'mond' : 'sonne'} groesse={18} /> {abend ? 'Tagesrückblick' : 'Briefing'}</h2>
       <div class="briefing-raster">
@@ -178,10 +198,39 @@
   <section>
     {#if ansicht.fokus}
       <div class="zeile-zwischen"><h2>Fokus: nur was Aufmerksamkeit braucht</h2></div>
+    {:else if !ansicht.kiosk && daten}
+      <div class="zeile-zwischen anpassen-kopf">
+        <span class="sehr-klein gedaempft">{anpassen ? 'Reihenfolge mit den Pfeilen, Auge blendet aus. Gilt nur auf diesem Gerät.' : ''}</span>
+        <span class="zeile">
+          {#if anpassen && (layout.reihenfolge.length || layout.versteckt.length)}
+            <button class="klein" onclick={() => layoutSetzen(LEERES_LAYOUT)}>Zurücksetzen</button>
+          {/if}
+          <button class="klein" class:primaer={anpassen} onclick={() => (anpassen = !anpassen)}>{anpassen ? 'Fertig' : 'Startseite anpassen'}</button>
+        </span>
+      </div>
+      {#if anpassen}
+        <div class="zeile abschnitte">
+          {#if rettungAktiv}
+            <label class="zeile klein"><input type="checkbox" checked={!versteckt('abschnitt.rettung')} onchange={() => zeigen('abschnitt.rettung')} /> Rettung jetzt</label>
+          {/if}
+          <label class="zeile klein"><input type="checkbox" checked={!versteckt('abschnitt.briefing')} onchange={() => zeigen('abschnitt.briefing')} /> Briefing und Tagesrückblick</label>
+        </div>
+      {/if}
     {/if}
     <div class="raster kacheln">
-      {#each sichtbareModule as m (m.id)}
-        <KachelAnsicht modul={m} kachel={daten?.kacheln[m.id]} />
+      {#each sichtbareModule as m, i (m.id)}
+        {#if anpassen}
+          <div class="kachel-huelle" class:aus={versteckt(m.id)}>
+            <KachelAnsicht modul={m} kachel={daten?.kacheln[m.id]} />
+            <div class="kachel-steuer">
+              <button class="klein" aria-label="{m.name} nach vorne" disabled={i === 0} onclick={() => schieben(m.id, -1)}>‹</button>
+              <button class="klein" aria-label={versteckt(m.id) ? `${m.name} einblenden` : `${m.name} ausblenden`} onclick={() => zeigen(m.id)}>{versteckt(m.id) ? 'Einblenden' : 'Ausblenden'}</button>
+              <button class="klein" aria-label="{m.name} nach hinten" disabled={i === sichtbareModule.length - 1} onclick={() => schieben(m.id, 1)}>›</button>
+            </div>
+          </div>
+        {:else}
+          <KachelAnsicht modul={m} kachel={daten?.kacheln[m.id]} />
+        {/if}
       {:else}
         {#if daten}<p class="leer">{ansicht.fokus ? 'Nichts zu tun. Alles läuft.' : 'Keine Module aktiv.'}</p>{/if}
       {/each}
@@ -190,6 +239,44 @@
 </div>
 
 <style>
+  .anpassen-kopf {
+    margin-bottom: 8px;
+    min-height: 32px;
+  }
+  .abschnitte {
+    gap: 16px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .abschnitte input {
+    width: auto;
+  }
+  .kachel-huelle {
+    position: relative;
+    display: grid;
+    border-radius: 14px;
+    outline: 1px dashed var(--rand-hell);
+    outline-offset: 3px;
+  }
+  .kachel-huelle > :global(.kachel) {
+    pointer-events: none;
+  }
+  .kachel-huelle.aus > :global(.kachel) {
+    opacity: 0.35;
+    filter: grayscale(1);
+  }
+  .kachel-steuer {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 4px;
+  }
+  .kachel-steuer button {
+    min-height: 0;
+    padding: 4px 10px;
+    background: var(--flaeche-3);
+  }
   .rettung-jetzt {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
