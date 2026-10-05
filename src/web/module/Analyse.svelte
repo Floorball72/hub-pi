@@ -24,8 +24,23 @@
       unterzahl: { chancen: number; gegentore: number; quote: number | null };
       strafminuten: { eigen: number; gegner: number };
     };
+    bloecke: { bloecke: BlockWerte[]; aufstellungen: BlockWerte[]; ohneFeld: number };
     spiele: number;
     ereignisse: Ereignis[];
+  }
+
+  interface BlockWerte {
+    block: number | null;
+    name: string;
+    spieler: string[];
+    ereignisse: number;
+    schuesseFuer: number;
+    schuesseGegen: number;
+    anteil: number | null;
+    toreFuer: number;
+    toreGegen: number;
+    plusMinus: number;
+    effizienz: number | null;
   }
 
   const TYPEN = [
@@ -380,6 +395,27 @@
   }
 </script>
 
+{#snippet blockTabelle(liste: BlockWerte[], ersteSpalte: string)}
+  <table>
+    <thead><tr><th>{ersteSpalte}</th><th>Schüsse</th><th>Anteil</th><th>Tore</th><th>+/−</th><th>Effizienz</th></tr></thead>
+    <tbody>
+      {#each liste as b (b.name)}
+        <tr>
+          <td>
+            <div>{b.name}</div>
+            {#if b.block != null && b.spieler.length}<div class="sehr-klein gedaempft">{b.spieler.join(', ')}</div>{/if}
+          </td>
+          <td class="zahl">{b.schuesseFuer}:{b.schuesseGegen}</td>
+          <td class="zahl">{pct(b.anteil)}</td>
+          <td class="zahl">{b.toreFuer}:{b.toreGegen}</td>
+          <td class="zahl" class:plus={b.plusMinus > 0} class:minus={b.plusMinus < 0}><strong>{b.plusMinus > 0 ? `+${b.plusMinus}` : b.plusMinus}</strong></td>
+          <td class="zahl">{pct(b.effizienz)}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/snippet}
+
 {#snippet bereichWahl()}
   <select bind:value={bereich} aria-label="Spiele">
     <option value="alle">Alle Spiele</option>
@@ -651,6 +687,21 @@
     {/if}
   {:else if tab === 'Spieler'}
     <div class="zeile filter">{@render bereichWahl()}</div>
+    {#if a?.bloecke.bloecke.length}
+      <h3>Blöcke</h3>
+      <div class="panel tabelle-scroll">
+        {@render blockTabelle(a.bloecke.bloecke, 'Block')}
+        <p class="sehr-klein gedaempft">
+          Ein Abschluss zählt für den Block, aus dem die Mehrheit der Spieler auf dem Feld kommt. Schüsse und Tore als für:gegen, Plus Minus ohne eigene Überzahl und Penaltys.
+          {#if a.bloecke.ohneFeld}{a.bloecke.ohneFeld} Abschlüsse ohne erfasste Spieler auf dem Feld sind nicht dabei.{/if}
+        </p>
+      </div>
+      {#if a.bloecke.aufstellungen.length}
+        <h3>Häufigste Aufstellungen</h3>
+        <div class="panel tabelle-scroll">{@render blockTabelle(a.bloecke.aufstellungen, 'Spieler auf dem Feld')}</div>
+      {/if}
+      <h3>Spieler</h3>
+    {/if}
     <div class="panel tabelle-scroll">
       {#if a?.spieler.length}
         <table>
