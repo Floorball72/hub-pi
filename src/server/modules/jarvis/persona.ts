@@ -56,7 +56,7 @@ export function systemBloecke(opt: {
     { type: 'text', text: `${BASIS}\n\n${stil}`, cache_control: { type: 'ephemeral' } },
     {
       type: 'text',
-      text: `Jetzt: ${zeit} (Europe/Zurich).\n${VOLLMACHT_TEXT[opt.vollmacht]}\n${opt.web ? 'Webzugriff ist an.' : 'Webzugriff ist aus.'}\n\nDein Gedächtnis über Jerome (die wichtigsten Erinnerungen, in eckigen Klammern die id):\n${opt.profil}`,
+      text: `Jetzt: ${zeit} (Europe/Zurich).\n${VOLLMACHT_TEXT[opt.vollmacht]}\n${opt.web ? 'Webzugriff ist an: Du kannst Webseiten lesen und mit der Websuche aktuelle Infos finden. Nenne bei Websuche die Quelle.' : 'Webzugriff ist aus.'}\n\nDein Gedächtnis über Jerome (die wichtigsten Erinnerungen, in eckigen Klammern die id):\n${opt.profil}`,
     },
   ];
 }

@@ -561,7 +561,7 @@
           </label>
           <label class="schalter">
             <input type="checkbox" checked={einst.web} onchange={(e) => speichern({ web: e.currentTarget.checked })} />
-            Jarvis darf Webseiten lesen
+            Jarvis darf Webseiten lesen und im Web suchen
           </label>
           <label class="schalter">
             <input type="checkbox" checked={einst.morgenpush} onchange={(e) => speichern({ morgenpush: e.currentTarget.checked })} />

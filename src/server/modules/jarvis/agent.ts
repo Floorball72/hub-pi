@@ -76,6 +76,11 @@ export function verlaufBereinigen(roh: Nachricht[]): Nachricht[] {
   return n;
 }
 
+/** Blöcke der serverseitigen Websuche enthalten verschlüsselte Rohdaten und werden nicht gespeichert. */
+function nurLokal(bloecke: Block[]): Block[] {
+  return bloecke.filter((b) => b.type !== 'server_tool_use' && b.type !== 'web_search_tool_result');
+}
+
 export class Agent {
   private ctx: Kontext;
   private gedaechtnis: Gedaechtnis;
@@ -209,6 +214,7 @@ export class Agent {
           nachrichten: verlauf,
           werkzeuge: defs,
           maxTokens: 2048,
+          websuche: s.web,
           signal: opt.signal,
         })) {
           if (ev.art === 'text') yield { art: 'text', text: schwaerzen(ev.text, geheim) };
@@ -226,8 +232,14 @@ export class Agent {
         const aufrufe = bloecke.filter(
           (b): b is Extract<Block, { type: 'tool_use' }> => b.type === 'tool_use',
         );
+        if (grund === 'pause_turn') {
+          // Die Websuche der API braucht mehr Zeit: Antwort unverändert fortsetzen lassen
+          verlauf.push({ role: 'assistant', content: bloecke });
+          continue;
+        }
         if (grund !== 'tool_use' || !aufrufe.length) {
-          if (bloecke.length) await this.speichern(gespraechId, 'assistant', bloecke);
+          const bleibt = nurLokal(bloecke);
+          if (bleibt.length) await this.speichern(gespraechId, 'assistant', bleibt);
           if (grund === 'max_tokens') yield { art: 'text', text: ' ...' };
           break;
         }
@@ -267,7 +279,7 @@ export class Agent {
           });
         }
         verlauf.push({ role: 'assistant', content: bloecke }, { role: 'user', content: ergebnisse });
-        await this.speichern(gespraechId, 'assistant', bloecke);
+        await this.speichern(gespraechId, 'assistant', nurLokal(bloecke));
         await this.speichern(gespraechId, 'user', ergebnisse);
         if (runde === MAX_RUNDEN - 1)
           yield { art: 'text', text: '\n(Abgebrochen nach zu vielen Schritten.)' };

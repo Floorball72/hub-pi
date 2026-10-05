@@ -4,7 +4,10 @@
 export type Block =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  // Serverseitige Websuche der Claude API: wird nur im laufenden Gespräch weitergereicht, nicht gespeichert
+  | { type: 'server_tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'web_search_tool_result'; tool_use_id: string; content: unknown };
 
 export interface Nachricht {
   role: 'user' | 'assistant';
@@ -29,6 +32,7 @@ export interface ModellAnfrage {
   nachrichten: Nachricht[];
   werkzeuge: WerkzeugDef[];
   maxTokens: number;
+  websuche?: boolean;
   signal?: AbortSignal;
 }
 
@@ -106,7 +110,13 @@ export function claudeModell(apiKey: () => string): ModellFn {
           max_tokens: a.maxTokens,
           system: a.system,
           messages: a.nachrichten,
-          tools: a.werkzeuge.length ? a.werkzeuge : undefined,
+          tools:
+            a.werkzeuge.length || a.websuche
+              ? [
+                  ...a.werkzeuge,
+                  ...(a.websuche ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] : []),
+                ]
+              : undefined,
           stream: true,
         }),
         signal: a.signal,
@@ -133,10 +143,15 @@ export function claudeModell(apiKey: () => string): ModellFn {
       } else if (ev.name === 'content_block_start') {
         const b = d.content_block;
         if (b?.type === 'text') bloecke[d.index] = { type: 'text', text: '' };
-        else if (b?.type === 'tool_use') {
-          bloecke[d.index] = { type: 'tool_use', id: b.id, name: b.name, input: {} };
+        else if (b?.type === 'tool_use' || b?.type === 'server_tool_use') {
+          bloecke[d.index] = { type: b.type, id: b.id, name: b.name, input: {} };
           jsonTeile.set(d.index, '');
-        }
+        } else if (b?.type === 'web_search_tool_result')
+          bloecke[d.index] = {
+            type: 'web_search_tool_result',
+            tool_use_id: b.tool_use_id,
+            content: b.content,
+          };
       } else if (ev.name === 'content_block_delta') {
         const b = bloecke[d.index];
         if (d.delta?.type === 'text_delta' && b?.type === 'text') {
@@ -147,7 +162,7 @@ export function claudeModell(apiKey: () => string): ModellFn {
         }
       } else if (ev.name === 'content_block_stop') {
         const b = bloecke[d.index];
-        if (b?.type === 'tool_use') {
+        if (b?.type === 'tool_use' || b?.type === 'server_tool_use') {
           try {
             b.input = JSON.parse(jsonTeile.get(d.index) || '{}');
           } catch {
