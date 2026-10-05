@@ -250,16 +250,14 @@ export function werkzeugListe(): Werkzeug[] {
         const s = await systemStatus(k.ctx.konfig.datenVerzeichnis);
         return {
           system: s,
-          jobs: k.ctx.kern.scheduler
-            .status()
-            .map((j) => ({
-              id: j.id,
-              name: j.name,
-              laeuft: j.laeuft,
-              letzterLauf: j.letzterLauf,
-              fehlerInFolge: j.fehlerInFolge,
-              letzterFehler: j.letzterFehler,
-            })),
+          jobs: k.ctx.kern.scheduler.status().map((j) => ({
+            id: j.id,
+            name: j.name,
+            laeuft: j.laeuft,
+            letzterLauf: j.letzterLauf,
+            fehlerInFolge: j.fehlerInFolge,
+            letzterFehler: j.letzterFehler,
+          })),
           quellen: k.ctx.kern.quellen().map((q) => q.status()),
           module: k.ctx.kern.module(),
         };

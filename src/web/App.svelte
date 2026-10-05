@@ -37,6 +37,7 @@
     unihockey: () => import('./module/Unihockey.svelte'),
     analyse: () => import('./module/Analyse.svelte'),
     smarthome: () => import('./module/SmartHome.svelte'),
+    jarvis: () => import('./module/Jarvis.svelte'),
     aufgaben: () => import('./module/Aufgaben.svelte'),
     finanzen: () => import('./module/Finanzen.svelte'),
     inventar: () => import('./module/Inventar.svelte'),

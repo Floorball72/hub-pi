@@ -8,6 +8,7 @@
     rettung: 'M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z',
     drohne: 'M5 5h4M15 5h4M7 5v3M17 5v3M9 10h6v4H9zM7 8l2 2M17 8l-2 2M9 14l-2 3M15 14l2 3',
     unihockey: 'M5 3l9 13a3 3 0 0 0 4 1l2-1M17 7a2 2 0 1 0 0 .01',
+    jarvis: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z',
     aufgaben: 'M9 5h11M9 12h11M9 19h11M3.5 5l1.5 1.5L7.5 4M3.5 12l1.5 1.5 2.5-2.5M4 19h2',
     finanzen: 'M3 7h18v12H3zM3 11h18M7 15h3M16 4H6',
     inventar: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8',

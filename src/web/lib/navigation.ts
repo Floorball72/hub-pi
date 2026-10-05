@@ -15,6 +15,7 @@ export interface NavGruppe {
 }
 
 const GRUPPEN: { id: string; name: string; module: string[] }[] = [
+  { id: 'jarvis', name: 'Jarvis', module: ['jarvis'] },
   { id: 'rettung', name: 'Rettung', module: ['rettung'] },
   {
     id: 'alltag',
