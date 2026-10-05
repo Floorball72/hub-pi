@@ -347,6 +347,7 @@
   }
   .suche {
     flex: 1;
+    min-width: 0;
     max-width: 520px;
     display: flex;
     align-items: center;
@@ -372,6 +373,10 @@
   }
   .suche-text {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .suche-taste {
     font-family: var(--schrift-zahl);

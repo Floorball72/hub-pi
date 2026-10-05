@@ -200,12 +200,12 @@
           <h2><Icon name="rettung" groesse={18} /> Rettung jetzt</h2>
           <span class="zeile sehr-klein"><a href="/lagebild?kiosk=1">Lagebild</a><a href="/modul/rettung">Mehr</a></span>
         </div>
-        <div class="rj-zahl zahl">{inDerLuft.length}<span class="gedaempft klein"> {inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft'}, ganze Schweiz</span></div>
+        <div class="rj-zahl zahl">{inDerLuft.length}<span class="gedaempft klein rj-einheit">{inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft'}, ganze Schweiz</span></div>
         {#if live?.fehler}<div class="hinweis ausfall klein">{live.fehler}</div>{/if}
         {#each inDerLuft.slice(0, 6) as h (h.hex)}
           <a class="zeile-zwischen klein rj-heli" href="/heli?hex={encodeURIComponent(h.hex)}">
             <span class="zeile"><span class="punkt luft" style="background:{heliFarbe(h.organisation)}"></span><span><strong>{h.organisation} {h.kennzeichen ?? h.hex}</strong> <span class="gedaempft">{h.ort ?? 'unterwegs'}</span></span></span>
-            <span class="gedaempft">{h.seit ? `${h.gestartet ? 'Start' : 'seit'} ${relativ(h.seit)}` : h.hoeheFt !== null ? `${h.hoeheFt} ft` : ''}</span>
+            <span class="gedaempft">{h.seit ? (h.gestartet ? `Start ${relativ(h.seit)}` : `seit ${relativ(h.seit).replace(/^vor /, '')}`) : h.hoeheFt !== null ? `${h.hoeheFt} ft` : ''}</span>
           </a>
         {:else}
           <p class="leer">Gerade ist kein Heli aus deiner Liste mit Transponder in der Luft.</p>
@@ -394,6 +394,12 @@
   .rj-zahl {
     font-size: 2rem;
     margin: 4px 0 8px;
+  }
+  .rj-heli > .gedaempft {
+    white-space: nowrap;
+  }
+  .rj-einheit {
+    margin-left: 6px;
   }
   .rj-heli {
     padding: 5px 0;
