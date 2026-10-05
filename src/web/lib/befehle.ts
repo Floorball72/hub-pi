@@ -19,7 +19,7 @@ export interface Befehl {
 export const MODUL_TABS: Record<string, string[]> = {
   abhaengigkeiten: ['Funde', 'Projekte'],
   abrufe: ['Quellen'],
-  analyse: ['Erfassen', 'Auswertung', 'Spieler', 'Spiele'],
+  analyse: ['Erfassen', 'Auswertung', 'Bericht', 'Spieler', 'Spiele'],
   aufgaben: ['Heute', 'Alle', 'Routinen', 'Einkauf'],
   finanzen: ['Übersicht', 'Abos', 'Rechnungen'],
   inventar: ['Übersicht', 'Liste', 'Wartung'],
