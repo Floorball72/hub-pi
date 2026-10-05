@@ -17,7 +17,7 @@ export interface NavGruppe {
 const GRUPPEN: { id: string; name: string; module: string[] }[] = [
   { id: 'rettung', name: 'Rettung', module: ['rettung'] },
   { id: 'alltag', name: 'Alltag', module: ['wetter', 'mobilitaet', 'parken'] },
-  { id: 'sport', name: 'Sport', module: ['swissunihockey', 'unihockey', 'teams'] },
+  { id: 'sport', name: 'Sport', module: ['swissunihockey', 'unihockey', 'analyse', 'teams'] },
   { id: 'drohne', name: 'Drohne', module: ['drohne'] },
   { id: 'hub', name: 'Hub', module: ['auffaelligkeiten', 'abrufe', 'selbstheilung', 'updates'] },
   // Selten gebraucht, standardmässig zugeklappt

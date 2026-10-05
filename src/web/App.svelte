@@ -35,6 +35,7 @@
     rettung: () => import('./module/Rettung.svelte'),
     drohne: () => import('./module/Drohne.svelte'),
     unihockey: () => import('./module/Unihockey.svelte'),
+    analyse: () => import('./module/Analyse.svelte'),
     swissunihockey: () => import('./module/SwissUnihockey.svelte'),
     events: () => import('./module/Events.svelte'),
     content: () => import('./module/Content.svelte'),

@@ -1,5 +1,6 @@
 // Manifest: alle Module des Hubs. Der Kern lädt sie in dieser Liste.
 import type { ModulDef } from '../kern/modul.ts';
+import { analyse } from './analyse/index.ts';
 import { auffaelligkeiten } from './auffaelligkeiten/index.ts';
 import { abrufe } from './abrufe/index.ts';
 import { abhaengigkeiten } from './abhaengigkeiten/index.ts';
@@ -45,5 +46,6 @@ export const MODULE: ModulDef[] = [
   updates,
   swissunihockey,
   unihockey,
+  analyse,
   mobilitaet,
 ];

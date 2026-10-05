@@ -1,0 +1,229 @@
+// Modul Unihockey Analyse: Abschlüsse vergangener Spiele selbst erfassen (Ort, Spieler, Ausgang)
+// und auswerten: Trefferbilder, Zonen, Drittel, Werte pro Spieler und Saison.
+import type { FastifyInstance } from 'fastify';
+import { tabelle } from '../../daten/schema.ts';
+import type { Kachel } from '../../geteilt/typen.ts';
+import type { Kontext, ModulDef } from '../../kern/modul.ts';
+import { lokalDatum, tageZurueck } from '../../kern/zeit.ts';
+import { auswerten, type Ereignis, resultat, type Spieler, SEITEN, TYPEN } from './auswertung.ts';
+import { DEMO_SPIELE, DEMO_SPIELER, demoEreignisse } from './demo.ts';
+
+export const ANALYSE_SPIELE = tabelle({
+  name: 'analyse_spiele',
+  modul: 'analyse',
+  label: 'Analyse Spiele',
+  bearbeitbar: true,
+  anzeige: 'gegner',
+  suche: ['gegner', 'notiz'],
+  spalten: [
+    { name: 'datum', typ: 'datum', label: 'Datum', pflicht: true },
+    { name: 'gegner', typ: 'text', label: 'Gegner', pflicht: true },
+    { name: 'team', typ: 'text', label: 'Eigenes Team', standard: 'UHC Jonschwil Vipers' },
+    {
+      name: 'ort',
+      typ: 'text',
+      label: 'Heim oder auswärts',
+      optionen: ['heim', 'auswaerts'],
+      standard: 'heim',
+    },
+    { name: 'saison', typ: 'text', label: 'Saison (z.B. 2026/27)' },
+    { name: 'notiz', typ: 'text', label: 'Notiz', lang: true },
+  ],
+  indizes: [['datum']],
+});
+
+export const ANALYSE_SPIELER = tabelle({
+  name: 'analyse_spieler',
+  modul: 'analyse',
+  label: 'Analyse Spieler',
+  bearbeitbar: true,
+  anzeige: 'name',
+  spalten: [
+    { name: 'nummer', typ: 'int', label: 'Nummer', min: 0, max: 99 },
+    { name: 'name', typ: 'text', label: 'Name oder Kürzel', pflicht: true },
+    {
+      name: 'position',
+      typ: 'text',
+      label: 'Position',
+      optionen: ['Sturm', 'Center', 'Verteidigung', 'Torhüter'],
+    },
+    { name: 'aktiv', typ: 'bool', label: 'Im Kader', standard: true },
+  ],
+});
+
+export const ANALYSE_EREIGNISSE = tabelle({
+  name: 'analyse_ereignisse',
+  modul: 'analyse',
+  label: 'Analyse Abschlüsse',
+  bearbeitbar: true,
+  spalten: [
+    { name: 'spiel_id', typ: 'text', label: 'Spiel', pflicht: true, verweis: 'analyse_spiele' },
+    { name: 'typ', typ: 'text', label: 'Ausgang', pflicht: true, optionen: [...TYPEN] },
+    { name: 'team', typ: 'text', label: 'Team', pflicht: true, optionen: [...SEITEN], standard: 'eigen' },
+    { name: 'x', typ: 'real', label: 'Position quer', pflicht: true, min: 0, max: 1 },
+    { name: 'y', typ: 'real', label: 'Position Tiefe', pflicht: true, min: 0, max: 1 },
+    { name: 'spieler_id', typ: 'text', label: 'Schütze', verweis: 'analyse_spieler' },
+    { name: 'assist_id', typ: 'text', label: 'Assist', verweis: 'analyse_spieler' },
+    { name: 'drittel', typ: 'int', label: 'Drittel (4 = Verlängerung)', min: 1, max: 4 },
+    { name: 'minute', typ: 'int', label: 'Minute', min: 0, max: 80 },
+    {
+      name: 'situation',
+      typ: 'text',
+      label: 'Situation',
+      optionen: ['gleich', 'ueberzahl', 'unterzahl', 'penalty'],
+      standard: 'gleich',
+    },
+  ],
+  indizes: [['spiel_id']],
+});
+
+interface Spiel {
+  id: string;
+  datum: string;
+  gegner: string;
+  team: string | null;
+  ort: string | null;
+  saison: string | null;
+  notiz: string | null;
+}
+
+export const analyse: ModulDef = {
+  id: 'analyse',
+  name: 'Unihockey Analyse',
+  beschreibung: 'Abschlüsse vergangener Spiele erfassen und auswerten: Trefferbild, Zonen, Spieler',
+  symbol: 'analyse',
+  reihenfolge: 52,
+  tabellen: [ANALYSE_SPIELE, ANALYSE_SPIELER, ANALYSE_EREIGNISSE],
+  erstellen: (ctx) => analyseLaufzeit(ctx),
+};
+
+function analyseLaufzeit(ctx: Kontext) {
+  const { daten } = ctx;
+  let bereit: Promise<void> | null = null;
+
+  // Im Demo Modus einmalig Beispielspiele anlegen, damit die Auswertung etwas zeigt
+  async function vorbereiten() {
+    bereit ??= (async () => {
+      if (!ctx.konfig.demo || ctx.einstellungen.hole('analyse.demo_angelegt', false)) return;
+      if ((await daten.anzahl('analyse_spiele')) > 0) return;
+      const spieler = await daten.einfuegen<{ id: string }>('analyse_spieler', DEMO_SPIELER);
+      const ids = spieler.map((s) => s.id);
+      let start = 7;
+      for (const s of DEMO_SPIELE) {
+        const [spiel] = await daten.einfuegen<{ id: string }>('analyse_spiele', [
+          {
+            datum: lokalDatum(tageZurueck(ctx.jetzt(), s.tage)),
+            gegner: s.gegner,
+            ort: s.ort,
+            team: 'UHC Jonschwil Vipers',
+            saison: '2026/27',
+          },
+        ]);
+        await daten.einfuegen('analyse_ereignisse', demoEreignisse(spiel.id, ids, start++));
+      }
+      await ctx.einstellungen.setze('analyse.demo_angelegt', true);
+    })();
+    await bereit;
+  }
+
+  const spieleLaden = () => daten.liste<Spiel>('analyse_spiele', { sortierung: '-datum', limit: 500 });
+  const spielerLaden = () =>
+    daten.liste<Spieler & { aktiv: boolean }>('analyse_spieler', { sortierung: 'nummer', limit: 200 });
+  const ereignisseLaden = (filter: Record<string, unknown> = {}) =>
+    daten.liste<Ereignis>('analyse_ereignisse', { filter, sortierung: 'erstellt', limit: 20000 });
+
+  async function uebersicht() {
+    await vorbereiten();
+    const [spiele, spieler, ereignisse] = await Promise.all([
+      spieleLaden(),
+      spielerLaden(),
+      ereignisseLaden(),
+    ]);
+    const proSpiel = new Map<string, Ereignis[]>();
+    for (const e of ereignisse) proSpiel.set(e.spiel_id, [...(proSpiel.get(e.spiel_id) ?? []), e]);
+    return {
+      spiele: spiele.map((s) => {
+        const liste = proSpiel.get(s.id) ?? [];
+        return {
+          ...s,
+          resultat: resultat(liste),
+          schuesse: {
+            eigen: liste.filter((e) => e.team === 'eigen').length,
+            gegner: liste.filter((e) => e.team === 'gegner').length,
+          },
+        };
+      }),
+      spieler,
+      saisons: [...new Set(spiele.map((s) => s.saison).filter(Boolean))].sort().reverse(),
+    };
+  }
+
+  async function routen(app: FastifyInstance) {
+    app.get('/uebersicht', async () => uebersicht());
+
+    // Auswertung für ein Spiel, eine Saison oder alles. Optional nur ein Spieler.
+    app.get<{ Querystring: { spiel?: string; saison?: string; spieler?: string } }>(
+      '/auswertung',
+      async (req) => {
+        await vorbereiten();
+        const { spiel, saison, spieler: nurSpieler } = req.query;
+        const [spiele, spieler] = await Promise.all([spieleLaden(), spielerLaden()]);
+        let ids: string[] | null = null;
+        if (spiel) ids = [spiel];
+        else if (saison) ids = spiele.filter((s) => s.saison === saison).map((s) => s.id);
+        let liste = await ereignisseLaden(ids ? { spiel_id: { in: ids.length ? ids : ['-'] } } : {});
+        const auswertung = auswerten(liste, spieler);
+        if (nurSpieler) liste = liste.filter((e) => e.team === 'eigen' && e.spieler_id === nurSpieler);
+        return {
+          ...auswertung,
+          spiele: ids ? ids.length : spiele.length,
+          ereignisse: liste.map((e) => ({
+            id: e.id,
+            typ: e.typ,
+            team: e.team,
+            x: e.x,
+            y: e.y,
+            spieler_id: e.spieler_id,
+          })),
+        };
+      },
+    );
+
+    // Alles für die Erfassung eines Spiels
+    app.get<{ Params: { id: string } }>('/spiel/:id', async (req, reply) => {
+      const spiel = await daten.hole<Spiel>('analyse_spiele', req.params.id);
+      if (!spiel) return reply.code(404).send({ fehler: 'Spiel nicht gefunden' });
+      const ereignisse = await ereignisseLaden({ spiel_id: spiel.id });
+      return { spiel, ereignisse, resultat: resultat(ereignisse) };
+    });
+  }
+
+  async function kachel(): Promise<Kachel> {
+    const u = await uebersicht();
+    const letztes = u.spiele.find((s) => s.schuesse.eigen + s.schuesse.gegner > 0);
+    const saison = u.saisons[0];
+    const a = saison ? auswerten(await saisonEreignisse(u.spiele, saison), u.spieler) : null;
+    const top = a?.spieler[0];
+    return {
+      status: 'neutral',
+      titel: 'Analyse',
+      wert: letztes ? `${letztes.resultat.eigen}:${letztes.resultat.gegner}` : 'kein Spiel',
+      unter: letztes ? `gegen ${letztes.gegner}` : 'Noch nichts erfasst',
+      zeilen: [
+        ...(a?.eigen.effizienz != null
+          ? [{ text: `Effizienz ${saison}`, wert: `${a.eigen.effizienz} %` }]
+          : []),
+        ...(top ? [{ text: 'Topskorer', wert: `${top.spieler.name} ${top.tore}+${top.assists}` }] : []),
+        { text: 'Erfasste Spiele', wert: String(u.spiele.length) },
+      ],
+      demo: ctx.konfig.demo,
+    };
+  }
+
+  async function saisonEreignisse(spiele: Spiel[], saison: string) {
+    const ids = spiele.filter((s) => s.saison === saison).map((s) => s.id);
+    return ids.length ? ereignisseLaden({ spiel_id: { in: ids } }) : [];
+  }
+
+  return { routen, kachel };
+}

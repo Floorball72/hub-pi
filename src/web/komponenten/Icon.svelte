@@ -8,6 +8,7 @@
     rettung: 'M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z',
     drohne: 'M5 5h4M15 5h4M7 5v3M17 5v3M9 10h6v4H9zM7 8l2 2M17 8l-2 2M9 14l-2 3M15 14l2 3',
     unihockey: 'M5 3l9 13a3 3 0 0 0 4 1l2-1M17 7a2 2 0 1 0 0 .01',
+    analyse: 'M4 4h16v16H4zM12 4v16M8 12a1 1 0 1 0 0 .01M15 8l2 2M17 8l-2 2M15 15l2 2M17 15l-2 2',
     swissunihockey: 'M4 5h16v14H4zM8 3v4M16 3v4M4 10h16M8 14l2 2 4-4',
     wetter: 'M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 11a3.5 3.5 0 0 0 1 7z',
     karte: 'M9 4l6 2 5-2v14l-5 2-6-2-5 2V6zM9 4v14M15 6v14',
