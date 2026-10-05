@@ -2,12 +2,20 @@
 export const ort = $state({ pfad: location.pathname, suche: location.search });
 
 export function navigieren(ziel: string, ersetzen = false) {
-  if (ziel === location.pathname + location.search) return;
+  if (ziel === location.pathname + location.search + location.hash) return;
+  const gleicheSeite = ziel.split('#')[0] === location.pathname + location.search;
   if (ersetzen) history.replaceState(null, '', ziel);
   else history.pushState(null, '', ziel);
   ort.pfad = location.pathname;
   ort.suche = location.search;
-  window.scrollTo(0, 0);
+  // Tab Links (#tab=...) melden, pushState löst kein hashchange aus
+  if (ziel.includes('#')) window.dispatchEvent(new HashChangeEvent('hashchange'));
+  if (!gleicheSeite) window.scrollTo(0, 0);
+}
+
+/** Tab aus dem Hash lesen, z.B. #tab=Chronik */
+export function hashTab(): string | null {
+  return new URLSearchParams(location.hash.slice(1)).get('tab');
 }
 
 window.addEventListener('popstate', () => {

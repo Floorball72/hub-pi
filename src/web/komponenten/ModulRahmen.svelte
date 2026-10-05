@@ -3,6 +3,7 @@
   import type { ModulInfo, QuellenStatusInfo } from '../../server/geteilt/typen.ts';
   import { api, fehlerText } from '../lib/api.ts';
   import { bestaetigen } from '../lib/bestaetigen.svelte.ts';
+  import { hashTab } from '../lib/router.svelte.ts';
   import { melden } from '../lib/meldung.svelte.ts';
   import Icon from './Icon.svelte';
   import QuellenListe from './QuellenListe.svelte';
@@ -25,7 +26,24 @@
   $effect(() => {
     void modulId;
     laden().catch(() => {});
-    if (!tab && tabs.length) tab = tabs[0];
+    const h = hashTab();
+    if (h && tabs.includes(h)) tab = h;
+    else if (!tab && tabs.length) tab = tabs[0];
+  });
+
+  // Tab im Hash halten, damit Neuladen, Zurück und geteilte Links den Tab behalten
+  $effect(() => {
+    if (!tabs.length || !tab) return;
+    const soll = tab === tabs[0] ? '' : `#tab=${encodeURIComponent(tab)}`;
+    if (location.hash !== soll && (soll || hashTab())) history.replaceState(null, '', location.pathname + location.search + soll);
+  });
+  $effect(() => {
+    const neu = () => {
+      const h = hashTab();
+      if (h && tabs.includes(h)) tab = h;
+    };
+    window.addEventListener('hashchange', neu);
+    return () => window.removeEventListener('hashchange', neu);
   });
 
   const ausfaelle = $derived(quellen.filter((q) => q.zustand === 'fehler').length);
