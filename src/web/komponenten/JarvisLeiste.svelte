@@ -81,33 +81,45 @@
 <div class="leiste">
   {#if offen}
     <div class="karte" role="dialog" aria-label="Jarvis">
+      <div class="titel">
+        <span class="mini" class:denkt={laeuft} aria-hidden="true"></span>
+        <strong>Jarvis</strong>
+        <a class="mehr" href="/modul/jarvis" onclick={() => (offen = false)}>Ganze Seite</a>
+      </div>
       {#if schritte.length || antwort || laeuft}
         <div class="antwort" aria-live="polite">
-          {#each schritte as s (s.id)}
-            <div class="schritt" class:fehler={s.ok === false}>
-              <span class="punkt" class:wartet={s.ok === undefined || !!s.bestaetigung}></span>{s.beschreibung}
-              {#if s.entschieden}<em>{s.entschieden}</em>{/if}
-              {#if s.bestaetigung}
-                <button onclick={() => entscheiden(s, true)}>Ausführen</button>
-                <button onclick={() => entscheiden(s, false)}>Verwerfen</button>
-              {/if}
+          {#if schritte.length}
+            <div class="schritte">
+              {#each schritte as s (s.id)}
+                <div class="schritt" class:fehler={s.ok === false} class:wartet={s.ok === undefined || !!s.bestaetigung}>
+                  <span class="punkt"></span>{s.beschreibung}
+                  {#if s.entschieden}<em>{s.entschieden}</em>{/if}
+                  {#if s.bestaetigung}
+                    <button class="ja" onclick={() => entscheiden(s, true)}>Ausführen</button>
+                    <button onclick={() => entscheiden(s, false)}>Verwerfen</button>
+                  {/if}
+                </div>
+              {/each}
             </div>
-          {/each}
-          {#if antwort}<p>{antwort}</p>{:else if laeuft && !schritte.length}<p class="gedaempft">Ich überlege …</p>{/if}
+          {/if}
+          {#if antwort}<p>{antwort}</p>{:else if laeuft && !schritte.length}<p class="tippt" aria-label="Jarvis überlegt"><i></i><i></i><i></i></p>{/if}
         </div>
       {/if}
       <form onsubmit={(e) => { e.preventDefault(); senden(); }}>
-        <input bind:this={feld} bind:value={eingabe} placeholder="Frag Jarvis oder gib ihm eine Aufgabe" maxlength="4000" aria-label="Nachricht an Jarvis" disabled={laeuft} />
+        <input bind:this={feld} bind:value={eingabe} placeholder="Frag Jarvis oder gib ihm eine Aufgabe" maxlength="4000" aria-label="Nachricht an Jarvis" autocomplete="off" disabled={laeuft} />
         {#if laeuft}
-          <button type="button" onclick={() => abbruch?.abort()}>Stopp</button>
+          <button type="button" class="los stopp" onclick={() => abbruch?.abort()} aria-label="Stopp">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          </button>
         {:else}
-          <button disabled={!eingabe.trim()}>Senden</button>
+          <button class="los" disabled={!eingabe.trim()} aria-label="Senden">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+          </button>
         {/if}
       </form>
-      <a class="mehr" href="/modul/jarvis" onclick={() => (offen = false)}>Ganze Jarvis Seite öffnen</a>
     </div>
   {/if}
-  <button class="rund" onclick={() => (offen = !offen)} aria-label={offen ? 'Jarvis schliessen' : 'Jarvis öffnen'} aria-expanded={offen}>
+  <button class="rund" class:denkt={laeuft} onclick={() => (offen = !offen)} aria-label={offen ? 'Jarvis schliessen' : 'Jarvis öffnen'} aria-expanded={offen}>
     <span class="r"></span><span class="m"></span>
   </button>
 </div>
@@ -119,7 +131,7 @@
     bottom: 16px;
     z-index: 1500;
     display: grid;
-    gap: 10px;
+    gap: 12px;
     justify-items: end;
   }
   @media (max-width: 800px) {
@@ -129,99 +141,237 @@
   }
   .rund {
     position: relative;
-    width: 52px;
-    height: 52px;
+    width: 56px;
+    height: 56px;
+    min-height: 0;
     border-radius: 50%;
     padding: 0;
     display: grid;
     place-items: center;
-    border: 2px solid currentColor;
-    background: #0b1220;
-    color: #38bdf8;
-    box-shadow: 0 0 18px #38bdf866;
+    border: 1px solid color-mix(in srgb, var(--akzent) 50%, transparent);
+    background: radial-gradient(circle at 50% 40%, #0f2433, #070d14);
+    box-shadow: 0 0 0 1px #ffffff0a inset, 0 6px 22px #0009, 0 0 26px -4px var(--akzent);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .rund:hover {
+    transform: scale(1.06);
   }
   .r {
     position: absolute;
-    inset: 7px;
+    inset: 5px;
     border-radius: 50%;
-    border: 2px dashed #38bdf8aa;
-    animation: dreh 14s linear infinite;
+    background: conic-gradient(from 0deg, transparent 0 55%, var(--akzent) 100%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    animation: dreh 8s linear infinite;
+  }
+  .rund.denkt .r {
+    animation-duration: 1.2s;
   }
   .m {
-    width: 12px;
-    height: 12px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    background: #38bdf8;
-    box-shadow: 0 0 10px 2px #38bdf8;
+    background: radial-gradient(circle at 34% 30%, #fff 0, var(--akzent) 40%, var(--akzent-2) 100%);
+    box-shadow: 0 0 14px 2px color-mix(in srgb, var(--akzent) 60%, transparent);
+    animation: atmen 3.6s ease-in-out infinite;
   }
   @keyframes dreh {
     to {
       transform: rotate(360deg);
     }
   }
+  @keyframes atmen {
+    50% {
+      transform: scale(1.14);
+      opacity: 0.85;
+    }
+  }
+  @keyframes puls {
+    50% {
+      transform: scale(1.3);
+      opacity: 0.55;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .r {
-      animation: none;
+    .r,
+    .m,
+    .mini,
+    .tippt i,
+    .punkt {
+      animation: none !important;
     }
   }
   .karte {
-    width: min(92vw, 380px);
-    background: #111827;
-    border: 1px solid #ffffff22;
-    border-radius: 14px;
+    width: min(92vw, 390px);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--flaeche-2) 94%, var(--akzent)), var(--flaeche));
+    border: 1px solid color-mix(in srgb, var(--akzent) 24%, var(--rand));
+    border-radius: 20px;
     padding: 12px;
     display: grid;
     gap: 10px;
-    box-shadow: 0 10px 30px #0008;
+    box-shadow: 0 18px 50px #000a, 0 0 40px -22px var(--akzent);
+    animation: auf 0.18s ease-out;
+  }
+  @keyframes auf {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+  .titel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+  }
+  .titel strong {
+    font-family: var(--schrift-zahl);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    flex: 1;
+  }
+  .mini {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, #fff 0, var(--akzent) 35%, var(--akzent-2) 100%);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--akzent) 60%, transparent);
+  }
+  .mini.denkt {
+    animation: puls 0.9s ease-in-out infinite;
+  }
+  .mehr {
+    font-size: 0.75rem;
+    color: var(--text-3);
+  }
+  .mehr:hover {
+    color: var(--akzent);
   }
   .antwort {
     max-height: 40vh;
     overflow-y: auto;
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    padding: 2px 4px;
+    line-height: 1.5;
   }
   .antwort p {
     margin: 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  .schritt {
-    font-size: 0.8rem;
-    opacity: 0.85;
+  .schritte {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+  .schritt {
+    font-size: 0.76rem;
+    color: var(--text-2);
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
     align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--rand);
   }
   .schritt.fehler {
-    color: #f87171;
+    color: var(--ausfall);
+    border-color: color-mix(in srgb, var(--ausfall) 40%, var(--rand));
+  }
+  .schritt em {
+    color: var(--akzent);
+    font-style: normal;
   }
   .schritt button {
-    padding: 2px 9px;
-    font-size: 0.8rem;
+    padding: 1px 9px;
+    min-height: 0;
+    font-size: 0.75rem;
+    border-radius: 999px;
+  }
+  .schritt button.ja {
+    background: linear-gradient(135deg, var(--akzent), var(--akzent-2));
+    color: #04121a;
+    border: 0;
   }
   .punkt {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+  .schritt.fehler .punkt {
+    background: var(--ausfall);
+  }
+  .schritt.wartet .punkt {
+    background: var(--warnung);
+    animation: puls 1s ease-in-out infinite;
+  }
+  .tippt {
+    display: flex;
+    gap: 5px;
+    padding: 6px 0;
+  }
+  .tippt i {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #4ade80;
+    background: var(--akzent);
+    animation: puls 1s ease-in-out infinite;
   }
-  .punkt.wartet {
-    background: #fbbf24;
+  .tippt i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .tippt i:nth-child(3) {
+    animation-delay: 0.3s;
   }
   form {
     display: flex;
+    align-items: center;
     gap: 6px;
+    padding: 5px 5px 5px 14px;
+    border-radius: 999px;
+    background: var(--flaeche-2);
+    border: 1px solid var(--rand-hell);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  form:focus-within {
+    border-color: var(--akzent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--akzent) 18%, transparent);
   }
   form input {
     flex: 1;
     min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+    padding: 6px 0;
   }
-  .mehr {
-    font-size: 0.8rem;
-    opacity: 0.7;
+  .los {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--akzent), var(--akzent-2));
+    color: #04121a;
   }
-  .gedaempft {
-    opacity: 0.7;
+  .los:disabled {
+    background: var(--flaeche-3);
+    color: var(--text-3);
+    opacity: 1;
+  }
+  .los.stopp {
+    background: var(--ausfall);
+    color: #1a0505;
   }
 </style>
