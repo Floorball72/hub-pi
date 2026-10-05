@@ -191,7 +191,7 @@
               <div class="info">
                 <span class="titel">{a.name}{#if a.gekuendigt}<span class="marke">gekündigt</span>{/if}</span>
                 <span class="sehr-klein gedaempft">
-                  {a.kategorie ?? 'Andere'}{#if a.naechste} · nächste Zahlung {datum(a.naechste)}{/if}{#if a.frist} · {fristText(a.frist, a.gekuendigt)}{/if}
+                  {a.kategorie ?? 'Andere'}{#if a.naechste}{' · '}nächste Zahlung {datum(a.naechste)}{/if}{#if a.frist}{' · '}{fristText(a.frist, a.gekuendigt)}{/if}
                 </span>
               </div>
               <div class="betrag">

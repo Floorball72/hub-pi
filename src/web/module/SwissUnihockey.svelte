@@ -89,7 +89,7 @@
       <div class="kopf panel">
         <div class="zeile"><span class="marke {STATUS[detail.einsatz.status] ?? ''}">{detail.einsatz.status}{detail.einsatz.ersatzFuer ? ` für ${detail.einsatz.ersatzFuer}` : ''}</span>{#if detail.einsatz.typ}<span class="marke">{detail.einsatz.typ}</span>{/if}</div>
         <h2>{tag(detail.einsatz.start)}</h2>
-        <div class="zahl gross">{detail.einsatz.ganztags ? 'ganztags' : zeit(detail.einsatz.start)}{#if detail.einsatz.postzeit}<span class="gedaempft klein"> · Postzeit ca. {zeit(detail.einsatz.postzeit)} (geschätzt: Termin plus 3 Stunden)</span>{/if}</div>
+        <div class="zahl gross">{detail.einsatz.ganztags ? 'ganztags' : zeit(detail.einsatz.start)}{#if detail.einsatz.postzeit}<span class="gedaempft klein">{' · '}Postzeit ca. {zeit(detail.einsatz.postzeit)} (geschätzt: Termin plus 3 Stunden)</span>{/if}</div>
         {#if detail.einsatz.text}<p class="klein gedaempft vor">{detail.einsatz.text}</p>{/if}
       </div>
 

@@ -154,8 +154,8 @@
       <span class="titel">{a.titel}</span>
       <span class="klein gedaempft">
         {#if a.faellig}<span class:ueber={a.gruppe === 'ueberfaellig'}>{faelligText(a)}</span>{/if}
-        {#if a.rhythmus && a.rhythmus !== 'einmalig'} · {RHYTHMUS[a.rhythmus] ?? a.rhythmus}{/if}
-        {#if !liste && a.liste} · {a.liste}{/if}
+        {#if a.rhythmus && a.rhythmus !== 'einmalig'}{' · '}{RHYTHMUS[a.rhythmus] ?? a.rhythmus}{/if}
+        {#if !liste && a.liste}{' · '}{a.liste}{/if}
       </span>
     </div>
     {#if a.gruppe === 'ueberfaellig' || a.gruppe === 'heute'}
@@ -230,7 +230,7 @@
             <h3>{r.name}</h3>
             <span class="klein gedaempft">
               {r.rhythmus === 'woechentlich' ? 'diese Woche' : r.heute ? 'heute' : 'heute nicht geplant'}
-              {#if r.serie > 1} · {r.serie} {r.rhythmus === 'woechentlich' ? 'Wochen' : 'Tage'} in Folge{/if}
+              {#if r.serie > 1}{' · '}{r.serie} {r.rhythmus === 'woechentlich' ? 'Wochen' : 'Tage'} in Folge{/if}
             </span>
           </div>
           <div class="fortschritt" aria-hidden="true"><span style="width:{r.schritte.length ? (r.erledigt.length / r.schritte.length) * 100 : 0}%"></span></div>
