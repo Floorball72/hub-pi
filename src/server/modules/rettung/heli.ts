@@ -216,6 +216,26 @@ export interface FlugEreignis {
 
 const IN_DER_LUFT_KN = 25;
 const VERLUST_MS = 3 * 60000;
+/** So lange bleibt ein Flug offen, wenn das Signal weg ist: oft nur eine kurze Lücke im Empfang */
+export const WARTEN_MS = 12 * 60000;
+/** Kürzere Lücken gelten immer als Störung, nie als Landung */
+const LUECKE_MS = 5 * 60000;
+
+/**
+ * Taucht ein Heli nach einer Lücke in der Luft wieder auf: Ist er in der Zwischenzeit weit genug
+ * gekommen (im Schnitt mindestens 60 km/h), ist er durchgeflogen. Sonst war er wohl am Boden.
+ */
+export function durchgeflogen(
+  vonLat: number,
+  vonLon: number,
+  nachLat: number,
+  nachLon: number,
+  lueckeMs: number,
+): boolean {
+  if (lueckeMs <= LUECKE_MS) return true;
+  if (lueckeMs > WARTEN_MS) return false;
+  return distanzKm(vonLat, vonLon, nachLat, nachLon) / (lueckeMs / 3600000) >= 60;
+}
 
 function inDerLuft(p: HeliPosition): boolean {
   return !p.amBoden && (p.speedKn ?? 0) >= IN_DER_LUFT_KN;
@@ -242,7 +262,19 @@ export class FlugErkennung {
         if (flug) ereignisse.push({ art: 'erfasst', flug });
         continue;
       }
-      if (!a.luft && luft) {
+      // Wieder in der Luft nach einer Lücke, aber nicht durchgeflogen: tief verschwunden, also wohl gelandet
+      if (
+        a.flug &&
+        a.luft &&
+        luft &&
+        (a.letzte.hoeheFt ?? 99999) < 4500 &&
+        !durchgeflogen(a.letzte.lat, a.letzte.lon, p.lat, p.lon, p.zeit - a.letzte.zeit)
+      ) {
+        this.beenden(a.flug, a.letzte, 'signalverlust', a.letzte.zeit);
+        ereignisse.push({ art: 'signalverlust', flug: a.flug });
+        a.flug = this.neuerFlug(p, 'erfasst');
+        ereignisse.push({ art: 'erfasst', flug: a.flug });
+      } else if (!a.luft && luft) {
         a.flug = this.neuerFlug(p, 'start');
         ereignisse.push({ art: 'start', flug: a.flug });
       } else if (a.luft && !luft && a.flug) {
@@ -261,7 +293,7 @@ export class FlugErkennung {
       a.luft = luft;
     }
     for (const [hex, a] of this.aktiv) {
-      if (gesehen.has(hex) || jetzt - a.letzte.zeit < VERLUST_MS) continue;
+      if (gesehen.has(hex) || jetzt - a.letzte.zeit < (a.flug ? WARTEN_MS : VERLUST_MS)) continue;
       if (a.flug) {
         // Niedrig verschwunden: wahrscheinlich gelandet (Funkschatten). Sonst Region verlassen.
         const tief = (a.letzte.hoeheFt ?? 99999) < 4500;
@@ -700,8 +732,8 @@ export function einsaetzeBilden(fluege: ChronikFlug[], pauseMin = 240): Einsatz[
     proHeli.set(f.hex, l);
   }
   const aus: Einsatz[] = [];
-  for (const liste of proHeli.values()) {
-    liste.sort((a, b) => a.start.localeCompare(b.start));
+  for (const roh of proHeli.values()) {
+    const liste = lueckenSchliessen(roh);
     let aktuell: ChronikFlug[] = [];
     const abschliessen = () => {
       if (aktuell.length) aus.push(einsatzAus(aktuell));
@@ -721,6 +753,48 @@ export function einsaetzeBilden(fluege: ChronikFlug[], pauseMin = 240): Einsatz[
     abschliessen();
   }
   return aus.sort((a, b) => b.start.localeCompare(a.start));
+}
+
+/**
+ * Flüge, die nur wegen einer kurzen Lücke im Empfang geteilt wurden, wieder zu einem Flug
+ * zusammensetzen: Ende mit Signalverlust, danach in der Luft erfasst und durchgeflogen.
+ */
+export function lueckenSchliessen(fluege: ChronikFlug[]): ChronikFlug[] {
+  const sortiert = [...fluege].sort((a, b) => a.start.localeCompare(b.start));
+  const aus: ChronikFlug[] = [];
+  for (const f of sortiert) {
+    const v = aus.at(-1);
+    if (
+      v?.ende &&
+      v.ende_art === 'signalverlust' &&
+      !f.start_platz &&
+      v.ende_lat !== null &&
+      v.ende_lon !== null &&
+      f.start_lat !== null &&
+      f.start_lon !== null &&
+      durchgeflogen(
+        v.ende_lat,
+        v.ende_lon,
+        f.start_lat,
+        f.start_lon,
+        new Date(f.start).getTime() - new Date(v.ende).getTime(),
+      )
+    ) {
+      aus[aus.length - 1] = {
+        ...v,
+        ende: f.ende,
+        ende_art: f.ende_art,
+        ende_platz: f.ende_platz,
+        ende_ort: f.ende_ort,
+        ende_lat: f.ende_lat,
+        ende_lon: f.ende_lon,
+        spur: [...(Array.isArray(v.spur) ? v.spur : []), ...(Array.isArray(f.spur) ? f.spur : [])],
+      };
+      continue;
+    }
+    aus.push(f);
+  }
+  return aus;
 }
 
 function einsatzAus(fl: ChronikFlug[]): Einsatz {

@@ -6,6 +6,7 @@ import { abfahrtenParsen } from '../src/server/modules/mobilitaet/oev.ts';
 import {
   type AdsbFlugzeug,
   FlugErkennung,
+  lueckenSchliessen,
   flugStatistik,
   type HeliPosition,
   heliFiltern,
@@ -97,9 +98,80 @@ describe('Helikopter', () => {
       ['erfasst'],
     );
     assert.deepEqual(b.aktualisieren([], 60000), []);
+    // Nach drei Minuten noch offen, erst nach der Wartezeit verschwunden
+    assert.deepEqual(b.aktualisieren([], 240000), []);
+    assert.equal(b.laufende().length, 1);
     assert.deepEqual(
-      b.aktualisieren([], 240000).map((x) => x.art),
+      b.aktualisieren([], 13 * 60000).map((x) => x.art),
       ['signalverlust'],
+    );
+  });
+  it('wertet eine kurze Lücke im Empfang nicht als Landung', () => {
+    const p = (zeit: number, lat: number, lon: number): HeliPosition => ({
+      hex: 'a',
+      kennzeichen: 'HB-ZRX',
+      typ: 'A109',
+      rufzeichen: null,
+      organisation: 'Rega',
+      lat,
+      lon,
+      hoeheFt: 2000,
+      amBoden: false,
+      speedKn: 110,
+      kurs: 0,
+      zeit,
+    });
+    const e = new FlugErkennung();
+    e.aktualisieren([p(0, 47.4, 9.3)], 0);
+    // Vier Minuten weg, am gleichen Ort wieder da: Störung
+    assert.deepEqual(e.aktualisieren([p(240000, 47.41, 9.3)], 240000), []);
+    // Acht Minuten weg, 20 km weiter: durchgeflogen
+    assert.deepEqual(e.aktualisieren([p(720000, 47.59, 9.3)], 720000), []);
+    assert.equal(e.laufende()[0].spur.length, 3);
+    // Zehn Minuten weg, am gleichen Ort wieder in der Luft: war wohl am Boden
+    assert.deepEqual(
+      e.aktualisieren([p(1320000, 47.59, 9.31)], 1320000).map((x) => x.art),
+      ['signalverlust', 'erfasst'],
+    );
+  });
+  it('setzt durch kurze Lücken geteilte Flüge in der Chronik wieder zusammen', () => {
+    const f = (
+      id: string,
+      start: string,
+      ende: string,
+      art: string,
+      sLat: number,
+      eLat: number,
+      platz: string | null = null,
+    ) => ({
+      id,
+      hex: 'a',
+      organisation: 'Rega',
+      kennzeichen: 'HB-ZRX',
+      start,
+      start_platz: platz,
+      start_ort: null,
+      start_lat: sLat,
+      start_lon: 9.3,
+      ende,
+      ende_art: art,
+      ende_platz: null,
+      ende_ort: null,
+      ende_lat: eLat,
+      ende_lon: 9.3,
+      spur: [[sLat, 9.3, 0]],
+    });
+    const z = lueckenSchliessen([
+      f('a', '2026-10-01T10:00:00Z', '2026-10-01T10:10:00Z', 'signalverlust', 47.4, 47.5, 'Rega Basis'),
+      f('b', '2026-10-01T10:13:00Z', '2026-10-01T10:30:00Z', 'landung', 47.5, 47.6),
+      f('c', '2026-10-01T11:00:00Z', '2026-10-01T11:20:00Z', 'signalverlust', 47.6, 47.7),
+    ]);
+    assert.deepEqual(
+      z.map((x) => [x.id, x.ende_art, x.ende_lat]),
+      [
+        ['a', 'landung', 47.6],
+        ['c', 'signalverlust', 47.7],
+      ],
     );
   });
   it('berechnet die Statistik nach Stunde, Wochentag und Raster', () => {
