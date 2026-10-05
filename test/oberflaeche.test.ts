@@ -54,3 +54,28 @@ describe('Startseite anpassen', () => {
     assert.deepEqual(umschalten(umschalten([], 'x'), 'x'), []);
   });
 });
+
+describe('Seitenleiste', () => {
+  it('ausgeschaltete Module stehen in einer eigenen Gruppe ganz unten', async () => {
+    const { gruppieren } = await import('../src/web/lib/navigation.ts');
+    const m = (id: string, aktiv: boolean) =>
+      ({ id, name: id, symbol: id, aktiv }) as unknown as Parameters<typeof gruppieren>[0][number];
+    const g = gruppieren([
+      m('zentrale', true),
+      m('wetter', true),
+      m('mobilitaet', false),
+      m('rettung', true),
+    ]);
+    const letzte = g[g.length - 1];
+    assert.equal(letzte.id, 'aus');
+    assert.deepEqual(
+      letzte.seiten.map((s) => s.pfad),
+      ['/modul/mobilitaet'],
+    );
+    const alltag = g.find((x) => x.id === 'alltag');
+    assert.deepEqual(
+      alltag?.seiten.map((s) => s.pfad),
+      ['/modul/wetter'],
+    );
+  });
+});

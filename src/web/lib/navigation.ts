@@ -39,7 +39,7 @@ const GRUPPEN: { id: string; name: string; module: string[] }[] = [
 ];
 
 /** Gruppen, die beim ersten Besuch zugeklappt sind */
-export const STANDARD_ZU = ['selten'];
+export const STANDARD_ZU = ['selten', 'aus'];
 
 const HUB_SEITEN: NavSeite[] = [
   { pfad: '/alarme', name: 'Alarmzentrale', symbol: 'alarm' },
@@ -56,19 +56,22 @@ function seite(m: ModulInfo): NavSeite {
 export function gruppieren(module: ModulInfo[]): NavGruppe[] {
   const zugeordnet = new Set(GRUPPEN.flatMap((g) => g.module));
   const nachId = new Map(module.map((m) => [m.id, m]));
+  // Ausgeschaltete Module wandern in eine eigene Gruppe ganz unten
+  const aus = module.filter((m) => m.id !== 'zentrale' && !m.aktiv).map(seite);
   const gruppen: NavGruppe[] = GRUPPEN.map((g) => ({
     id: g.id,
     name: g.name,
     seiten: g.module.flatMap((id) => {
       const m = nachId.get(id);
-      return m ? [seite(m)] : [];
+      return m?.aktiv ? [seite(m)] : [];
     }),
   }));
-  const rest = module.filter((m) => m.id !== 'zentrale' && !zugeordnet.has(m.id)).map(seite);
+  const rest = module.filter((m) => m.id !== 'zentrale' && m.aktiv && !zugeordnet.has(m.id)).map(seite);
   // Neue Module ohne Zuordnung vor «Hub»
   const hubIndex = gruppen.findIndex((g) => g.id === 'hub');
   if (rest.length) gruppen.splice(hubIndex, 0, { id: 'weitere', name: 'Weitere', seiten: rest });
   const hub = gruppen.find((g) => g.id === 'hub');
   if (hub) hub.seiten = [...HUB_SEITEN, ...hub.seiten, EINRICHTUNG];
+  if (aus.length) gruppen.push({ id: 'aus', name: 'Ausgeschaltet', seiten: aus });
   return gruppen.filter((g) => g.seiten.length);
 }

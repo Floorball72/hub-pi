@@ -57,12 +57,12 @@
   let menueOffen = $state(false);
   // Zugeklappte Gruppen der Seitenleiste, im Browser gemerkt
   // Eigener Schlüssel seit der neuen Gruppierung, damit «Wenig genutzt» zugeklappt startet
-  let zu = $state<string[]>(lesen('nav.zu.v2', STANDARD_ZU));
+  let zu = $state<string[]>(lesen('nav.zu.v3', STANDARD_ZU));
   const gruppen = $derived(gruppieren(module));
 
   function gruppeUmschalten(id: string) {
     zu = zu.includes(id) ? zu.filter((g) => g !== id) : [...zu, id];
-    schreiben('nav.zu.v2', zu);
+    schreiben('nav.zu.v3', zu);
   }
 
   async function sitzungLaden() {
