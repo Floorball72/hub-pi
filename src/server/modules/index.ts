@@ -2,6 +2,7 @@
 import type { ModulDef } from '../kern/modul.ts';
 import { analyse } from './analyse/index.ts';
 import { smarthome } from './smarthome/index.ts';
+import { aufgaben } from './aufgaben/index.ts';
 import { auffaelligkeiten } from './auffaelligkeiten/index.ts';
 import { abrufe } from './abrufe/index.ts';
 import { abhaengigkeiten } from './abhaengigkeiten/index.ts';
@@ -49,5 +50,6 @@ export const MODULE: ModulDef[] = [
   unihockey,
   analyse,
   smarthome,
+  aufgaben,
   mobilitaet,
 ];
