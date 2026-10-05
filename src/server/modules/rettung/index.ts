@@ -1775,7 +1775,10 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
     const warnungen = (w.daten ?? []).filter(
       (x) => warnungFuerGebiete(x, konfig.warnGebiete) && x.stufe >= 2,
     );
-    if (!positionenStand) await heliRunde().catch(() => undefined);
+    // Nach einem Neustart nicht auf die erste ADS-B Runde warten: die dauert auf dem Pi oft länger
+    // als das Zeitlimit der Kachel und die Startseite meldete dann einen Ausfall
+    const laedt = !positionenStand;
+    if (laedt) void heliRunde().catch(() => undefined);
     const inDerLuft = positionen.filter((p) => !p.amBoden);
     const heute = await daten.anzahl('heli_fluege', {
       start: { gte: new Date(ctx.jetzt().getTime() - 86400000).toISOString() },
@@ -1787,7 +1790,7 @@ ${ZEIT(f.start)}${f.ende ? `, ${Math.max(1, Math.round((new Date(f.ende).getTime
       titel: 'Rettung',
       wert: String(inDerLuft.length),
       einheit: inDerLuft.length === 1 ? 'Heli in der Luft' : 'Helis in der Luft',
-      unter: `${heute} Flüge in 24 h erfasst`,
+      unter: laedt ? 'Positionen werden geladen' : `${heute} Flüge in 24 h erfasst`,
       zeilen: [
         ...inDerLuft.slice(0, 2).map((p) => ({
           text: `${p.organisation ?? 'Heli'} ${p.kennzeichen ?? ''}`,
