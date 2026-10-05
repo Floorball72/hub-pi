@@ -147,16 +147,23 @@
     parken: '<path d="M9 19V5h4.5a4 4 0 0 1 0 8H9" stroke-width="2.6"/>',
   };
 
+  // Feste Orte (Spitäler, Wachen, Landeplätze usw.) klein und gedämpft, damit Helis und Ereignisse hervorstechen
+  const RUHIG = new Set(['spital', 'wache', 'landeplatz', 'defi', 'webcam', 'halt', 'parken', 'ort']);
+  const istRuhig = (p: GeoPunkt) => RUHIG.has(p.symbol) && !p.groesse && !p.farbe;
+
   function symbolIcon(p: GeoPunkt): Leaflet.DivIcon {
     const farbe = p.farbe ?? FARBEN[p.symbol] ?? '#4cc9f0';
-    const g = p.groesse ?? (p.symbol === 'heli' ? 34 : 26);
+    const ruhig = istRuhig(p);
+    const g = p.groesse ?? (p.symbol === 'heli' ? 34 : ruhig ? 18 : 24);
     const drehen = p.richtung !== undefined ? `transform: rotate(${p.richtung}deg)` : '';
-    const puls = p.symbol === 'heli' || p.symbol === 'blitz' || p.symbol === 'einsatz' ? 'puls' : '';
+    // Pulsieren nur, was gerade passiert: Helis, Blitze und Ereignisse der letzten zwei Stunden
+    const frisch = p.zeit ? Date.now() - new Date(p.zeit).getTime() < 7200000 : false;
+    const puls = p.symbol === 'heli' || p.symbol === 'blitz' || (p.symbol === 'einsatz' && frisch) ? 'puls' : '';
     return L.divIcon({
       className: 'hub-marker',
       iconSize: [g, g],
       iconAnchor: [g / 2, g / 2],
-      html: `<div class="hub-symbol ${puls}" style="--farbe:${farbe};width:${g}px;height:${g}px"><svg viewBox="0 0 24 24" width="${g * 0.62}" height="${g * 0.62}" style="${drehen}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SYMBOLE[p.symbol] ?? SYMBOLE.ort}</svg></div>`,
+      html: `<div class="hub-symbol ${ruhig ? 'ruhig' : ''} ${puls}" style="--farbe:${farbe};width:${g}px;height:${g}px"><svg viewBox="0 0 24 24" width="${g * 0.62}" height="${g * 0.62}" style="${drehen}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SYMBOLE[p.symbol] ?? SYMBOLE.ort}</svg></div>`,
     });
   }
 
@@ -187,6 +194,16 @@
     ),
   );
 
+  const markerOptionen = (p: GeoPunkt): Leaflet.MarkerOptions => ({
+    icon: symbolIcon(p),
+    title: p.titel,
+    riseOnHover: true,
+    zIndexOffset: istRuhig(p) ? -1000 : 0,
+  });
+
+  // Pro Punkte Ebene: Flächen und Linien werden neu gezeichnet, Marker nur geändert, wo sich etwas tut (kein Flackern)
+  const zustand = new WeakMap<Leaflet.LayerGroup, { flaeche: Leaflet.LayerGroup; marker: Map<string, { m: Leaflet.Marker; k: string }> }>();
+
   function heatZeichnen(werte: [number, number, number][], gruppe: Leaflet.LayerGroup) {
     // Wurzel dämpft einzelne Hotspots, damit auch seltene Orte sichtbar bleiben
     const max = Math.sqrt(Math.max(1, ...werte.map((h) => h[2])));
@@ -205,8 +222,15 @@
   async function punkteLaden(e: Ebene, gruppe: Leaflet.LayerGroup) {
     try {
       const r = await api.get<PunkteAntwort>(e.datenUrl!);
-      gruppe.clearLayers();
-      if (e.art === 'heatmap' && r.heat) heatZeichnen(r.heat, gruppe);
+      // Ebene inzwischen ausgeschaltet
+      if (layer.get(e.id) !== gruppe) return;
+      let z = zustand.get(gruppe);
+      if (!z) {
+        z = { flaeche: L.layerGroup().addTo(gruppe), marker: new Map() };
+        zustand.set(gruppe, z);
+      }
+      z.flaeche.clearLayers();
+      if (e.art === 'heatmap' && r.heat) heatZeichnen(r.heat, z.flaeche);
       for (const li of r.linien ?? []) {
         if (li.punkte.length < 2) continue;
         L.polyline(li.punkte, {
@@ -216,12 +240,31 @@
           dashArray: li.gestrichelt ? '6 6' : undefined,
         })
           .bindPopup(popupHtml({ id: li.id, lat: 0, lon: 0, titel: li.titel, text: li.text, symbol: 'ort' }), { maxWidth: 280 })
-          .addTo(gruppe);
+          .addTo(z.flaeche);
       }
-      for (const p of r.punkte) {
-        L.marker([p.lat, p.lon], { icon: symbolIcon(p), title: p.titel, riseOnHover: true })
-          .bindPopup(popupHtml(p), { maxWidth: 280 })
-          .addTo(gruppe);
+      const gesehen = new Set<string>();
+      r.punkte.forEach((p, i) => {
+        let id = p.id || `${p.lat},${p.lon},${p.titel}`;
+        if (gesehen.has(id)) id = `${id}#${i}`;
+        gesehen.add(id);
+        const k = JSON.stringify(p);
+        const alt = z.marker.get(id);
+        if (alt) {
+          if (alt.k === k) return;
+          alt.m.setLatLng([p.lat, p.lon]);
+          alt.m.setIcon(symbolIcon(p));
+          alt.m.setZIndexOffset(istRuhig(p) ? -1000 : 0);
+          alt.m.setPopupContent(popupHtml(p));
+          alt.k = k;
+          return;
+        }
+        const m = L.marker([p.lat, p.lon], markerOptionen(p)).bindPopup(popupHtml(p), { maxWidth: 280 }).addTo(gruppe);
+        z.marker.set(id, { m, k });
+      });
+      for (const [id, { m }] of z.marker) {
+        if (gesehen.has(id)) continue;
+        m.remove();
+        z.marker.delete(id);
       }
       infos[e.id] = { stand: r.stand, demo: r.demo, fehler: r.fehler, hinweis: r.hinweis, anzahl: r.punkte.length + (r.heat?.length ?? 0) + (r.linien?.length ?? 0) };
     } catch (err) {
@@ -309,7 +352,7 @@
       grenzen.push(...li.punkte);
     }
     for (const p of liste) {
-      L.marker([p.lat, p.lon], { icon: symbolIcon(p), title: p.titel }).bindPopup(popupHtml(p)).addTo(seitenPunkte);
+      L.marker([p.lat, p.lon], markerOptionen(p)).bindPopup(popupHtml(p)).addTo(seitenPunkte);
       grenzen.push([p.lat, p.lon]);
     }
     if (einpassen && !eingepasst && grenzen.length) {
@@ -327,6 +370,10 @@
       karte = L.map(element, { zoomControl: !kompakt, attributionControl: true, preferCanvas: true, zoomSnap: 0.5 }).setView(zentrum, zoom);
       karte.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener noreferrer">Leaflet</a>');
       basisSetzen(basis, false);
+      // Weit herausgezoomt werden feste Orte noch kleiner
+      const zoomKlasse = () => element.classList.toggle('karte-weit', (karte?.getZoom() ?? 12) < 10);
+      karte.on('zoomend', zoomKlasse);
+      zoomKlasse();
       if (onklick) karte.on('click', (ev: Leaflet.LeafletMouseEvent) => onklick?.(ev.latlng.lat, ev.latlng.lng));
       const r = await api.get<{ ebenen: Ebene[]; auswahl: string[] | null }>('/api/karte/ebenen');
       ebenen = r.ebenen;
@@ -620,9 +667,26 @@
     background: radial-gradient(circle, #0b1118 55%, #0b111800 72%);
     border: 2px solid var(--farbe);
     box-shadow:
-      0 0 0 3px #0b111899,
-      0 0 14px color-mix(in srgb, var(--farbe) 60%, transparent);
-    transition: transform 0.2s;
+      0 0 0 2px #0b111899,
+      0 0 8px color-mix(in srgb, var(--farbe) 35%, transparent);
+    transition:
+      transform 0.2s,
+      opacity 0.2s;
+  }
+  :global(.hub-symbol.ruhig) {
+    border-width: 1.5px;
+    border-color: color-mix(in srgb, var(--farbe) 50%, transparent);
+    color: color-mix(in srgb, var(--farbe) 75%, #cbd5e1);
+    background: #0b1118d9;
+    box-shadow: none;
+    opacity: 0.7;
+  }
+  :global(.karte-weit .hub-symbol.ruhig) {
+    transform: scale(0.72);
+    opacity: 0.5;
+  }
+  :global(.hub-symbol.ruhig:hover) {
+    opacity: 1;
   }
   @media (hover: hover) and (pointer: fine) {
     :global(.hub-symbol:hover) {
