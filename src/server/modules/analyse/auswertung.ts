@@ -86,6 +86,7 @@ export interface Spieler {
   nummer: number | null;
   name: string;
   position: string | null;
+  block?: number | null;
 }
 
 export interface Werte {
@@ -198,6 +199,97 @@ export function nachSpieler(liste: Ereignis[], spieler: Spieler[], strafen: Stra
     .sort((a, b) => b.punkte - a.punkte || b.tore - a.tore || b.schuesse - a.schuesse);
 }
 
+export interface BlockWerte {
+  /** Blocknummer, null für gemischte Aufstellungen */
+  block: number | null;
+  name: string;
+  spieler: string[];
+  ereignisse: number;
+  schuesseFuer: number;
+  schuesseGegen: number;
+  /** Anteil der eigenen Abschlüsse an allen Abschlüssen, solange der Block auf dem Feld war */
+  anteil: number | null;
+  toreFuer: number;
+  toreGegen: number;
+  /** Tore gleicher Anzahl Spieler wie beim Plus Minus der Spieler */
+  plusMinus: number;
+  effizienz: number | null;
+}
+
+function blockWerte(block: number | null, name: string, liste: Ereignis[], spieler: string[]): BlockWerte {
+  const fuer = liste.filter((e) => e.team === 'eigen');
+  const gegen = liste.filter((e) => e.team === 'gegner');
+  const toreFuer = fuer.filter((e) => e.typ === 'tor').length;
+  let pm = 0;
+  for (const e of liste) {
+    if (e.typ !== 'tor' || e.situation === 'penalty') continue;
+    if (e.team === 'eigen' && e.situation !== 'ueberzahl') pm++;
+    if (e.team === 'gegner' && e.situation !== 'unterzahl') pm--;
+  }
+  return {
+    block,
+    name,
+    spieler,
+    ereignisse: liste.length,
+    schuesseFuer: fuer.length,
+    schuesseGegen: gegen.length,
+    anteil: prozent(fuer.length, liste.length),
+    toreFuer,
+    toreGegen: gegen.filter((e) => e.typ === 'tor').length,
+    plusMinus: pm,
+    effizienz: prozent(toreFuer, fuer.length),
+  };
+}
+
+/**
+ * Werte pro Block: Ein Abschluss zählt für den Block, zu dem die Mehrheit der Spieler auf dem Feld gehört.
+ * Dazu die häufigsten genauen Aufstellungen (mindestens drei Abschlüsse).
+ */
+export function nachBlock(liste: Ereignis[], spieler: Spieler[]) {
+  const mitFeld = liste.filter((e) => e.auf_feld);
+  const blockVon = new Map(spieler.map((s) => [s.id, s.block ?? null]));
+  const name = new Map(spieler.map((s) => [s.id, s.nummer != null ? `${s.name} ${s.nummer}` : s.name]));
+  const proBlock = new Map<number | null, Ereignis[]>();
+  const proAufstellung = new Map<string, Ereignis[]>();
+  for (const e of mitFeld) {
+    const ids = (e.auf_feld ?? '').split(',').filter(Boolean);
+    const zaehler = new Map<number, number>();
+    for (const id of ids) {
+      const b = blockVon.get(id);
+      if (b != null) zaehler.set(b, (zaehler.get(b) ?? 0) + 1);
+    }
+    const [besterBlock, anzahl] = [...zaehler].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+    const block = anzahl * 2 > ids.length ? besterBlock : null;
+    proBlock.set(block, [...(proBlock.get(block) ?? []), e]);
+    const schluessel = [...ids].sort().join(',');
+    proAufstellung.set(schluessel, [...(proAufstellung.get(schluessel) ?? []), e]);
+  }
+  const bloecke = [...proBlock]
+    .sort((a, b) => (a[0] ?? 99) - (b[0] ?? 99))
+    .map(([b, l]) =>
+      blockWerte(
+        b,
+        b == null ? 'Gemischt' : `Block ${b}`,
+        l,
+        b == null ? [] : spieler.filter((s) => s.block === b).map((s) => name.get(s.id) ?? s.name),
+      ),
+    );
+  const aufstellungen = [...proAufstellung]
+    .filter(([, l]) => l.length >= 3)
+    .map(([k, l]) => {
+      const ids = k.split(',');
+      return blockWerte(
+        null,
+        ids.map((id) => name.get(id) ?? '?').join(', '),
+        l,
+        ids.map((id) => name.get(id) ?? '?'),
+      );
+    })
+    .sort((a, b) => b.ereignisse - a.ereignisse)
+    .slice(0, 6);
+  return { bloecke, aufstellungen, ohneFeld: liste.length - mitFeld.length };
+}
+
 /** Resultat aus den erfassten Toren */
 export function resultat(liste: Ereignis[]) {
   return {
@@ -218,5 +310,6 @@ export function auswerten(liste: Ereignis[], spieler: Spieler[], strafen: Strafe
     drittel: nachDrittel(liste),
     spieler: nachSpieler(liste, spieler, strafen),
     spezial: spezialteams(liste, strafen),
+    bloecke: nachBlock(liste, spieler),
   };
 }

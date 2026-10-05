@@ -47,6 +47,7 @@ export interface Kontext {
     abendbericht: (zeitraum?: Rueckblick) => Promise<BriefingTeil[]>;
     suche: (q: string) => Promise<SuchTreffer[]>;
     briefing: () => Promise<BriefingTeil[]>;
+    kacheln: () => Promise<Record<string, Kachel>>;
   };
   /** Meldet eine Zahl an die Auffälligkeiten Erkennung. Gibt eine Funktion zum Erfassen zurück. */
   metrik: (def: MetrikDef) => (wert: number | null | undefined) => Promise<void>;

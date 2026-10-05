@@ -1,6 +1,7 @@
 // Manifest: alle Module des Hubs. Der Kern lädt sie in dieser Liste.
 import type { ModulDef } from '../kern/modul.ts';
 import { analyse } from './analyse/index.ts';
+import { jarvis } from './jarvis/index.ts';
 import { smarthome } from './smarthome/index.ts';
 import { aufgaben } from './aufgaben/index.ts';
 import { finanzen } from './finanzen/index.ts';
@@ -31,6 +32,7 @@ import { zentrale } from './zentrale/index.ts';
 
 export const MODULE: ModulDef[] = [
   zentrale,
+  jarvis,
   wetter,
   scont,
   rettung,

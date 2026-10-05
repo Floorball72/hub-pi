@@ -10,7 +10,7 @@ import { AKTIVITAET_TABELLE, schwaerzen } from './aktivitaet.ts';
 import { ALARM_TABELLEN, Alarmzentrale } from './alarm.ts';
 import { EINSTELLUNGEN_TABELLE, Einstellungen } from './einstellungen.ts';
 import { fehlerText } from './fehler.ts';
-import { mitTimeout } from './routen.ts';
+import { kachelnSammeln, mitTimeout } from './routen.ts';
 import type { Kontext, ModulDef, ModulLaufzeit } from './modul.ts';
 import { METRIK_STUNDEN, METRIK_WERTE, MetrikRegistry } from './metriken.ts';
 import { Abrufplaner, type PlanerEinstellung } from './planer.ts';
@@ -131,6 +131,7 @@ export class Hub {
         abendbericht: (zeitraum) => this.abendbericht(zeitraum),
         suche: (q) => this.suche(q),
         briefing: () => this.briefing(),
+        kacheln: () => kachelnSammeln(this),
       },
       metrik: (def) => this.metriken.registrieren({ modul: modulId, ...def }),
       quelle: <P, T>(def: QuellenDef<P, T>) => {
