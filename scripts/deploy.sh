@@ -14,7 +14,13 @@ echo "== Bauen"
 npm run --silent build
 echo "== Hochladen nach $ZIEL:$PFAD/upload"
 ssh "$ZIEL" "sudo mkdir -p $PFAD/upload && sudo chown \$(id -un) $PFAD/upload"
-rsync -az --delete --exclude node_modules --exclude .git --exclude data --exclude .env --exclude screenshots ./ "$ZIEL:$PFAD/upload/"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -az --delete --exclude node_modules --exclude .git --exclude data --exclude .env --exclude screenshots ./ "$ZIEL:$PFAD/upload/"
+else
+  # Ohne rsync (z.B. Git Bash unter Windows): tar über ssh, vorher den Zielordner leeren
+  ssh "$ZIEL" "find $PFAD/upload -mindepth 1 -delete"
+  tar -c --exclude=node_modules --exclude=.git --exclude=data --exclude=.env --exclude=screenshots . | ssh "$ZIEL" "tar -x -C $PFAD/upload"
+fi
 echo "== Release auf dem Pi"
 if ssh -t "$ZIEL" "sudo /usr/local/sbin/pihub-release $PFAD/upload"; then
   echo "✓ Deploy erfolgreich"
