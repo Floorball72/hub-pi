@@ -204,6 +204,8 @@ for (const m of MODULE) {
       ),
       timeline: async () => [],
       abendbericht: async () => [],
+      suche: async () => [],
+      briefing: async () => [],
     },
     metrik: () => async () => {},
     quelle: <P, T>(def: QuellenDef<P, T>) => {

@@ -182,53 +182,7 @@ export function kernRouten(app: FastifyInstance, hub: Hub) {
     }),
   );
 
-  app.get<{ Querystring: { q?: string } }>('/api/suche', async (req) => {
-    const q = String(req.query.q ?? '')
-      .trim()
-      .slice(0, 80);
-    if (q.length < 2) return [];
-    const treffer: SuchTreffer[] = [];
-    // Bearbeitbare Tabellen mit Suchfeldern
-    for (const t of hub.daten.alleTabellen()) {
-      if (!t.suche?.length || !hub.modulAktiv(t.modul)) continue;
-      for (const feld of t.suche) {
-        try {
-          const zeilen = await hub.daten.liste<Record<string, unknown>>(t.name, {
-            filter: { [feld]: { like: `%${q}%` } },
-            limit: 10,
-          });
-          for (const z of zeilen) {
-            treffer.push({
-              modul: t.modul,
-              titel: String(z[t.anzeige ?? feld] ?? z[feld]),
-              text: t.label,
-              link: `/modul/${t.modul}?tabelle=${t.name}&id=${z.id}`,
-            });
-          }
-        } catch {
-          // Suche in einer Tabelle darf scheitern
-        }
-      }
-    }
-    await Promise.all(
-      [...hub.module.entries()].map(async ([id, m]) => {
-        if (!m.laufzeit.suche || !hub.modulAktiv(id)) return;
-        try {
-          treffer.push(...(await mitTimeout(m.laufzeit.suche(q), 4000)));
-        } catch {
-          // egal
-        }
-      }),
-    );
-    const gesehen = new Set<string>();
-    return treffer
-      .filter((t) => {
-        if (gesehen.has(t.link)) return false;
-        gesehen.add(t.link);
-        return true;
-      })
-      .slice(0, 50);
-  });
+  app.get<{ Querystring: { q?: string } }>('/api/suche', async (req) => hub.suche(String(req.query.q ?? '')));
 
   app.get<{ Querystring: { von?: string; bis?: string } }>('/api/timeline', async (req) => {
     const von = req.query.von ? new Date(req.query.von) : new Date(hub.jetzt().getTime() - 86400000);
@@ -238,25 +192,11 @@ export function kernRouten(app: FastifyInstance, hub: Hub) {
     return hub.timeline(von, bis);
   });
 
-  app.get('/api/briefing', async () => {
-    const teile: BriefingTeil[] = [];
-    await Promise.all(
-      [...hub.module.entries()].map(async ([id, m]) => {
-        if (!m.laufzeit.briefing || !hub.modulAktiv(id)) return;
-        try {
-          const t = await mitTimeout(m.laufzeit.briefing(), 8000);
-          if (t) teile.push(t);
-        } catch {
-          // egal
-        }
-      }),
-    );
-    return {
-      teile: teile.sort((a, b) => a.reihenfolge - b.reihenfolge),
-      zeit: hub.jetzt().toISOString(),
-      demo: hub.konfig.demo,
-    };
-  });
+  app.get('/api/briefing', async () => ({
+    teile: await hub.briefing(),
+    zeit: hub.jetzt().toISOString(),
+    demo: hub.konfig.demo,
+  }));
 
   app.get<{ Querystring: { zeitraum?: string } }>('/api/abendbericht', async (req) => ({
     teile: await hub.abendbericht(req.query.zeitraum === 'woche' ? 'woche' : 'tag'),

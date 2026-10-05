@@ -2,7 +2,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { type Daten, datenErstellen } from '../daten/index.ts';
 import type { Tabelle } from '../daten/schema.ts';
-import type { BriefingTeil, ModulInfo, TimelineEintrag } from '../geteilt/typen.ts';
+import type { BriefingTeil, ModulInfo, SuchTreffer, TimelineEintrag } from '../geteilt/typen.ts';
 import { geheimeWerte, type Konfig } from '../konfig.ts';
 import { MODULE } from '../modules/index.ts';
 import { Quelle, type QuellenDef } from '../quellen/quelle.ts';
@@ -10,6 +10,7 @@ import { AKTIVITAET_TABELLE, schwaerzen } from './aktivitaet.ts';
 import { ALARM_TABELLEN, Alarmzentrale } from './alarm.ts';
 import { EINSTELLUNGEN_TABELLE, Einstellungen } from './einstellungen.ts';
 import { fehlerText } from './fehler.ts';
+import { mitTimeout } from './routen.ts';
 import type { Kontext, ModulDef, ModulLaufzeit } from './modul.ts';
 import { METRIK_STUNDEN, METRIK_WERTE, MetrikRegistry } from './metriken.ts';
 import { Abrufplaner, type PlanerEinstellung } from './planer.ts';
@@ -128,6 +129,8 @@ export class Hub {
         metriken: this.metriken,
         timeline: (von, bis) => this.timeline(von, bis),
         abendbericht: (zeitraum) => this.abendbericht(zeitraum),
+        suche: (q) => this.suche(q),
+        briefing: () => this.briefing(),
       },
       metrik: (def) => this.metriken.registrieren({ modul: modulId, ...def }),
       quelle: <P, T>(def: QuellenDef<P, T>) => {
@@ -183,6 +186,69 @@ export class Hub {
       }),
     );
     return eintraege.sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  /** Globale Suche über alle Tabellen mit Suchfeldern und die Suche der Module */
+  async suche(eingabe: string): Promise<SuchTreffer[]> {
+    const q = eingabe.trim().slice(0, 80);
+    if (q.length < 2) return [];
+    const treffer: SuchTreffer[] = [];
+    for (const t of this.daten.alleTabellen()) {
+      if (!t.suche?.length || !this.modulAktiv(t.modul)) continue;
+      for (const feld of t.suche) {
+        try {
+          const zeilen = await this.daten.liste<Record<string, unknown>>(t.name, {
+            filter: { [feld]: { like: `%${q}%` } },
+            limit: 10,
+          });
+          for (const z of zeilen) {
+            treffer.push({
+              modul: t.modul,
+              titel: String(z[t.anzeige ?? feld] ?? z[feld]),
+              text: t.label,
+              link: `/modul/${t.modul}?tabelle=${t.name}&id=${z.id}`,
+            });
+          }
+        } catch {
+          // Suche in einer Tabelle darf scheitern
+        }
+      }
+    }
+    await Promise.all(
+      [...this.module.entries()].map(async ([id, m]) => {
+        if (!m.laufzeit.suche || !this.modulAktiv(id)) return;
+        try {
+          treffer.push(...(await mitTimeout(m.laufzeit.suche(q), 4000)));
+        } catch {
+          // egal
+        }
+      }),
+    );
+    const gesehen = new Set<string>();
+    return treffer
+      .filter((t) => {
+        if (gesehen.has(t.link)) return false;
+        gesehen.add(t.link);
+        return true;
+      })
+      .slice(0, 50);
+  }
+
+  /** Morgenbriefing: Teile aller aktiven Module, sortiert */
+  async briefing(): Promise<BriefingTeil[]> {
+    const teile: BriefingTeil[] = [];
+    await Promise.all(
+      [...this.module.entries()].map(async ([id, m]) => {
+        if (!m.laufzeit.briefing || !this.modulAktiv(id)) return;
+        try {
+          const t = await mitTimeout(m.laufzeit.briefing(), 8000);
+          if (t) teile.push(t);
+        } catch {
+          // egal
+        }
+      }),
+    );
+    return teile.sort((a, b) => a.reihenfolge - b.reihenfolge);
   }
 
   /** Tages oder Wochenrückblick: Teile aller aktiven Module, sortiert */

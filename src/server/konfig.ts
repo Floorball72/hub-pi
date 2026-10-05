@@ -41,6 +41,7 @@ export interface Konfig {
   sportsdbKey: string;
   update: { repo: string; zweig: string };
   suhLogin: { benutzer: string; passwort: string };
+  jarvis: { apiKey: string; modell: string; modellSchnell: string };
 }
 
 /** Schlüssel, deren Werte nie ausgegeben werden dürfen. */
@@ -58,6 +59,7 @@ export const GEHEIME_SCHLUESSEL = [
   'GITHUB_TOKEN',
   'SUH_LOGIN_BENUTZER',
   'SUH_LOGIN_PASSWORT',
+  'ANTHROPIC_API_KEY',
 ];
 
 function liste(wert: string | undefined, trenner = ','): string[] {
@@ -145,6 +147,11 @@ export function konfigLaden(ueberschreiben: Record<string, string> = {}): Konfig
     sportsdbKey: e.THESPORTSDB_KEY || '123',
     update: { repo: e.UPDATE_REPO || 'Floorball72/hub-pi', zweig: e.UPDATE_BRANCH || 'main' },
     suhLogin: { benutzer: e.SUH_LOGIN_BENUTZER ?? '', passwort: e.SUH_LOGIN_PASSWORT ?? '' },
+    jarvis: {
+      apiKey: e.ANTHROPIC_API_KEY ?? '',
+      modell: e.JARVIS_MODELL || 'claude-sonnet-5-5',
+      modellSchnell: e.JARVIS_MODELL_SCHNELL || 'claude-haiku-4-5-20251001',
+    },
   };
 }
 
@@ -163,5 +170,6 @@ export function geheimeWerte(k: Konfig): string[] {
     k.githubToken,
     k.suhLogin.benutzer,
     k.suhLogin.passwort,
+    k.jarvis.apiKey,
   ].filter((w) => w && w.length >= 4);
 }
